@@ -1,0 +1,13 @@
+django
+djangorestframework
+django-cors-headers
+psycopg2-binary
+python-dotenv
+djangorestframework-simplejwt
+django-filter
+markdown
+django-import-export
+openpyxl
+whitenoise
+drf-spectacular
+python-dateutil

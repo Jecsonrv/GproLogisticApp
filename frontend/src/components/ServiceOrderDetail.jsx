@@ -1,0 +1,541 @@
+import React, { useState, useEffect } from 'react';
+import {
+  FileText,
+  DollarSign,
+  Truck,
+  Folder,
+  Clock,
+  Trash2,
+  Plus,
+  AlertCircle
+} from 'lucide-react';
+import { 
+    Badge, 
+    Button, 
+    Card, 
+    CardContent,
+    Input, 
+    Select, 
+    EmptyState,
+    Label 
+} from './ui';
+import axios from '../lib/axios';
+import toast from 'react-hot-toast';
+
+/**
+ * ServiceOrderDetail - Vista detallada de Orden de Servicio con Tabs
+ */
+const ServiceOrderDetail = ({ orderId, onUpdate }) => {
+  const [activeTab, setActiveTab] = useState('info');
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Data for dropdowns
+  const [services, setServices] = useState([]);
+  const [providers, setProviders] = useState([]);
+
+  // Charges
+  const [charges, setCharges] = useState([]);
+  const [isAddingCharge, setIsAddingCharge] = useState(false);
+  const [chargeForm, setChargeForm] = useState({
+    service: '',
+    quantity: 1,
+    unit_price: '',
+    discount: 0,
+    notes: ''
+  });
+
+  // Third Party Expenses
+  const [expenses, setExpenses] = useState([]);
+
+  useEffect(() => {
+    if (orderId) {
+      fetchOrderDetail();
+      fetchServices();
+      fetchProviders();
+    }
+  }, [orderId]);
+
+  const fetchOrderDetail = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`/orders/service-orders/${orderId}/`);
+      setOrder(response.data);
+      setCharges(response.data.charges || []);
+      setExpenses(response.data.third_party_expenses || []);
+    } catch (error) {
+      // toast.error('Error al cargar detalle de OS');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchServices = async () => {
+    try {
+      const response = await axios.get('/catalogs/services/activos/');
+      setServices(response.data);
+    } catch (error) {
+      console.error('Error loading services');
+    }
+  };
+
+  const fetchProviders = async () => {
+    try {
+      const response = await axios.get('/catalogs/providers/');
+      setProviders(response.data);
+    } catch (error) {
+      console.error('Error loading providers');
+    }
+  };
+
+  const handleAddCharge = async () => {
+    try {
+      await axios.post(`/orders/service-orders/${orderId}/add_charge/`, chargeForm);
+      toast.success('Cargo agregado exitosamente');
+      fetchOrderDetail();
+      setIsAddingCharge(false);
+      resetChargeForm();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al agregar cargo');
+    }
+  };
+
+  const handleDeleteCharge = async (chargeId) => {
+    if (!confirm('¿Eliminar este cargo?')) return;
+
+    try {
+      await axios.delete(`/orders/charges/${chargeId}/`);
+      toast.success('Cargo eliminado');
+      fetchOrderDetail();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al eliminar cargo');
+    }
+  };
+
+  const resetChargeForm = () => {
+    setChargeForm({
+      service: '',
+      quantity: 1,
+      unit_price: '',
+      discount: 0,
+      notes: ''
+    });
+  };
+
+  const calculateChargeTotal = (charge) => {
+    const subtotal = charge.quantity * charge.unit_price;
+    const discount = subtotal * (charge.discount / 100);
+    const base = subtotal - discount;
+    const iva = charge.applies_iva ? base * 0.13 : 0;
+    return base + iva;
+  };
+
+  const tabs = [
+    { id: 'info', name: 'Info General', icon: FileText },
+    { id: 'charges', name: 'Cobros/Servicios', icon: DollarSign },
+    { id: 'expenses', name: 'Gastos a Terceros', icon: Truck },
+    { id: 'documents', name: 'Documentos', icon: Folder },
+    { id: 'history', name: 'Historial', icon: Clock }
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return <div className="text-center py-12 text-gray-500">No se encontró la orden</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">OS: {order.order_number}</h2>
+          <div className="flex items-center space-x-3 mt-2">
+            <Badge variant={order.status === 'abierta' ? 'default' : 'secondary'}>
+              {order.status === 'abierta' ? 'Abierta' : 'Cerrada'}
+            </Badge>
+            {order.facturado && (
+              <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Facturado</Badge>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-gray-500">Total</div>
+          <div className="text-3xl font-bold text-primary-700">
+            ${order.total_amount?.toFixed(2) || '0.00'}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                  ${activeTab === tab.id
+                    ? 'border-primary-500 text-primary-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }
+                `}
+              >
+                <Icon className={`-ml-0.5 mr-2 h-4 w-4 ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}`} />
+                {tab.name}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div className="mt-6">
+        {/* Info General */}
+        {activeTab === 'info' && (
+          <Card>
+            <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Información del Cliente</h3>
+                    <dl className="space-y-4">
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">Cliente</dt>
+                        <dd className="mt-1 text-base font-medium text-gray-900">{order.client_name}</dd>
+                    </div>
+                    {order.sub_client_name && (
+                        <div>
+                        <dt className="text-sm font-medium text-gray-500">Sub-Cliente</dt>
+                        <dd className="mt-1 text-base text-gray-900">{order.sub_client_name}</dd>
+                        </div>
+                    )}
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">Aforador</dt>
+                        <dd className="mt-1 text-base text-gray-900">{order.customs_agent_name || 'N/A'}</dd>
+                    </div>
+                    </dl>
+                </div>
+
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">Información del Embarque</h3>
+                    <dl className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">DUCA</dt>
+                            <dd className="mt-1 text-base font-mono text-gray-900 bg-gray-50 px-2 py-1 rounded w-fit">{order.duca}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-sm font-medium text-gray-500">BL / Referencia</dt>
+                            <dd className="mt-1 text-base text-gray-900">{order.bl_reference || 'N/A'}</dd>
+                        </div>
+                    </div>
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">ETA</dt>
+                        <dd className="mt-1 text-base text-gray-900">
+                        {new Date(order.eta).toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">Tipo de Embarque</dt>
+                        <dd className="mt-1 text-base text-gray-900">{order.shipment_type_name || 'N/A'}</dd>
+                    </div>
+                    <div>
+                        <dt className="text-sm font-medium text-gray-500">Purchase Order</dt>
+                        <dd className="mt-1 text-base text-gray-900">{order.purchase_order || 'N/A'}</dd>
+                    </div>
+                    </dl>
+                </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen Financiero</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-primary-50 p-4 rounded-lg border border-primary-100">
+                    <div className="text-sm text-primary-700 font-medium">Servicios (Ingresos)</div>
+                    <div className="text-2xl font-bold text-primary-900 mt-1">
+                        ${order.total_services?.toFixed(2) || '0.00'}
+                    </div>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                    <div className="text-sm text-orange-700 font-medium">Gastos a Terceros</div>
+                    <div className="text-2xl font-bold text-orange-900 mt-1">
+                        ${order.total_third_party?.toFixed(2) || '0.00'}
+                    </div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                    <div className="text-sm text-green-700 font-medium">Total General</div>
+                    <div className="text-2xl font-bold text-green-900 mt-1">
+                        ${order.total_amount?.toFixed(2) || '0.00'}
+                    </div>
+                    </div>
+                </div>
+                </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Cobros/Servicios */}
+        {activeTab === 'charges' && (
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900">Calculadora de Cobros</h3>
+                    {order.status === 'abierta' && !isAddingCharge && (
+                    <Button
+                        size="sm"
+                        onClick={() => setIsAddingCharge(true)}
+                    >
+                        <Plus className="mr-2 h-4 w-4" /> Agregar Servicio
+                    </Button>
+                    )}
+                </div>
+
+                {/* Add Charge Form */}
+                {isAddingCharge && (
+                    <div className="bg-gray-50 p-6 rounded-lg mb-6 border border-gray-200 animate-fade-in">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-4">Nuevo Cargo</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <Select
+                                label="Servicio"
+                                value={chargeForm.service}
+                                onChange={(value) => {
+                                    const service = services.find(s => s.id === value);
+                                    setChargeForm({
+                                    ...chargeForm,
+                                    service: value,
+                                    unit_price: service?.default_price || ''
+                                    });
+                                }}
+                                options={services}
+                                getOptionLabel={(opt) => `${opt.code} - ${opt.name}`}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                required
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-2 block">Cantidad</Label>
+                                <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={chargeForm.quantity}
+                                onChange={(e) => setChargeForm({ ...chargeForm, quantity: parseFloat(e.target.value) || 1 })}
+                                required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <Label className="mb-2 block">Precio Unitario</Label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2 text-gray-500">$</span>
+                                    <Input
+                                        className="pl-7"
+                                        type="number"
+                                        step="0.01"
+                                        value={chargeForm.unit_price}
+                                        onChange={(e) => setChargeForm({ ...chargeForm, unit_price: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <Label className="mb-2 block">Descuento (%)</Label>
+                                <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={chargeForm.discount}
+                                onChange={(e) => setChargeForm({ ...chargeForm, discount: parseFloat(e.target.value) || 0 })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <Label className="mb-2 block">Notas</Label>
+                            <Input
+                                value={chargeForm.notes}
+                                onChange={(e) => setChargeForm({ ...chargeForm, notes: e.target.value })}
+                                placeholder="Detalles adicionales del servicio..."
+                            />
+                        </div>
+
+                        <div className="flex justify-end space-x-2 pt-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setIsAddingCharge(false);
+                                    resetChargeForm();
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button onClick={handleAddCharge}>
+                                Guardar Cargo
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Charges Table */}
+                {charges.length === 0 ? (
+                    <EmptyState
+                    icon={DollarSign}
+                    title="No hay servicios agregados"
+                    description="Agregue servicios para calcular el cobro de esta orden"
+                    />
+                ) : (
+                    <div className="border rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Servicio
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Cant.
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Precio
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Desc.
+                            </th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            IVA
+                            </th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Total
+                            </th>
+                            {order.status === 'abierta' && (
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                
+                            </th>
+                            )}
+                        </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                        {charges.map((charge) => (
+                            <tr key={charge.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                                <div className="text-sm font-medium text-gray-900">
+                                {charge.service_code} - {charge.service_name}
+                                </div>
+                                {charge.notes && (
+                                <div className="text-xs text-gray-500 mt-0.5">{charge.notes}</div>
+                                )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                {charge.quantity}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                ${parseFloat(charge.unit_price).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                {charge.discount > 0 ? `${charge.discount}%` : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                                {charge.applies_iva ? (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">IVA</Badge>
+                                ) : (
+                                    <span className="text-gray-300">-</span>
+                                )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                                ${calculateChargeTotal(charge).toFixed(2)}
+                            </td>
+                            {order.status === 'abierta' && (
+                                <td className="px-4 py-3 text-center">
+                                <button
+                                    onClick={() => handleDeleteCharge(charge.id)}
+                                    className="text-gray-400 hover:text-red-600 transition-colors"
+                                    title="Eliminar"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </button>
+                                </td>
+                            )}
+                            </tr>
+                        ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50">
+                        <tr>
+                            <td colSpan={5} className="px-4 py-3 text-right font-semibold text-gray-900">
+                            Total Servicios:
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-primary-700 text-base">
+                            ${order.total_services?.toFixed(2) || '0.00'}
+                            </td>
+                            {order.status === 'abierta' && <td></td>}
+                        </tr>
+                        </tfoot>
+                    </table>
+                    </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Gastos a Terceros */}
+        {activeTab === 'expenses' && (
+          <Card>
+            <CardContent className="pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Gastos a Terceros</h3>
+                <EmptyState
+                icon={Truck}
+                title="Módulo en desarrollo"
+                description="Aquí podrá gestionar los gastos a terceros (DTA, almacenaje, transporte, etc.)"
+                />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Documentos */}
+        {activeTab === 'documents' && (
+          <Card>
+             <CardContent className="pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Documentos</h3>
+                <EmptyState
+                icon={Folder}
+                title="Módulo en desarrollo"
+                description="Aquí podrá subir y gestionar documentos relacionados con la orden (facturas, BL, DUA, etc.)"
+                />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Historial */}
+        {activeTab === 'history' && (
+          <Card>
+            <CardContent className="pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Historial de Cambios</h3>
+                <EmptyState
+                icon={Clock}
+                title="Módulo en desarrollo"
+                description="Aquí podrá ver el historial completo de cambios y eventos de la orden"
+                />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ServiceOrderDetail;

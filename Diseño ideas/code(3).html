@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Perfil de Cliente - CRM</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#1e3fae",
+            "background-light": "#f6f6f8",
+            "background-dark": "#121520",
+          },
+          fontFamily: {
+            "display": ["Inter", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.5rem",
+            "lg": "0.75rem",
+            "xl": "1rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="relative flex h-auto min-h-screen w-full group/design-root overflow-x-hidden">
+<aside class="flex w-64 flex-col bg-white dark:bg-background-dark/50 border-r border-[#e8eaf2] dark:border-white/10 sticky top-0 h-screen">
+<div class="flex items-center gap-3 p-6 border-b border-[#e8eaf2] dark:border-white/10">
+<div class="size-8 text-primary">
+<svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M42.4379 44C42.4379 44 36.0744 33.9038 41.1692 24C46.8624 12.9336 42.2078 4 42.2078 4L7.01134 4C7.01134 4 11.6577 12.932 5.96912 23.9969C0.876273 33.9029 7.27094 44 7.27094 44L42.4379 44Z" fill="currentColor"></path>
+</svg>
+</div>
+<h2 class="text-[#0f111a] dark:text-white text-xl font-bold leading-tight tracking-[-0.015em]">LogisticsCRM</h2>
+</div>
+<nav class="flex flex-col gap-2 p-4 flex-grow">
+<a class="flex items-center gap-3 px-4 py-2.5 text-[#536293] dark:text-gray-400 text-sm font-semibold rounded-md hover:bg-primary/5 dark:hover:bg-white/5 hover:text-primary dark:hover:text-white" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 text-white dark:text-white text-sm font-semibold rounded-md bg-primary" href="#">
+<span class="material-symbols-outlined text-xl">group</span>
+<span>Clientes</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 text-[#536293] dark:text-gray-400 text-sm font-semibold rounded-md hover:bg-primary/5 dark:hover:bg-white/5 hover:text-primary dark:hover:text-white" href="#">
+<span class="material-symbols-outlined text-xl">analytics</span>
+<span>Reportes</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 text-[#536293] dark:text-gray-400 text-sm font-semibold rounded-md hover:bg-primary/5 dark:hover:bg-white/5 hover:text-primary dark:hover:text-white" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span>Configuración</span>
+</a>
+</nav>
+<div class="p-4 border-t border-[#e8eaf2] dark:border-white/10">
+<div class="flex items-center gap-3">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="User profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuC6SMR3Rx8QqlZiLVOlmfKLc7_IXDszOIZtUDcbVUCB-M8Ca0wN-F6JPkGr4r_0pWFKa0n1rs2zPgwAcMyB2vcWj_ht62iwSUpacMsxZYrK5FYOvZPIviBrUjPJWR4CJcnXFcrcR8TNadH6-kTLatmF_cdannShHIaX-YNnjmjgjUx96OVPE8HcO1DXd_JF-aM0i6fUGki8dbaALl9DQhlFI9GUorsYk8kfbUpGCyuqH9SfAyx7Cx8QBRbxkmDohJFPPm8RxQwpC8M");'></div>
+<div class="flex flex-col">
+<p class="text-[#0f111a] dark:text-white text-sm font-semibold leading-normal">Ana López</p>
+<p class="text-[#536293] dark:text-gray-400 text-xs font-normal leading-normal">ana.lopez@email.com</p>
+</div>
+<button class="ml-auto text-[#536293] dark:text-gray-400 hover:text-primary dark:hover:text-white">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+</div>
+</aside>
+<div class="flex-1 flex flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#e8eaf2] dark:border-b-background-dark/80 px-10 py-3 bg-white/80 dark:bg-background-dark/50 sticky top-0 z-10 backdrop-blur-sm">
+<div class="flex min-w-72 flex-col gap-0">
+<p class="text-[#0f111a] dark:text-white text-2xl font-bold leading-tight tracking-[-0.02em]">Perfil de: Empresa Cliente XYZ</p>
+<div class="flex flex-wrap items-center gap-2 text-sm text-[#536293] dark:text-gray-400 font-medium">
+<a class="hover:text-primary dark:hover:text-white" href="#">Clientes</a>
+<span class="material-symbols-outlined text-base">chevron_right</span>
+<span>Perfil de Cliente XYZ</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-[#e8eaf2] dark:bg-white/10 text-[#0f111a] dark:text-white text-sm font-bold leading-normal tracking-[0.015em] gap-2">
+<span class="material-symbols-outlined text-lg">edit</span>
+<span class="truncate">Editar</span>
+</button>
+<button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em]" disabled="">
+<span class="truncate">Guardar Cambios</span>
+</button>
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-[#e8eaf2] dark:bg-white/10 text-[#0f111a] dark:text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+</div>
+</header>
+<main class="layout-container flex h-full grow flex-col p-10">
+<div class="layout-content-container flex flex-col w-full gap-8">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="bg-white dark:bg-background-dark/50 rounded-xl p-6 flex flex-col gap-4 border border-[#e8eaf2] dark:border-white/10 shadow-sm">
+<h3 class="text-lg font-semibold text-[#0f111a] dark:text-white">Datos Fiscales</h3>
+<div class="grid grid-cols-1 gap-y-4 pt-2">
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">Razón Social</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">Empresa Cliente XYZ S.A. de C.V.</p>
+</div>
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">RFC / CIF</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">ECX951101ABC</p>
+</div>
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">Dirección Fiscal</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">Av. de la Reforma 222, CDMX, México</p>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-background-dark/50 rounded-xl p-6 flex flex-col gap-4 border border-[#e8eaf2] dark:border-white/10 shadow-sm">
+<h3 class="text-lg font-semibold text-[#0f111a] dark:text-white">Límite de Crédito</h3>
+<div class="grid grid-cols-1 gap-y-4 pt-2">
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">Límite de Crédito</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">€50,000.00</p>
+</div>
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">Balance Actual</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">€12,500.00</p>
+</div>
+<div>
+<p class="text-[#536293] dark:text-gray-400 text-sm font-medium leading-normal">Términos de Pago</p>
+<p class="text-[#0f111a] dark:text-white text-base font-normal leading-normal mt-1">Neto 30 días</p>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex border-b border-[#d1d6e5] dark:border-white/10 gap-6">
+<a class="flex items-center justify-center border-b-[3px] border-b-transparent pb-3 pt-1" href="#">
+<p class="text-[#536293] dark:text-gray-400 text-sm font-semibold leading-normal">General</p>
+</a>
+<a class="flex items-center justify-center border-b-[3px] border-b-primary pb-3 pt-1" href="#">
+<p class="text-primary dark:text-white text-sm font-semibold leading-normal">Tarifas Especiales</p>
+</a>
+</div>
+<div class="bg-white dark:bg-background-dark/50 rounded-xl border border-[#e8eaf2] dark:border-white/10 overflow-hidden shadow-sm">
+<div class="p-4 sm:p-6 flex flex-wrap justify-between items-center gap-4 border-b border-[#e8eaf2] dark:border-white/10">
+<div class="relative w-full sm:w-auto sm:max-w-xs flex-grow">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">search</span>
+<input class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-white/20 bg-background-light dark:bg-background-dark focus:ring-2 focus:ring-primary focus:border-transparent text-sm text-[#0f111a] dark:text-white" placeholder="Buscar servicio..." type="text"/>
+</div>
+<button class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-primary px-4 h-10 text-sm font-bold text-white">
+<span class="material-symbols-outlined text-lg">add</span>
+<span>Añadir Tarifa</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm">
+<thead class="border-b border-[#e8eaf2] dark:border-white/10 bg-background-light dark:bg-white/5 text-[#536293] dark:text-gray-400 font-semibold">
+<tr>
+<th class="px-6 py-3">Servicio</th>
+<th class="px-6 py-3">Descripción</th>
+<th class="px-6 py-3 text-right">Precio Estándar</th>
+<th class="px-6 py-3 text-right">Precio Especial</th>
+<th class="px-6 py-3 text-center">Acciones</th>
+</tr>
+</thead>
+<tbody class="text-[#0f111a] dark:text-white">
+<tr class="border-b border-[#e8eaf2] dark:border-white/10">
+<td class="px-6 py-4 font-semibold">Envío Nacional Express</td>
+<td class="px-6 py-4 text-[#536293] dark:text-gray-400">Entrega en 24h en territorio nacional.</td>
+<td class="px-6 py-4 text-right">€25.00</td>
+<td class="px-6 py-4 text-right">
+<input class="w-24 text-right rounded-md border-gray-300 dark:border-white/20 bg-background-light dark:bg-background-dark focus:ring-1 focus:ring-primary focus:border-transparent text-sm text-[#0f111a] dark:text-white" type="text" value="€20.00"/>
+</td>
+<td class="px-6 py-4 text-center">
+<button class="p-2 text-[#536293] dark:text-gray-400 hover:text-red-500 dark:hover:text-red-500 rounded-full hover:bg-red-500/10 dark:hover:bg-red-500/20">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</td>
+</tr>
+<tr class="border-b border-[#e8eaf2] dark:border-white/10">
+<td class="px-6 py-4 font-semibold">Almacenaje (Pallet/Día)</td>
+<td class="px-6 py-4 text-[#536293] dark:text-gray-400">Coste diario por pallet en almacén.</td>
+<td class="px-6 py-4 text-right">€5.00</td>
+<td class="px-6 py-4 text-right">
+<input class="w-24 text-right rounded-md border-gray-300 dark:border-white/20 bg-background-light dark:bg-background-dark focus:ring-1 focus:ring-primary focus:border-transparent text-sm text-[#0f111a] dark:text-white" type="text" value="€4.50"/>
+</td>
+<td class="px-6 py-4 text-center">
+<button class="p-2 text-[#536293] dark:text-gray-400 hover:text-red-500 dark:hover:text-red-500 rounded-full hover:bg-red-500/10 dark:hover:bg-red-500/20">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 font-semibold">Transporte Refrigerado</td>
+<td class="px-6 py-4 text-[#536293] dark:text-gray-400">Servicio con control de temperatura.</td>
+<td class="px-6 py-4 text-right">€150.00</td>
+<td class="px-6 py-4 text-right">
+<input class="w-24 text-right rounded-md border-gray-300 dark:border-white/20 bg-background-light dark:bg-background-dark focus:ring-1 focus:ring-primary focus:border-transparent text-sm text-[#0f111a] dark:text-white" type="text" value="€135.00"/>
+</td>
+<td class="px-6 py-4 text-center">
+<button class="p-2 text-[#536293] dark:text-gray-400 hover:text-red-500 dark:hover:text-red-500 rounded-full hover:bg-red-500/10 dark:hover:bg-red-500/20">
+<span class="material-symbols-outlined text-xl">delete</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+</body></html>

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(rd /s /q node_modules.vite 2)",
+      "Bash(nul)",
+      "Bash(del \"C:\\Users\\jecso\\Desktop\\Gpro Logistic App\\frontend\\src\\components\\UI.jsx\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
