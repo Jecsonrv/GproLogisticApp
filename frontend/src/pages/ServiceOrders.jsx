@@ -173,44 +173,7 @@ const ServiceOrders = () => {
         }
     };
 
-    const handleExportExcel = async () => {
-        if (orders.length === 0) {
-            toast.error("No hay datos para exportar");
-            return;
-        }
 
-        try {
-            setLoadingExport(true);
-            const response = await axios.get(
-                "/orders/service-orders/export_excel/",
-                {
-                    responseType: "blob",
-                    params: filters, // Aplicar filtros actuales
-                }
-            );
-
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement("a");
-            link.href = url;
-            link.setAttribute(
-                "download",
-                `ordenes_servicio_${
-                    new Date().toISOString().split("T")[0]
-                }.xlsx`
-            );
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-
-            toast.success("Archivo exportado exitosamente");
-        } catch (error) {
-            console.error("Error al exportar:", error);
-            toast.error("Error al exportar el archivo Excel");
-        } finally {
-            setLoadingExport(false);
-        }
-    };
 
     const columns = [
         {

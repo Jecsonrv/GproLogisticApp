@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
     Card,
@@ -100,64 +100,79 @@ function ServiceOrderDetail() {
         }
     };
 
-    const handleAddCharge = async (e) => {
-        e.preventDefault();
-        try {
-            await axios.post("/api/orders/order-charges/", {
-                ...chargeFormData,
-                service_order: id,
-            });
-            toast.success("Cobro agregado exitosamente");
-            setIsAddChargeModalOpen(false);
-            setChargeFormData({ service: "", quantity: 1, unit_price: "" });
-            fetchOrderDetails();
-        } catch (error) {
-            toast.error("Error al agregar cobro");
-        }
-    };
+    const handleAddCharge = useCallback(
+        async (e) => {
+            e.preventDefault();
+            try {
+                await axios.post("/api/orders/order-charges/", {
+                    ...chargeFormData,
+                    service_order: id,
+                });
+                toast.success("Cobro agregado exitosamente");
+                setIsAddChargeModalOpen(false);
+                setChargeFormData({ service: "", quantity: 1, unit_price: "" });
+                fetchOrderDetails();
+            } catch (error) {
+                toast.error("Error al agregar cobro");
+            }
+        },
+        [id, chargeFormData, fetchOrderDetails]
+    );
 
-    const handleDeleteCharge = async (chargeId) => {
-        if (!window.confirm("¿Eliminar este cobro?")) return;
+    const handleDeleteCharge = useCallback(
+        async (chargeId) => {
+            if (!window.confirm("¿Eliminar este cobro?")) return;
 
-        try {
-            await axios.delete(`/api/orders/order-charges/${chargeId}/`);
-            toast.success("Cobro eliminado");
-            fetchOrderDetails();
-        } catch (error) {
-            toast.error("Error al eliminar cobro");
-        }
-    };
+            try {
+                await axios.delete(`/api/orders/order-charges/${chargeId}/`);
+                toast.success("Cobro eliminado");
+                fetchOrderDetails();
+            } catch (error) {
+                toast.error("Error al eliminar cobro");
+            }
+        },
+        [fetchOrderDetails]
+    );
 
-    const handleAddTransfer = async (e) => {
-        e.preventDefault();
-        try {
-            await axios.post("/api/transfers/", {
-                ...transferFormData,
-                service_order: id,
-            });
-            toast.success("Transferencia agregada");
-            setIsAddTransferModalOpen(false);
-            setTransferFormData({
-                transfer_type: "terceros",
-                provider: "",
-                amount: "",
-                notes: "",
-            });
-            fetchOrderDetails();
-        } catch (error) {
-            toast.error("Error al agregar transferencia");
-        }
-    };
+    const handleAddTransfer = useCallback(
+        async (e) => {
+            e.preventDefault();
+            try {
+                await axios.post("/api/transfers/", {
+                    ...transferFormData,
+                    service_order: id,
+                });
+                toast.success("Transferencia agregada");
+                setIsAddTransferModalOpen(false);
+                setTransferFormData({
+                    transfer_type: "terceros",
+                    provider: "",
+                    amount: "",
+                    notes: "",
+                });
+                fetchOrderDetails();
+            } catch (error) {
+                toast.error("Error al agregar transferencia");
+            }
+        },
+        [id, transferFormData, fetchOrderDetails]
+    );
 
-    // Cálculos
-    const totals = {
-        charges: charges.reduce((sum, c) => sum + parseFloat(c.total || 0), 0),
-        transfers: transfers.reduce(
-            (sum, t) => sum + parseFloat(t.amount || 0),
-            0
-        ),
-        invoiced: invoice ? parseFloat(invoice.total_amount || 0) : 0,
-    };
+    // Cálculos optimizados con useMemo (solo se recalculan cuando cambian las dependencias)
+    const totals = useMemo(
+        () => ({
+            charges: charges.reduce(
+                (sum, c) => sum + parseFloat(c.total || 0),
+                0
+            ),
+            transfers: transfers.reduce(
+                (sum, t) => sum + parseFloat(t.amount || 0),
+                0
+            ),
+            invoiced: invoice ? parseFloat(invoice.total_amount || 0) : 0,
+        }),
+        [charges, transfers, invoice]
+    );
 
     const chargesColumns = [
         {

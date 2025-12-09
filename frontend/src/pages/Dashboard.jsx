@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
     Users,
     Truck,
@@ -8,6 +8,11 @@ import {
     Activity,
     CheckCircle,
     AlertCircle,
+    ArrowUpRight,
+    ArrowDownRight,
+    XCircle,
+    AlertTriangle,
+    Clock,
 } from "lucide-react";
 import {
     LineChart,
@@ -22,6 +27,7 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
+    Legend,
 } from "recharts";
 import {
     Card,
@@ -48,6 +54,7 @@ const generateMockData = () => {
 
 function Dashboard() {
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [stats, setStats] = useState({
         totalClients: 0,
         activeOrders: 0,
@@ -69,24 +76,21 @@ function Dashboard() {
         statusDistribution: [],
     });
 
-    useEffect(() => {
-        fetchDashboardData();
-    }, []);
-
-    const fetchDashboardData = async () => {
+    const fetchDashboardData = useCallback(async () => {
         try {
             setLoading(true);
-            // Fallback or Real API
-            // const response = await api.get("/dashboard/");
-            // For now, assuming the structure matches what was previously there,
-            // but I'll add safety checks or use mock if response is empty/error
-
+            setError(null);
+            
             let data = {};
+            let isOfflineMode = false;
+
             try {
                 const response = await api.get("/dashboard/");
                 data = response.data;
             } catch (e) {
-                console.warn("API Dashboard failed, using mock data", e);
+                console.warn("Conexión inestable con servidor de métricas:", e.message);
+                isOfflineMode = true;
+                setError("No se pudieron sincronizar las métricas en tiempo real. Se muestran datos locales/estimados.");
             }
 
             const mockTrend = generateMockData();
@@ -113,31 +117,31 @@ function Dashboard() {
                 data.top_clients || [
                     {
                         id: 1,
-                        client_name: "Cliente A",
+                        client_name: "Cliente A (Demo)",
                         total_revenue: 45000,
                         orders_count: 12,
                     },
                     {
                         id: 2,
-                        client_name: "Cliente B",
+                        client_name: "Cliente B (Demo)",
                         total_revenue: 38000,
                         orders_count: 9,
                     },
                     {
                         id: 3,
-                        client_name: "Cliente C",
+                        client_name: "Cliente C (Demo)",
                         total_revenue: 32000,
                         orders_count: 8,
                     },
                     {
                         id: 4,
-                        client_name: "Cliente D",
+                        client_name: "Cliente D (Demo)",
                         total_revenue: 28000,
                         orders_count: 7,
                     },
                     {
                         id: 5,
-                        client_name: "Cliente E",
+                        client_name: "Cliente E (Demo)",
                         total_revenue: 22000,
                         orders_count: 5,
                     },
@@ -148,25 +152,10 @@ function Dashboard() {
                     {
                         id: 1,
                         type: "invoice_overdue",
-                        message: "Factura #INV-1234 vencida hace 15 días",
-                        severity: "high",
-                        client: "Cliente X",
-                    },
-                    {
-                        id: 2,
-                        type: "credit_limit",
-                        message:
-                            "Cliente Y está al 95% de su límite de crédito",
-                        severity: "warning",
-                        client: "Cliente Y",
-                    },
-                    {
-                        id: 3,
-                        type: "old_order",
-                        message: "OS #OS-5678 lleva 45 días abierta",
+                        message: "Sistema: Visualizando datos demostrativos",
                         severity: "medium",
-                        order: "OS-5678",
-                    },
+                        client: "Sistema",
+                    }
                 ]
             );
 
@@ -199,67 +188,76 @@ function Dashboard() {
                     },
                 ].filter((i) => i.value > 0),
             });
-        } catch (error) {
-            console.error("Critical error in dashboard", error);
+        } catch (fatalError) {
+            setError("Error crítico al inicializar el panel de control.");
+            console.error(fatalError);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const kpiCards = [
-        {
-            title: "Órdenes Activas",
-            value: stats.activeOrders,
-            icon: Truck,
-            color: "text-primary-600",
-            bg: "bg-primary-50",
-        },
-        {
-            title: "Ingresos del Mes",
-            value: `$${stats.monthlyRevenue.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-            })}`,
-            icon: DollarSign,
-            color: "text-secondary-600",
-            bg: "bg-secondary-50",
-        },
-        {
-            title: "OS del Mes",
-            value: stats.ordersThisMonth,
-            trend: stats.ordersThisMonthTrend,
-            icon: FileText,
-            color: "text-blue-600",
-            bg: "bg-blue-50",
-        },
-        {
-            title: "Rentabilidad",
-            value: `$${stats.profitability.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-            })}`,
-            trend: stats.profitabilityTrend,
-            icon: TrendingUp,
-            color: "text-green-600",
-            bg: "bg-green-50",
-        },
-        {
-            title: "Facturas Pendientes",
-            value: stats.pendingInvoices,
-            icon: AlertCircle,
-            color: "text-accent-600",
-            bg: "bg-accent-50",
-        },
-        {
-            title: "Total Clientes",
-            value: stats.totalClients,
-            icon: Users,
-            color: "text-gray-600",
-            bg: "bg-gray-100",
-        },
-    ];
+    useEffect(() => {
+        fetchDashboardData();
+    }, [fetchDashboardData]);
+
+    // Optimizar los KPI cards con useMemo (solo recalculan cuando stats cambia)
+    const kpiCards = useMemo(
+        () => [
+            {
+                title: "Órdenes Activas",
+                value: stats.activeOrders,
+                icon: Truck,
+                color: "text-primary-600",
+                bg: "bg-primary-50",
+            },
+            {
+                title: "Ingresos del Mes",
+                value: `$${stats.monthlyRevenue.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                })}`,
+                icon: DollarSign,
+                color: "text-secondary-600",
+                bg: "bg-secondary-50",
+            },
+            {
+                title: "OS del Mes",
+                value: stats.ordersThisMonth,
+                trend: stats.ordersThisMonthTrend,
+                icon: FileText,
+                color: "text-blue-600",
+                bg: "bg-blue-50",
+            },
+            {
+                title: "Rentabilidad",
+                value: `$${stats.profitability.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                })}`,
+                trend: stats.profitabilityTrend,
+                icon: TrendingUp,
+                color: "text-green-600",
+                bg: "bg-green-50",
+            },
+            {
+                title: "Facturas Pendientes",
+                value: stats.pendingInvoices,
+                icon: AlertCircle,
+                color: "text-accent-600",
+                bg: "bg-accent-50",
+            },
+            {
+                title: "Total Clientes",
+                value: stats.totalClients,
+                icon: Users,
+                color: "text-gray-600",
+                bg: "bg-gray-100",
+            },
+        ],
+        [stats]
+    );
 
     if (loading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse p-6">
                 {[1, 2, 3, 4].map((i) => (
                     <div key={i} className="h-32 bg-gray-200 rounded-lg"></div>
                 ))}
@@ -273,10 +271,30 @@ function Dashboard() {
                 <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Panel de Control
                 </h1>
-                <p className="text-sm text-gray-500">
-                    Resumen ejecutivo de tus operaciones logísticas.
-                </p>
+                <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                        Resumen ejecutivo de tus operaciones logísticas.
+                    </p>
+                    {error && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                            <AlertCircle className="w-3 h-3" />
+                            Modo Offline / Datos Simulados
+                        </span>
+                    )}
+                </div>
             </div>
+
+            {error && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                        <h3 className="text-sm font-medium text-amber-800">Aviso del Sistema</h3>
+                        <p className="text-sm text-amber-700 mt-1">
+                            {error} <button onClick={fetchDashboardData} className="underline hover:text-amber-900 ml-1 font-medium">Reintentar conexión</button>
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -500,10 +518,11 @@ function Dashboard() {
                                         <div className="text-right">
                                             <p className="font-bold text-gray-900">
                                                 $
-                                                {client.total_revenue.toLocaleString(
-                                                    "en-US",
-                                                    { minimumFractionDigits: 2 }
-                                                )}
+                                                {(
+                                                    client.total_revenue || 0
+                                                ).toLocaleString("en-US", {
+                                                    minimumFractionDigits: 2,
+                                                })}
                                             </p>
                                         </div>
                                     </div>

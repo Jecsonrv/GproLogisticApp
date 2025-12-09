@@ -50,15 +50,13 @@ export function Header({ onMenuClick }) {
         <div className="h-6 w-px bg-gray-200 hidden sm:block" />
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-9 w-9 rounded-full bg-primary-100 p-0 text-primary-700 hover:bg-primary-200 sm:h-auto sm:w-auto sm:bg-transparent sm:px-2 sm:py-1.5 sm:hover:bg-gray-100">
+          <DropdownMenuTrigger as={Button} variant="ghost" className="relative h-9 w-9 rounded-full bg-primary-100 p-0 text-primary-700 hover:bg-primary-200 sm:h-auto sm:w-auto sm:bg-transparent sm:px-2 sm:py-1.5 sm:hover:bg-gray-100">
                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 sm:mr-2">
                  <span className="text-sm font-bold text-primary-700">{user?.first_name?.[0] || "U"}</span>
                </span>
                <span className="hidden text-sm font-medium text-gray-700 sm:inline-block">
                  {user?.first_name || "Usuario"}
                </span>
-            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
