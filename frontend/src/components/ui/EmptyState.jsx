@@ -3,13 +3,13 @@ import React from 'react';
 /**
  * EmptyState - Estado vacío profesional
  */
-const EmptyState = ({ icon, title, description, action }) => {
+const EmptyState = ({ icon: Icon, title, description, action }) => {
   return (
     <div className="text-center py-12">
-      {icon && (
+      {Icon && (
         <div className="flex justify-center mb-4">
           <div className="rounded-full bg-gray-100 p-3">
-            {icon}
+            <Icon className="h-6 w-6 text-gray-400" />
           </div>
         </div>
       )}
