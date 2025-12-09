@@ -3,10 +3,12 @@ from django.core.validators import EmailValidator
 
 class Client(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nombre / Razón Social")
+    legal_name = models.CharField(max_length=255, blank=True, verbose_name="Nombre Jurídico Completo")
     nit = models.CharField(max_length=50, unique=True, verbose_name="NIT")
     iva_registration = models.CharField(max_length=50, verbose_name="Registro IVA")
     address = models.TextField(verbose_name="Dirección")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono")
+    secondary_phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono Secundario")
     email = models.EmailField(validators=[EmailValidator()], blank=True, verbose_name="Email")
     contact_person = models.CharField(max_length=255, blank=True, verbose_name="Persona de Contacto")
     

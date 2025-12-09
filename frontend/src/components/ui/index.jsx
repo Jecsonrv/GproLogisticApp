@@ -17,10 +17,27 @@ export { Label } from "./Label";
 export { default as EmptyState } from "./EmptyState";
 export { default as Spinner, LoadingState, LoadingOverlay } from "./Spinner";
 export {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
 } from "./DropdownMenu";
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
+export {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DialogClose,
+} from "./Dialog";
+export {
+    Skeleton,
+    SkeletonTable,
+    SkeletonCard,
+    SkeletonForm,
+} from "./Skeleton";
+export { FileUpload } from "./FileUpload";

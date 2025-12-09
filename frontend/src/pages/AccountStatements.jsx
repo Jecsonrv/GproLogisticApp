@@ -1,42 +1,76 @@
 import React, { useEffect, useState } from "react";
 import axios from "../lib/axios";
-import { Card, DataTable, Button, Select, Badge } from "../components/ui";
+import {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    DataTable,
+    Button,
+    Select,
+    Badge,
+    Label,
+    Skeleton,
+    EmptyState,
+} from "../components/ui";
+import {
+    FileText,
+    Download,
+    TrendingUp,
+    TrendingDown,
+    DollarSign,
+    CreditCard,
+    AlertCircle,
+} from "lucide-react";
+import toast from "react-hot-toast";
 
 function AccountStatements() {
     const [clients, setClients] = useState([]);
     const [selectedClient, setSelectedClient] = useState("");
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [statement, setStatement] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [loadingClients, setLoadingClients] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
 
     useEffect(() => {
         fetchClients();
     }, []);
 
+    useEffect(() => {
+        if (selectedClient) {
+            fetchStatement(selectedClient, selectedYear);
+        }
+    }, [selectedClient, selectedYear]);
+
     const fetchClients = async () => {
         try {
-            const response = await axios.get("/clients/");
+            setLoadingClients(true);
+            const response = await axios.get("/api/clients/");
             setClients(response.data);
         } catch (err) {
-            setError("Error al cargar clientes");
+            toast.error("Error al cargar clientes");
+        } finally {
+            setLoadingClients(false);
         }
     };
 
-    const fetchStatement = async (clientId) => {
+    const fetchStatement = async (clientId, year) => {
         if (!clientId) return;
 
         setLoading(true);
-        setError(null);
 
         try {
             const response = await axios.get(
-                `/clients/${clientId}/account_statement/`
+                `/api/clients/${clientId}/account_statement/`,
+                { params: { year } }
             );
             setStatement(response.data);
         } catch (err) {
-            setError(
+            toast.error(
                 err.response?.data?.detail || "Error al cargar estado de cuenta"
             );
+            setStatement(null);
         } finally {
             setLoading(false);
         }
@@ -45,34 +79,60 @@ function AccountStatements() {
     const handleClientChange = (e) => {
         const clientId = e.target.value;
         setSelectedClient(clientId);
-        if (clientId) {
-            fetchStatement(clientId);
-        } else {
+        if (!clientId) {
             setStatement(null);
         }
     };
 
     const handleExportExcel = async () => {
-        if (!selectedClient) return;
+        if (!selectedClient) {
+            toast.error("Seleccione un cliente primero");
+            return;
+        }
+
+        if (
+            !statement ||
+            !statement.invoices ||
+            statement.invoices.length === 0
+        ) {
+            toast.error("No hay datos para exportar");
+            return;
+        }
 
         try {
+            setIsExporting(true);
             const response = await axios.get(
                 `/clients/${selectedClient}/export_statement_excel/`,
-                { responseType: "blob" }
+                {
+                    responseType: "blob",
+                    params: { year: selectedYear },
+                }
             );
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
             link.href = url;
+            const clientName =
+                clients.find((c) => c.id === parseInt(selectedClient))?.name ||
+                "cliente";
             link.setAttribute(
                 "download",
-                `estado_cuenta_${selectedClient}.xlsx`
+                `estado_cuenta_${clientName}_${selectedYear}.xlsx`
             );
             document.body.appendChild(link);
             link.click();
             link.remove();
+            window.URL.revokeObjectURL(url);
+
+            toast.success("Estado de cuenta exportado exitosamente");
         } catch (err) {
-            setError("Error al exportar estado de cuenta");
+            const message =
+                err.response?.data?.error ||
+                "Error al exportar estado de cuenta";
+            toast.error(message);
+            console.error("Export error:", err);
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -138,23 +198,13 @@ function AccountStatements() {
                         <Button
                             variant="success"
                             onClick={handleExportExcel}
-                            disabled={!selectedClient || !statement}
+                            disabled={
+                                isExporting || !selectedClient || !statement
+                            }
                             className="w-full"
                         >
-                            <svg
-                                className="w-5 h-5 mr-2 inline"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                            </svg>
-                            Exportar a Excel
+                            <Download className="h-5 w-5 mr-2" />
+                            {isExporting ? "Exportando..." : "Exportar a Excel"}
                         </Button>
                     </div>
                 </div>

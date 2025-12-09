@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from apps.orders.models import ServiceOrder
-from apps.catalogs.models import Provider
+from apps.catalogs.models import Provider, Bank
 
 class Transfer(models.Model):
     TYPE_CHOICES = (
@@ -35,7 +35,7 @@ class Transfer(models.Model):
 
     # Información de pago
     beneficiary_name = models.CharField(max_length=255, blank=True, verbose_name="A Nombre De (Beneficiario)")
-    bank = models.CharField(max_length=100, blank=True, verbose_name="Banco")
+    bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     ccf = models.CharField(max_length=100, blank=True, verbose_name="CCF (Número de Factura)")
     invoice_number = models.CharField(max_length=100, blank=True, verbose_name="Número de Factura/Comprobante")
     invoice_file = models.FileField(upload_to='transfers/invoices/', blank=True, null=True, verbose_name="Factura")

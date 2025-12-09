@@ -10,6 +10,7 @@ import Invoicing from "./pages/Invoicing";
 import Transfers from "./pages/Transfers";
 import Users from "./pages/Users";
 import AccountStatements from "./pages/AccountStatements";
+import Catalogs from "./pages/Catalogs";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -36,6 +37,7 @@ function App() {
                 <Route path="client-pricing" element={<ClientPricing />} />
                 <Route path="invoicing" element={<Invoicing />} />
                 <Route path="transfers" element={<Transfers />} />
+                <Route path="catalogs" element={<Catalogs />} />
                 <Route path="users" element={<Users />} />
                 <Route
                     path="account-statements"

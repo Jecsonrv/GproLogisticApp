@@ -35,6 +35,27 @@ class CustomsAgent(models.Model):
     def __str__(self):
         return self.name
 
+class Bank(models.Model):
+    """Catálogo de bancos para transferencias y pagos"""
+    name = models.CharField(max_length=100, unique=True, verbose_name="Nombre del Banco")
+    code = models.CharField(max_length=20, unique=True, verbose_name="Código")
+    swift_code = models.CharField(max_length=11, blank=True, verbose_name="Código SWIFT")
+    contact_phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono de Contacto")
+    is_active = models.BooleanField(default=True, verbose_name="Activo")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+
+    class Meta:
+        verbose_name = "Banco"
+        verbose_name_plural = "Bancos"
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
 class ShipmentType(models.Model):
     name = models.CharField(max_length=255, unique=True, verbose_name="Nombre")
     code = models.CharField(max_length=10, blank=True, verbose_name="Código")

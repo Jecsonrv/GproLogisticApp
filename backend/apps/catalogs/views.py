@@ -3,11 +3,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
-    Provider, CustomsAgent, ShipmentType, SubClient,
+    Provider, CustomsAgent, Bank, ShipmentType, SubClient,
     Service, ClientServicePrice
 )
 from .serializers import (
-    ProviderSerializer, CustomsAgentSerializer,
+    ProviderSerializer, CustomsAgentSerializer, BankSerializer,
     ShipmentTypeSerializer, SubClientSerializer,
     ServiceSerializer, ClientServicePriceSerializer
 )
@@ -34,9 +34,24 @@ class CustomsAgentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     search_fields = ['name', 'code']
     filterset_fields = ['is_active']
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
+        if self.action == 'list' and self.request.query_params.get('is_active') is None:
+            queryset = queryset.filter(is_active=True)
+        return queryset.order_by('name')
+
+class BankViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestión de bancos"""
+    queryset = Bank.objects.all()
+    serializer_class = BankSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    search_fields = ['name', 'code', 'swift_code']
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Por defecto mostrar solo activos en listados
         if self.action == 'list' and self.request.query_params.get('is_active') is None:
             queryset = queryset.filter(is_active=True)
         return queryset.order_by('name')

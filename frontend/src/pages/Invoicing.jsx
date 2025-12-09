@@ -788,7 +788,7 @@ const Invoicing = () => {
                 </div>
             </Modal>
 
-            {/* Detail Modal - Placeholder */}
+            {/* Detail Modal */}
             <Modal
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}
@@ -796,14 +796,223 @@ const Invoicing = () => {
                 size="2xl"
             >
                 {selectedInvoice && (
-                    <div className="space-y-4">
-                        <EmptyState
-                            icon={
-                                <DocumentTextIcon className="h-12 w-12 text-gray-400" />
-                            }
-                            title="Detalle de factura"
-                            description="Aquí se mostrará el detalle completo de la factura con historial de pagos"
-                        />
+                    <div className="space-y-6">
+                        {/* Invoice Header */}
+                        <div className="grid grid-cols-2 gap-6 p-6 bg-gray-50 rounded-lg">
+                            <div>
+                                <p className="text-sm text-gray-600 mb-1">
+                                    Cliente
+                                </p>
+                                <p className="text-lg font-semibold text-gray-900">
+                                    {selectedInvoice.client_name}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600 mb-1">
+                                    Estado
+                                </p>
+                                <Badge
+                                    variant={getStatusBadgeVariant(
+                                        selectedInvoice
+                                    )}
+                                >
+                                    {selectedInvoice.status_display}
+                                </Badge>
+                                {selectedInvoice.days_overdue > 0 && (
+                                    <p className="text-xs text-red-600 font-medium mt-1">
+                                        Vencida hace{" "}
+                                        {selectedInvoice.days_overdue} días
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600 mb-1">
+                                    Fecha de Factura
+                                </p>
+                                <p className="font-medium text-gray-900">
+                                    {new Date(
+                                        selectedInvoice.invoice_date
+                                    ).toLocaleDateString("es-SV")}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-600 mb-1">
+                                    Fecha de Vencimiento
+                                </p>
+                                <p className="font-medium text-gray-900">
+                                    {selectedInvoice.due_date
+                                        ? new Date(
+                                              selectedInvoice.due_date
+                                          ).toLocaleDateString("es-SV")
+                                        : "Sin vencimiento"}
+                                </p>
+                            </div>
+                            {selectedInvoice.ccf && (
+                                <div className="col-span-2">
+                                    <p className="text-sm text-gray-600 mb-1">
+                                        CCF
+                                    </p>
+                                    <p className="font-mono font-medium text-gray-900">
+                                        {selectedInvoice.ccf}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Financial Summary */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <p className="text-sm text-blue-600 mb-1">
+                                    Total Facturado
+                                </p>
+                                <p className="text-2xl font-bold text-blue-900">
+                                    $
+                                    {parseFloat(
+                                        selectedInvoice.total_amount
+                                    ).toFixed(2)}
+                                </p>
+                            </div>
+                            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                                <p className="text-sm text-green-600 mb-1">
+                                    Total Pagado
+                                </p>
+                                <p className="text-2xl font-bold text-green-900">
+                                    $
+                                    {parseFloat(
+                                        selectedInvoice.paid_amount || 0
+                                    ).toFixed(2)}
+                                </p>
+                            </div>
+                            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                                <p className="text-sm text-red-600 mb-1">
+                                    Saldo Pendiente
+                                </p>
+                                <p className="text-2xl font-bold text-red-900">
+                                    $
+                                    {parseFloat(
+                                        selectedInvoice.balance
+                                    ).toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Payment History */}
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                <BanknotesIcon className="h-5 w-5 text-primary-600" />
+                                Historial de Pagos
+                            </h3>
+                            {selectedInvoice.payments &&
+                            selectedInvoice.payments.length > 0 ? (
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Fecha
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Monto
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Método
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Referencia
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                                    Notas
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {selectedInvoice.payments.map(
+                                                (payment, idx) => (
+                                                    <tr
+                                                        key={idx}
+                                                        className="hover:bg-gray-50"
+                                                    >
+                                                        <td className="px-4 py-3 text-sm text-gray-900">
+                                                            {new Date(
+                                                                payment.payment_date
+                                                            ).toLocaleDateString(
+                                                                "es-SV"
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                                                            $
+                                                            {parseFloat(
+                                                                payment.amount
+                                                            ).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                                                            {
+                                                                payment.payment_method
+                                                            }
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600 font-mono">
+                                                            {payment.reference ||
+                                                                "-"}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                            {payment.notes ||
+                                                                "-"}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                                    <ClockIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                                    <p className="text-gray-600">
+                                        No hay pagos registrados
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Service Orders */}
+                        {selectedInvoice.service_orders &&
+                            selectedInvoice.service_orders.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                        <DocumentTextIcon className="h-5 w-5 text-primary-600" />
+                                        Órdenes de Servicio Incluidas
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {selectedInvoice.service_orders.map(
+                                            (order) => (
+                                                <div
+                                                    key={order.id}
+                                                    className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-200"
+                                                >
+                                                    <div>
+                                                        <p className="font-mono font-semibold text-gray-900">
+                                                            {order.order_number}
+                                                        </p>
+                                                        {order.duca && (
+                                                            <p className="text-xs text-gray-500">
+                                                                DUCA:{" "}
+                                                                {order.duca}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <p className="font-semibold text-gray-900">
+                                                        $
+                                                        {parseFloat(
+                                                            order.total_amount ||
+                                                                0
+                                                        ).toFixed(2)}
+                                                    </p>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                     </div>
                 )}
             </Modal>

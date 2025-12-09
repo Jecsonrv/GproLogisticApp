@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q, Sum
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
 from .models import Transfer
 from .serializers import TransferSerializer, TransferListSerializer
@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill
 from datetime import datetime
+import os
 
 class TransferFilter(filters.FilterSet):
     """Filtros avanzados para transfers"""
@@ -109,6 +110,36 @@ class TransferViewSet(viewsets.ModelViewSet):
         
         wb.save(response)
         return response
+
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
+    def download_pdf(self, request, pk=None):
+        """Descargar el archivo PDF asociado a un traslado"""
+        transfer = self.get_object()
+        
+        if not transfer.pdf_file:
+            return Response(
+                {'error': 'Este traslado no tiene archivo PDF adjunto'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            file_path = transfer.pdf_file.path
+            if not os.path.exists(file_path):
+                return Response(
+                    {'error': 'El archivo no existe en el servidor'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            with open(file_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/pdf')
+                filename = os.path.basename(file_path)
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+        except Exception as e:
+            return Response(
+                {'error': f'Error al acceder al archivo: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -143,3 +174,39 @@ class TransferViewSet(viewsets.ModelViewSet):
             }
         
         return Response(summary)
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
+    def download_pdf(self, request, pk=None):
+        """Descargar el PDF adjunto de una transferencia"""
+        transfer = self.get_object()
+        
+        if not transfer.pdf_file:
+            return Response(
+                {'error': 'Esta transferencia no tiene archivo PDF adjunto'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            file_path = transfer.pdf_file.path
+            
+            if not os.path.exists(file_path):
+                return Response(
+                    {'error': 'El archivo PDF no se encuentra en el servidor'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type='application/pdf'
+            )
+            
+            filename = os.path.basename(file_path)
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            
+            return response
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error al descargar el archivo: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

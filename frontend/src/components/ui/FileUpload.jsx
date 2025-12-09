@@ -1,0 +1,127 @@
+import React, { useRef, useState } from "react";
+import { Upload, File, X } from "lucide-react";
+import { cn } from "../../lib/utils";
+import { Button } from "./Button";
+
+export function FileUpload({
+    onFileChange,
+    accept = "*/*",
+    maxSize = 5 * 1024 * 1024, // 5MB default
+    multiple = false,
+    disabled = false,
+    className,
+    label = "Seleccionar archivo",
+    helperText,
+}) {
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [error, setError] = useState("");
+    const inputRef = useRef(null);
+
+    const handleFileChange = (e) => {
+        const files = Array.from(e.target.files || []);
+        setError("");
+
+        // Validate file size
+        const oversizedFiles = files.filter((file) => file.size > maxSize);
+        if (oversizedFiles.length > 0) {
+            setError(
+                `Archivo(s) demasiado grande(s). Máximo ${formatFileSize(
+                    maxSize
+                )}`
+            );
+            return;
+        }
+
+        setSelectedFiles(files);
+        if (onFileChange) {
+            onFileChange(multiple ? files : files[0]);
+        }
+    };
+
+    const handleRemoveFile = (index) => {
+        const newFiles = selectedFiles.filter((_, i) => i !== index);
+        setSelectedFiles(newFiles);
+        if (onFileChange) {
+            onFileChange(multiple ? newFiles : null);
+        }
+    };
+
+    const handleClick = () => {
+        inputRef.current?.click();
+    };
+
+    const formatFileSize = (bytes) => {
+        if (bytes === 0) return "0 Bytes";
+        const k = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return (
+            Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
+        );
+    };
+
+    return (
+        <div className={cn("w-full", className)}>
+            <input
+                ref={inputRef}
+                type="file"
+                accept={accept}
+                multiple={multiple}
+                onChange={handleFileChange}
+                disabled={disabled}
+                className="hidden"
+            />
+
+            {/* Upload Button */}
+            <Button
+                type="button"
+                variant="outline"
+                onClick={handleClick}
+                disabled={disabled}
+                className="w-full"
+            >
+                <Upload className="h-4 w-4 mr-2" />
+                {label}
+            </Button>
+
+            {/* Helper Text */}
+            {helperText && (
+                <p className="mt-1 text-xs text-gray-500">{helperText}</p>
+            )}
+
+            {/* Error Message */}
+            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+
+            {/* Selected Files */}
+            {selectedFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                    {selectedFiles.map((file, index) => (
+                        <div
+                            key={index}
+                            className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-2"
+                        >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <File className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-gray-700 truncate">
+                                        {file.name}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                        {formatFileSize(file.size)}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleRemoveFile(index)}
+                                className="ml-2 rounded-sm text-gray-400 hover:text-gray-600 focus:outline-none"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}

@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from apps.clients.models import Client
-from apps.catalogs.models import SubClient, ShipmentType, Provider, CustomsAgent
+from apps.catalogs.models import SubClient, ShipmentType, Provider, CustomsAgent, Bank
 
 class ServiceOrder(models.Model):
     order_number = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Orden")
@@ -285,7 +285,7 @@ class InvoicePayment(models.Model):
     amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto")
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name="Método de Pago")
     reference_number = models.CharField(max_length=100, blank=True, verbose_name="Número de Referencia/Cheque")
-    bank = models.CharField(max_length=100, blank=True, verbose_name="Banco")
+    bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     notes = models.TextField(blank=True, verbose_name="Notas")
     receipt_file = models.FileField(upload_to='invoices/payments/', null=True, blank=True, verbose_name="Comprobante de Pago")
     created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")

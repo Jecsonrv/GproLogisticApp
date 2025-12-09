@@ -14,22 +14,55 @@ import {
     Package,
     ShieldCheck,
     X,
+    Boxes,
+    ChevronDown,
+    ChevronRight,
 } from "lucide-react";
 import useAuthStore from "../stores/authStore";
 
-const menuItems = [
-    { name: "Dashboard", path: "/", icon: LayoutDashboard },
+const menuSections = [
     {
-        name: "Órdenes de Servicio",
-        path: "/service-orders",
-        icon: ClipboardList,
+        title: null,
+        items: [{ name: "Dashboard", path: "/", icon: LayoutDashboard }],
     },
-    { name: "Facturación", path: "/invoicing", icon: Banknote },
-    { name: "Clientes", path: "/clients", icon: Users },
-    { name: "Estados de Cuenta", path: "/account-statements", icon: FileText },
-    { name: "Precios", path: "/client-pricing", icon: Tags },
-    { name: "Servicios", path: "/services", icon: Package },
-    { name: "Usuarios", path: "/users", icon: ShieldCheck },
+    {
+        title: "OPERACIONES",
+        items: [
+            {
+                name: "Órdenes de Servicio",
+                path: "/service-orders",
+                icon: ClipboardList,
+            },
+            {
+                name: "Transferencias",
+                path: "/transfers",
+                icon: ArrowRightLeft,
+            },
+        ],
+    },
+    {
+        title: "FINANZAS",
+        items: [
+            { name: "Facturación y CXC", path: "/invoicing", icon: Banknote },
+            {
+                name: "Estados de Cuenta",
+                path: "/account-statements",
+                icon: FileText,
+            },
+        ],
+    },
+    {
+        title: "CATÁLOGOS",
+        items: [
+            { name: "Clientes", path: "/clients", icon: Users },
+            { name: "Servicios y Tarifario", path: "/services", icon: Package },
+            { name: "Catálogos Generales", path: "/catalogs", icon: Boxes },
+        ],
+    },
+    {
+        title: "ADMINISTRACIÓN",
+        items: [{ name: "Usuarios", path: "/users", icon: ShieldCheck }],
+    },
 ];
 
 export function Sidebar({ isOpen, onClose }) {
@@ -69,34 +102,49 @@ export function Sidebar({ isOpen, onClose }) {
                 </div>
 
                 <nav className="flex-1 overflow-y-auto py-4 px-3">
-                    <div className="space-y-1">
-                        {menuItems.map((item) => {
-                            const isActive = location.pathname === item.path;
-                            const Icon = item.icon;
-                            return (
-                                <Link
-                                    key={item.path}
-                                    to={item.path}
-                                    onClick={onClose}
-                                    className={cn(
-                                        "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
-                                        isActive
-                                            ? "bg-primary-50 text-primary-800"
-                                            : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                                    )}
-                                >
-                                    <Icon
-                                        className={cn(
-                                            "mr-3 h-5 w-5 flex-shrink-0",
-                                            isActive
-                                                ? "text-primary-800"
-                                                : "text-gray-400"
-                                        )}
-                                    />
-                                    {item.name}
-                                </Link>
-                            );
-                        })}
+                    <div className="space-y-6">
+                        {menuSections.map((section, sectionIndex) => (
+                            <div key={sectionIndex}>
+                                {/* Section Title */}
+                                {section.title && (
+                                    <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                        {section.title}
+                                    </h3>
+                                )}
+
+                                {/* Section Items */}
+                                <div className="space-y-1">
+                                    {section.items.map((item) => {
+                                        const isActive =
+                                            location.pathname === item.path;
+                                        const Icon = item.icon;
+                                        return (
+                                            <Link
+                                                key={item.path}
+                                                to={item.path}
+                                                onClick={onClose}
+                                                className={cn(
+                                                    "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
+                                                    isActive
+                                                        ? "bg-blue-50 text-blue-800"
+                                                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                                )}
+                                            >
+                                                <Icon
+                                                    className={cn(
+                                                        "mr-3 h-5 w-5 flex-shrink-0",
+                                                        isActive
+                                                            ? "text-blue-800"
+                                                            : "text-gray-400"
+                                                    )}
+                                                />
+                                                {item.name}
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </nav>
 
