@@ -33,25 +33,114 @@ import {
     Plus,
     Trash2,
     Edit,
+    Building2,
+    Ship,
+    Calendar,
+    Clock,
+    User,
+    Hash,
+    Package,
+    CheckCircle2,
+    AlertCircle,
+    TrendingUp,
+    TrendingDown,
+    Minus,
 } from "lucide-react";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { useServiceOrder } from "../hooks/useServiceOrders";
+import { formatCurrency, formatDate, cn } from "../lib/utils";
 
+// ============================================
+// DATA DISPLAY COMPONENT
+// ============================================
+const DataField = ({ label, value, mono = false, className = "" }) => (
+    <div className={className}>
+        <dt className="data-label">{label}</dt>
+        <dd className={cn("data-value", mono && "font-mono")}>{value || "N/A"}</dd>
+    </div>
+);
+
+// ============================================
+// STATUS BADGE COMPONENT
+// ============================================
+const StatusBadge = ({ status, size = "default" }) => {
+    const config = {
+        abierta: {
+            label: "En Proceso",
+            className: "badge-info",
+        },
+        cerrada: {
+            label: "Cerrada",
+            className: "badge-success",
+        },
+        pagada: {
+            label: "Pagada",
+            className: "badge-success",
+        },
+        pendiente: {
+            label: "Pendiente",
+            className: "badge-warning",
+        },
+    };
+
+    const { label, className } = config[status] || { label: status, className: "badge-default" };
+
+    return <span className={className}>{label}</span>;
+};
+
+// ============================================
+// SUMMARY CARD COMPONENT
+// ============================================
+const SummaryCard = ({ title, value, variant = "default", icon: Icon }) => {
+    const variants = {
+        default: "bg-slate-50 border-slate-200 text-slate-900",
+        success: "bg-success-50 border-success-200 text-success-700",
+        warning: "bg-warning-50 border-warning-200 text-warning-700",
+        danger: "bg-danger-50 border-danger-200 text-danger-700",
+        info: "bg-brand-50 border-brand-200 text-brand-700",
+    };
+
+    return (
+        <div className={cn("p-4 rounded border", variants[variant])}>
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-xs font-medium opacity-75 uppercase tracking-wide">
+                        {title}
+                    </p>
+                    <p className="text-xl font-bold mt-1 tabular-nums">{value}</p>
+                </div>
+                {Icon && (
+                    <div className="opacity-50">
+                        <Icon className="w-6 h-6" />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 function ServiceOrderDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { data: order, isLoading } = useServiceOrder(id);
 
+    // Data state
     const [charges, setCharges] = useState([]);
     const [transfers, setTransfers] = useState([]);
     const [invoice, setInvoice] = useState(null);
     const [services, setServices] = useState([]);
     const [providers, setProviders] = useState([]);
 
+    // UI state
+    const [activeTab, setActiveTab] = useState("general");
     const [isAddChargeModalOpen, setIsAddChargeModalOpen] = useState(false);
     const [isAddTransferModalOpen, setIsAddTransferModalOpen] = useState(false);
 
+    // Form state
     const [chargeFormData, setChargeFormData] = useState({
         service: "",
         quantity: 1,
@@ -65,6 +154,9 @@ function ServiceOrderDetail() {
         notes: "",
     });
 
+    // ============================================
+    // DATA FETCHING
+    // ============================================
     useEffect(() => {
         if (id) {
             fetchOrderDetails();
@@ -75,9 +167,9 @@ function ServiceOrderDetail() {
     const fetchOrderDetails = async () => {
         try {
             const [chargesRes, transfersRes, invoiceRes] = await Promise.all([
-                axios.get(`/api/orders/order-charges/?service_order=${id}`),
-                axios.get(`/api/transfers/?service_order=${id}`),
-                axios.get(`/api/invoices/?service_order=${id}`),
+                axios.get(`/orders/order-charges/?service_order=${id}`),
+                axios.get(`/transfers/?service_order=${id}`),
+                axios.get(`/invoices/?service_order=${id}`),
             ]);
             setCharges(chargesRes.data);
             setTransfers(transfersRes.data);
@@ -90,8 +182,8 @@ function ServiceOrderDetail() {
     const fetchCatalogs = async () => {
         try {
             const [servicesRes, providersRes] = await Promise.all([
-                axios.get("/api/catalogs/services/"),
-                axios.get("/api/catalogs/providers/"),
+                axios.get("/catalogs/services/"),
+                axios.get("/catalogs/providers/"),
             ]);
             setServices(servicesRes.data);
             setProviders(providersRes.data);
@@ -100,11 +192,14 @@ function ServiceOrderDetail() {
         }
     };
 
+    // ============================================
+    // HANDLERS
+    // ============================================
     const handleAddCharge = useCallback(
         async (e) => {
             e.preventDefault();
             try {
-                await axios.post("/api/orders/order-charges/", {
+                await axios.post("/orders/order-charges/", {
                     ...chargeFormData,
                     service_order: id,
                 });
@@ -116,7 +211,7 @@ function ServiceOrderDetail() {
                 toast.error("Error al agregar cobro");
             }
         },
-        [id, chargeFormData, fetchOrderDetails]
+        [id, chargeFormData]
     );
 
     const handleDeleteCharge = useCallback(
@@ -124,21 +219,21 @@ function ServiceOrderDetail() {
             if (!window.confirm("¿Eliminar este cobro?")) return;
 
             try {
-                await axios.delete(`/api/orders/order-charges/${chargeId}/`);
+                await axios.delete(`/orders/order-charges/${chargeId}/`);
                 toast.success("Cobro eliminado");
                 fetchOrderDetails();
             } catch (error) {
                 toast.error("Error al eliminar cobro");
             }
         },
-        [fetchOrderDetails]
+        []
     );
 
     const handleAddTransfer = useCallback(
         async (e) => {
             e.preventDefault();
             try {
-                await axios.post("/api/transfers/", {
+                await axios.post("/transfers/", {
                     ...transferFormData,
                     service_order: id,
                 });
@@ -155,10 +250,12 @@ function ServiceOrderDetail() {
                 toast.error("Error al agregar transferencia");
             }
         },
-        [id, transferFormData, fetchOrderDetails]
+        [id, transferFormData]
     );
 
-    // Cálculos optimizados con useMemo (solo se recalculan cuando cambian las dependencias)
+    // ============================================
+    // COMPUTED VALUES
+    // ============================================
     const totals = useMemo(
         () => ({
             charges: charges.reduce(
@@ -174,454 +271,610 @@ function ServiceOrderDetail() {
         [charges, transfers, invoice]
     );
 
+    const margin = useMemo(() => {
+        const value = totals.charges - totals.transfers;
+        const percentage = totals.charges > 0 ? (value / totals.charges) * 100 : 0;
+        return { value, percentage };
+    }, [totals]);
+
+    // ============================================
+    // TABLE COLUMNS
+    // ============================================
     const chargesColumns = [
         {
-            key: "service",
-            label: "Servicio",
-            render: (row) => row.service?.name || "N/A",
-        },
-        { key: "quantity", label: "Cantidad" },
-        {
-            key: "unit_price",
-            label: "Precio Unit.",
-            render: (row) => `$${parseFloat(row.unit_price).toFixed(2)}`,
-        },
-        {
-            key: "subtotal",
-            label: "Subtotal",
-            render: (row) => `$${parseFloat(row.subtotal).toFixed(2)}`,
-        },
-        {
-            key: "iva_amount",
-            label: "IVA",
-            render: (row) => `$${parseFloat(row.iva_amount).toFixed(2)}`,
-        },
-        {
-            key: "total",
-            label: "Total",
+            header: "Servicio",
+            accessor: "service",
             render: (row) => (
-                <span className="font-semibold">
-                    ${parseFloat(row.total).toFixed(2)}
+                <span className="font-medium text-slate-900">
+                    {row.service?.name || "N/A"}
                 </span>
             ),
         },
         {
-            key: "actions",
-            label: "Acciones",
+            header: "Cantidad",
+            accessor: "quantity",
+            className: "w-20 text-center",
             render: (row) => (
-                <Button
-                    size="sm"
-                    variant="destructive"
+                <span className="tabular-nums">{row.quantity}</span>
+            ),
+        },
+        {
+            header: "Precio Unit.",
+            accessor: "unit_price",
+            className: "w-28 text-right",
+            render: (row) => (
+                <span className="tabular-nums">
+                    {formatCurrency(row.unit_price)}
+                </span>
+            ),
+        },
+        {
+            header: "Subtotal",
+            accessor: "subtotal",
+            className: "w-28 text-right",
+            render: (row) => (
+                <span className="tabular-nums">
+                    {formatCurrency(row.subtotal)}
+                </span>
+            ),
+        },
+        {
+            header: "IVA 13%",
+            accessor: "iva_amount",
+            className: "w-24 text-right",
+            render: (row) => (
+                <span className="tabular-nums text-slate-500">
+                    {formatCurrency(row.iva_amount)}
+                </span>
+            ),
+        },
+        {
+            header: "Total",
+            accessor: "total",
+            className: "w-28 text-right",
+            render: (row) => (
+                <span className="font-semibold tabular-nums text-slate-900">
+                    {formatCurrency(row.total)}
+                </span>
+            ),
+        },
+        {
+            header: "",
+            accessor: "actions",
+            className: "w-16",
+            render: (row) => (
+                <button
                     onClick={() => handleDeleteCharge(row.id)}
+                    className="p-1.5 text-slate-400 hover:text-danger-600 hover:bg-danger-50 rounded transition-colors"
+                    title="Eliminar"
                 >
-                    <Trash2 className="h-3 w-3" />
-                </Button>
+                    <Trash2 className="w-4 h-4" />
+                </button>
             ),
         },
     ];
 
     const transfersColumns = [
         {
-            key: "transfer_type",
-            label: "Tipo",
+            header: "Tipo",
+            accessor: "transfer_type",
+            className: "w-28",
+            render: (row) => {
+                const types = {
+                    terceros: { label: "Terceros", className: "badge-warning" },
+                    propios: { label: "Propios", className: "badge-info" },
+                    admin: { label: "Admin", className: "badge-default" },
+                };
+                const config = types[row.transfer_type] || types.terceros;
+                return <span className={config.className}>{config.label}</span>;
+            },
+        },
+        {
+            header: "Proveedor",
+            accessor: "provider",
             render: (row) => (
-                <Badge
-                    variant={
-                        row.transfer_type === "terceros" ? "warning" : "default"
-                    }
-                >
-                    {row.transfer_type}
-                </Badge>
+                <span className="text-slate-900">
+                    {row.provider?.name || "-"}
+                </span>
             ),
         },
         {
-            key: "provider",
-            label: "Proveedor",
-            render: (row) => row.provider?.name || "-",
-        },
-        {
-            key: "amount",
-            label: "Monto",
-            render: (row) => `$${parseFloat(row.amount).toFixed(2)}`,
-        },
-        {
-            key: "status",
-            label: "Estado",
+            header: "Monto",
+            accessor: "amount",
+            className: "w-32 text-right",
             render: (row) => (
-                <Badge
-                    variant={row.status === "pagada" ? "success" : "warning"}
-                >
-                    {row.status}
-                </Badge>
+                <span className="font-semibold tabular-nums">
+                    {formatCurrency(row.amount)}
+                </span>
             ),
         },
-        { key: "notes", label: "Notas" },
+        {
+            header: "Estado",
+            accessor: "status",
+            className: "w-28",
+            render: (row) => <StatusBadge status={row.status} />,
+        },
+        {
+            header: "Notas",
+            accessor: "notes",
+            render: (row) => (
+                <span className="text-sm text-slate-500 truncate max-w-[200px] block">
+                    {row.notes || "-"}
+                </span>
+            ),
+        },
     ];
 
+    // ============================================
+    // LOADING STATE
+    // ============================================
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                <Skeleton className="h-10 w-96" />
-                <Skeleton className="h-64 w-full" />
+            <div className="min-h-screen bg-slate-50 p-6">
+                <div className="space-y-6 max-w-7xl mx-auto">
+                    <div className="flex items-center gap-4">
+                        <Skeleton className="h-10 w-24" />
+                        <Skeleton className="h-8 w-64" />
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                        <Skeleton className="h-24" />
+                        <Skeleton className="h-24" />
+                        <Skeleton className="h-24" />
+                        <Skeleton className="h-24" />
+                    </div>
+                    <Skeleton className="h-96" />
+                </div>
             </div>
         );
     }
 
+    // ============================================
+    // NOT FOUND STATE
+    // ============================================
     if (!order) {
         return (
-            <div className="flex items-center justify-center h-96">
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <EmptyState
                     icon={FileText}
                     title="Orden no encontrada"
                     description="No se pudo cargar la información de la orden de servicio"
+                    action={
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate("/service-orders")}
+                        >
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Volver al listado
+                        </Button>
+                    }
                 />
             </div>
         );
     }
 
+    // ============================================
+    // RENDER
+    // ============================================
     return (
-        <div className="space-y-6">
+        <div className="min-h-screen bg-slate-50">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate("/service-orders")}
-                >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Volver
-                </Button>
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        OS #{order.os_number}
-                    </h1>
-                    <p className="text-sm text-gray-500">
-                        Cliente: {order.client?.name} | Estado:{" "}
-                        <Badge>{order.status}</Badge>
-                    </p>
+            <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+                <div className="px-6 py-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate("/service-orders")}
+                                className="text-slate-600"
+                            >
+                                <ArrowLeft className="w-4 h-4 mr-1.5" />
+                                Volver
+                            </Button>
+                            <div className="h-6 w-px bg-slate-200" />
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-xl font-semibold text-slate-900 font-mono">
+                                        {order.order_number}
+                                    </h1>
+                                    <StatusBadge status={order.status} />
+                                    {order.facturado && (
+                                        <span className="badge-success">
+                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                            Facturado
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-sm text-slate-500 mt-0.5">
+                                    {order.client?.name} • {order.shipment_type?.name}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm">
+                                <Edit className="w-4 h-4 mr-1.5" />
+                                Editar
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabs Navigation */}
+                <div className="px-6 tabs-corporate">
+                    <button
+                        onClick={() => setActiveTab("general")}
+                        className={cn(
+                            "tab-item",
+                            activeTab === "general" && "tab-item-active"
+                        )}
+                    >
+                        <FileText className="w-4 h-4 mr-2 inline" />
+                        Información General
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("charges")}
+                        className={cn(
+                            "tab-item",
+                            activeTab === "charges" && "tab-item-active"
+                        )}
+                    >
+                        <DollarSign className="w-4 h-4 mr-2 inline" />
+                        Cobros ({charges.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("transfers")}
+                        className={cn(
+                            "tab-item",
+                            activeTab === "transfers" && "tab-item-active"
+                        )}
+                    >
+                        <ArrowRightLeft className="w-4 h-4 mr-2 inline" />
+                        Transferencias ({transfers.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("invoice")}
+                        className={cn(
+                            "tab-item",
+                            activeTab === "invoice" && "tab-item-active"
+                        )}
+                    >
+                        <Receipt className="w-4 h-4 mr-2 inline" />
+                        Facturación
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("analysis")}
+                        className={cn(
+                            "tab-item",
+                            activeTab === "analysis" && "tab-item-active"
+                        )}
+                    >
+                        <BarChart3 className="w-4 h-4 mr-2 inline" />
+                        Análisis
+                    </button>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <Tabs defaultValue="general">
-                <TabsList>
-                    <TabsTrigger value="general">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Info General
-                    </TabsTrigger>
-                    <TabsTrigger value="charges">
-                        <DollarSign className="h-4 w-4 mr-2" />
-                        Cobros ({charges.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="transfers">
-                        <ArrowRightLeft className="h-4 w-4 mr-2" />
-                        Transferencias ({transfers.length})
-                    </TabsTrigger>
-                    <TabsTrigger value="invoice">
-                        <Receipt className="h-4 w-4 mr-2" />
-                        Facturación
-                    </TabsTrigger>
-                    <TabsTrigger value="comparative">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Comparativa
-                    </TabsTrigger>
-                </TabsList>
+            {/* Content */}
+            <div className="p-6 max-w-7xl mx-auto space-y-6">
+                {/* Tab: General Info */}
+                {activeTab === "general" && (
+                    <div className="space-y-6 animate-fade-in">
+                        {/* Quick Summary */}
+                        <div className="grid grid-cols-4 gap-4">
+                            <SummaryCard
+                                title="Total Cobros"
+                                value={formatCurrency(totals.charges)}
+                                variant="success"
+                                icon={DollarSign}
+                            />
+                            <SummaryCard
+                                title="Total Gastos"
+                                value={formatCurrency(totals.transfers)}
+                                variant="warning"
+                                icon={ArrowRightLeft}
+                            />
+                            <SummaryCard
+                                title="Margen"
+                                value={formatCurrency(margin.value)}
+                                variant={margin.value >= 0 ? "info" : "danger"}
+                                icon={margin.value >= 0 ? TrendingUp : TrendingDown}
+                            />
+                            <SummaryCard
+                                title="Facturado"
+                                value={formatCurrency(totals.invoiced)}
+                                variant="default"
+                                icon={Receipt}
+                            />
+                        </div>
 
-                {/* Tab 1: Info General */}
-                <TabsContent value="general">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Información del Cliente</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Cliente
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.client?.name}
-                                    </p>
+                        {/* Info Cards */}
+                        <div className="grid grid-cols-2 gap-5">
+                            {/* Client Info */}
+                            <div className="card-corporate p-5">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Building2 className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Información del Cliente
+                                    </h3>
                                 </div>
-                                <div>
-                                    <Label className="text-gray-500">NIT</Label>
-                                    <p className="font-medium">
-                                        {order.client?.nit}
-                                    </p>
+                                <dl className="grid grid-cols-2 gap-4">
+                                    <DataField
+                                        label="Cliente"
+                                        value={order.client?.name}
+                                    />
+                                    <DataField
+                                        label="NIT"
+                                        value={order.client?.nit}
+                                        mono
+                                    />
+                                    {order.sub_client && (
+                                        <DataField
+                                            label="Subcliente"
+                                            value={order.sub_client.name}
+                                            className="col-span-2"
+                                        />
+                                    )}
+                                </dl>
+                            </div>
+
+                            {/* Shipment Info */}
+                            <div className="card-corporate p-5">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Ship className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Detalles del Embarque
+                                    </h3>
                                 </div>
-                                {order.sub_client && (
+                                <dl className="grid grid-cols-2 gap-4">
+                                    <DataField
+                                        label="Tipo de Embarque"
+                                        value={order.shipment_type?.name}
+                                    />
+                                    <DataField
+                                        label="Proveedor"
+                                        value={order.provider?.name}
+                                    />
+                                    <DataField
+                                        label="Aforador"
+                                        value={order.customs_agent?.name}
+                                        className="col-span-2"
+                                    />
+                                </dl>
+                            </div>
+
+                            {/* References */}
+                            <div className="card-corporate p-5">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Hash className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Referencias
+                                    </h3>
+                                </div>
+                                <dl className="grid grid-cols-2 gap-4">
+                                    <DataField
+                                        label="DUCA"
+                                        value={order.duca}
+                                        mono
+                                    />
+                                    <DataField
+                                        label="BL / Referencia"
+                                        value={order.bl_reference}
+                                        mono
+                                    />
+                                    <DataField
+                                        label="Orden de Compra"
+                                        value={order.purchase_order}
+                                        mono
+                                    />
+                                </dl>
+                            </div>
+
+                            {/* Dates */}
+                            <div className="card-corporate p-5">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Calendar className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Fechas y Estado
+                                    </h3>
+                                </div>
+                                <dl className="grid grid-cols-2 gap-4">
+                                    <DataField
+                                        label="ETA"
+                                        value={formatDate(order.eta, { format: "medium" })}
+                                    />
+                                    <DataField
+                                        label="Fecha de Creación"
+                                        value={formatDate(order.created_at, { format: "medium" })}
+                                    />
                                     <div>
-                                        <Label className="text-gray-500">
-                                            Subcliente
-                                        </Label>
-                                        <p className="font-medium">
-                                            {order.sub_client.name}
-                                        </p>
+                                        <dt className="data-label">Estado</dt>
+                                        <dd className="mt-1">
+                                            <StatusBadge status={order.status} />
+                                        </dd>
                                     </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Detalles de la Orden</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Tipo de Embarque
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.shipment_type?.name}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Proveedor
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.provider?.name}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Aforador
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.customs_agent?.name}
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Referencias</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Orden de Compra (PO)
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.purchase_order || "N/A"}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        BL/Referencia
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.bl_reference || "N/A"}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        DUCA
-                                    </Label>
-                                    <p className="font-medium">
-                                        {order.duca || "N/A"}
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Fechas</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div>
-                                    <Label className="text-gray-500">ETA</Label>
-                                    <p className="font-medium">
-                                        {order.eta
-                                            ? new Date(
-                                                  order.eta
-                                              ).toLocaleDateString("es-SV")
-                                            : "N/A"}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Fecha de Creación
-                                    </Label>
-                                    <p className="font-medium">
-                                        {new Date(
-                                            order.created_at
-                                        ).toLocaleDateString("es-SV")}
-                                    </p>
-                                </div>
-                                <div>
-                                    <Label className="text-gray-500">
-                                        Estado
-                                    </Label>
-                                    <Badge
-                                        variant={
-                                            order.status === "abierta"
-                                                ? "warning"
-                                                : "default"
-                                        }
-                                    >
-                                        {order.status}
-                                    </Badge>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                    {order.closed_at && (
+                                        <DataField
+                                            label="Fecha de Cierre"
+                                            value={formatDate(order.closed_at, { format: "medium" })}
+                                        />
+                                    )}
+                                </dl>
+                            </div>
+                        </div>
                     </div>
-                </TabsContent>
+                )}
 
-                {/* Tab 2: Cobros */}
-                <TabsContent value="charges">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Cálculo de Cobros</CardTitle>
-                            <Button
-                                onClick={() => setIsAddChargeModalOpen(true)}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Agregar Cobro
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
+                {/* Tab: Charges */}
+                {activeTab === "charges" && (
+                    <div className="space-y-5 animate-fade-in">
+                        <div className="card-corporate overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Cálculo de Cobros
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Servicios facturables con IVA 13%
+                                    </p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={() => setIsAddChargeModalOpen(true)}
+                                    className="bg-brand-600 hover:bg-brand-700"
+                                >
+                                    <Plus className="w-4 h-4 mr-1.5" />
+                                    Agregar Cobro
+                                </Button>
+                            </div>
+
                             {charges.length > 0 ? (
                                 <>
                                     <DataTable
                                         columns={chargesColumns}
                                         data={charges}
                                     />
-                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                        <div className="flex justify-between text-lg font-bold">
-                                            <span>Total Cobros:</span>
-                                            <span className="text-green-600">
-                                                ${totals.charges.toFixed(2)}
-                                            </span>
+                                    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
+                                        <div className="flex justify-end">
+                                            <div className="text-right">
+                                                <p className="text-sm text-slate-600">
+                                                    Total Cobros
+                                                </p>
+                                                <p className="text-2xl font-bold text-success-600 tabular-nums">
+                                                    {formatCurrency(totals.charges)}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </>
                             ) : (
-                                <EmptyState
-                                    icon={DollarSign}
-                                    title="Sin cobros registrados"
-                                    description="Agrega cobros para esta orden de servicio"
-                                    action={
-                                        <Button
-                                            onClick={() =>
-                                                setIsAddChargeModalOpen(true)
-                                            }
-                                        >
-                                            <Plus className="h-4 w-4 mr-2" />
-                                            Agregar Cobro
-                                        </Button>
-                                    }
-                                />
+                                <div className="py-12">
+                                    <EmptyState
+                                        icon={DollarSign}
+                                        title="Sin cobros registrados"
+                                        description="Agrega cobros para esta orden de servicio"
+                                        action={
+                                            <Button
+                                                size="sm"
+                                                onClick={() =>
+                                                    setIsAddChargeModalOpen(true)
+                                                }
+                                                className="bg-brand-600 hover:bg-brand-700"
+                                            >
+                                                <Plus className="w-4 h-4 mr-1.5" />
+                                                Agregar Cobro
+                                            </Button>
+                                        }
+                                    />
+                                </div>
                             )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                        </div>
+                    </div>
+                )}
 
-                {/* Tab 3: Transferencias */}
-                <TabsContent value="transfers">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Gastos a Terceros</CardTitle>
-                            <Button
-                                onClick={() => setIsAddTransferModalOpen(true)}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Agregar Gasto
-                            </Button>
-                        </CardHeader>
-                        <CardContent>
+                {/* Tab: Transfers */}
+                {activeTab === "transfers" && (
+                    <div className="space-y-5 animate-fade-in">
+                        <div className="card-corporate overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Gastos y Transferencias
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Gastos a terceros, propios y administrativos
+                                    </p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    onClick={() => setIsAddTransferModalOpen(true)}
+                                    className="bg-brand-600 hover:bg-brand-700"
+                                >
+                                    <Plus className="w-4 h-4 mr-1.5" />
+                                    Agregar Gasto
+                                </Button>
+                            </div>
+
                             {transfers.length > 0 ? (
                                 <>
                                     <DataTable
                                         columns={transfersColumns}
                                         data={transfers}
                                     />
-                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                        <div className="flex justify-between text-lg font-bold">
-                                            <span>Total Gastos:</span>
-                                            <span className="text-orange-600">
-                                                ${totals.transfers.toFixed(2)}
-                                            </span>
+                                    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
+                                        <div className="flex justify-end">
+                                            <div className="text-right">
+                                                <p className="text-sm text-slate-600">
+                                                    Total Gastos
+                                                </p>
+                                                <p className="text-2xl font-bold text-warning-600 tabular-nums">
+                                                    {formatCurrency(totals.transfers)}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 </>
                             ) : (
-                                <EmptyState
-                                    icon={ArrowRightLeft}
-                                    title="Sin transferencias registradas"
-                                    description="Agrega gastos a terceros para esta orden"
-                                    action={
-                                        <Button
-                                            onClick={() =>
-                                                setIsAddTransferModalOpen(true)
-                                            }
-                                        >
-                                            <Plus className="h-4 w-4 mr-2" />
-                                            Agregar Gasto
-                                        </Button>
-                                    }
-                                />
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Tab 4: Facturación */}
-                <TabsContent value="invoice">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Información de Facturación</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {invoice ? (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <Label className="text-gray-500">
-                                                Número de Factura
-                                            </Label>
-                                            <p className="font-medium text-lg">
-                                                {invoice.invoice_number}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <Label className="text-gray-500">
-                                                Estado
-                                            </Label>
-                                            <Badge
-                                                variant={
-                                                    invoice.status === "paid"
-                                                        ? "success"
-                                                        : "warning"
+                                <div className="py-12">
+                                    <EmptyState
+                                        icon={ArrowRightLeft}
+                                        title="Sin transferencias registradas"
+                                        description="Agrega gastos a terceros para esta orden"
+                                        action={
+                                            <Button
+                                                size="sm"
+                                                onClick={() =>
+                                                    setIsAddTransferModalOpen(true)
                                                 }
+                                                className="bg-brand-600 hover:bg-brand-700"
                                             >
-                                                {invoice.status}
-                                            </Badge>
-                                        </div>
+                                                <Plus className="w-4 h-4 mr-1.5" />
+                                                Agregar Gasto
+                                            </Button>
+                                        }
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tab: Invoice */}
+                {activeTab === "invoice" && (
+                    <div className="space-y-5 animate-fade-in">
+                        <div className="card-corporate p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Receipt className="w-4 h-4 text-slate-400" />
+                                <h3 className="text-sm font-semibold text-slate-900">
+                                    Información de Facturación
+                                </h3>
+                            </div>
+
+                            {invoice ? (
+                                <div className="space-y-5">
+                                    <div className="grid grid-cols-4 gap-4">
+                                        <DataField
+                                            label="Número de Factura"
+                                            value={invoice.invoice_number}
+                                            mono
+                                        />
                                         <div>
-                                            <Label className="text-gray-500">
-                                                Total
-                                            </Label>
-                                            <p className="font-medium text-lg">
-                                                $
-                                                {parseFloat(
-                                                    invoice.total_amount
-                                                ).toFixed(2)}
-                                            </p>
+                                            <dt className="data-label">Estado</dt>
+                                            <dd className="mt-1">
+                                                <StatusBadge status={invoice.status} />
+                                            </dd>
                                         </div>
-                                        <div>
-                                            <Label className="text-gray-500">
-                                                Saldo Pendiente
-                                            </Label>
-                                            <p className="font-medium text-lg text-red-600">
-                                                $
-                                                {parseFloat(
-                                                    invoice.balance
-                                                ).toFixed(2)}
-                                            </p>
-                                        </div>
+                                        <DataField
+                                            label="Total Facturado"
+                                            value={formatCurrency(invoice.total_amount)}
+                                        />
+                                        <DataField
+                                            label="Saldo Pendiente"
+                                            value={
+                                                <span className="text-danger-600 font-semibold">
+                                                    {formatCurrency(invoice.balance)}
+                                                </span>
+                                            }
+                                        />
                                     </div>
                                 </div>
                             ) : (
@@ -631,174 +884,152 @@ function ServiceOrderDetail() {
                                     description="Esta orden aún no tiene una factura asociada"
                                 />
                             )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                        </div>
+                    </div>
+                )}
 
-                {/* Tab 5: Comparativa */}
-                <TabsContent value="comparative">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Análisis Comparativo</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-6">
-                                {/* Resumen Visual */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                                        <p className="text-sm text-green-600 font-medium">
-                                            Cobros Calculados
-                                        </p>
-                                        <p className="text-2xl font-bold text-green-700">
-                                            ${totals.charges.toFixed(2)}
-                                        </p>
-                                    </div>
-                                    <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                                        <p className="text-sm text-orange-600 font-medium">
-                                            Gastos a Terceros
-                                        </p>
-                                        <p className="text-2xl font-bold text-orange-700">
-                                            ${totals.transfers.toFixed(2)}
-                                        </p>
-                                    </div>
-                                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                        <p className="text-sm text-blue-600 font-medium">
-                                            Facturado
-                                        </p>
-                                        <p className="text-2xl font-bold text-blue-700">
-                                            ${totals.invoiced.toFixed(2)}
-                                        </p>
-                                    </div>
+                {/* Tab: Analysis */}
+                {activeTab === "analysis" && (
+                    <div className="space-y-5 animate-fade-in">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <SummaryCard
+                                title="Cobros Calculados"
+                                value={formatCurrency(totals.charges)}
+                                variant="success"
+                                icon={DollarSign}
+                            />
+                            <SummaryCard
+                                title="Gastos a Terceros"
+                                value={formatCurrency(totals.transfers)}
+                                variant="warning"
+                                icon={ArrowRightLeft}
+                            />
+                            <SummaryCard
+                                title="Total Facturado"
+                                value={formatCurrency(totals.invoiced)}
+                                variant="info"
+                                icon={Receipt}
+                            />
+                        </div>
+
+                        {/* Profitability Analysis */}
+                        <div className="card-corporate p-5">
+                            <div className="flex items-center gap-2 mb-5">
+                                <BarChart3 className="w-4 h-4 text-slate-400" />
+                                <h3 className="text-sm font-semibold text-slate-900">
+                                    Análisis de Rentabilidad
+                                </h3>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center py-2">
+                                    <span className="text-sm text-slate-600">
+                                        Ingresos (Cobros)
+                                    </span>
+                                    <span className="font-semibold tabular-nums text-success-600">
+                                        +{formatCurrency(totals.charges)}
+                                    </span>
                                 </div>
-
-                                {/* Margen */}
-                                <div className="p-6 bg-gray-50 rounded-lg">
-                                    <h3 className="text-lg font-semibold mb-4">
-                                        Análisis de Rentabilidad
-                                    </h3>
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">
-                                                Ingresos (Cobros):
-                                            </span>
-                                            <span className="font-semibold">
-                                                ${totals.charges.toFixed(2)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">
-                                                Gastos (Terceros):
-                                            </span>
-                                            <span className="font-semibold text-red-600">
-                                                -${totals.transfers.toFixed(2)}
-                                            </span>
-                                        </div>
-                                        <div className="border-t pt-3 flex justify-between">
-                                            <span className="text-gray-900 font-bold">
-                                                Margen Bruto:
-                                            </span>
-                                            <span
-                                                className={`font-bold text-lg ${
-                                                    totals.charges -
-                                                        totals.transfers >=
-                                                    0
-                                                        ? "text-green-600"
-                                                        : "text-red-600"
-                                                }`}
-                                            >
-                                                $
-                                                {(
-                                                    totals.charges -
-                                                    totals.transfers
-                                                ).toFixed(2)}
-                                            </span>
-                                        </div>
+                                <div className="flex justify-between items-center py-2">
+                                    <span className="text-sm text-slate-600">
+                                        Gastos (Terceros)
+                                    </span>
+                                    <span className="font-semibold tabular-nums text-danger-600">
+                                        -{formatCurrency(totals.transfers)}
+                                    </span>
+                                </div>
+                                <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
+                                    <span className="text-sm font-semibold text-slate-900">
+                                        Margen Bruto
+                                    </span>
+                                    <div className="text-right">
+                                        <span
+                                            className={cn(
+                                                "text-xl font-bold tabular-nums",
+                                                margin.value >= 0
+                                                    ? "text-success-600"
+                                                    : "text-danger-600"
+                                            )}
+                                        >
+                                            {formatCurrency(margin.value)}
+                                        </span>
                                         {totals.charges > 0 && (
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-gray-600">
-                                                    Margen %:
-                                                </span>
-                                                <span className="font-semibold">
-                                                    {(
-                                                        ((totals.charges -
-                                                            totals.transfers) /
-                                                            totals.charges) *
-                                                        100
-                                                    ).toFixed(1)}
-                                                    %
-                                                </span>
-                                            </div>
+                                            <span className="text-sm text-slate-500 ml-2">
+                                                ({margin.percentage.toFixed(1)}%)
+                                            </span>
                                         )}
                                     </div>
                                 </div>
-
-                                {/* Diferencia Cobros vs Facturado */}
-                                {invoice && (
-                                    <div className="p-6 bg-blue-50 rounded-lg">
-                                        <h3 className="text-lg font-semibold mb-4">
-                                            Cobros vs Facturado
-                                        </h3>
-                                        <div className="space-y-3">
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-600">
-                                                    Total Cobros:
-                                                </span>
-                                                <span className="font-semibold">
-                                                    ${totals.charges.toFixed(2)}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-600">
-                                                    Total Facturado:
-                                                </span>
-                                                <span className="font-semibold">
-                                                    $
-                                                    {totals.invoiced.toFixed(2)}
-                                                </span>
-                                            </div>
-                                            <div className="border-t pt-3 flex justify-between">
-                                                <span className="text-gray-900 font-bold">
-                                                    Diferencia:
-                                                </span>
-                                                <span
-                                                    className={`font-bold ${
-                                                        Math.abs(
-                                                            totals.charges -
-                                                                totals.invoiced
-                                                        ) < 0.01
-                                                            ? "text-green-600"
-                                                            : "text-yellow-600"
-                                                    }`}
-                                                >
-                                                    $
-                                                    {Math.abs(
-                                                        totals.charges -
-                                                            totals.invoiced
-                                                    ).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-            </Tabs>
+                        </div>
 
-            {/* Modal Agregar Cobro */}
+                        {/* Cobros vs Facturado */}
+                        {invoice && (
+                            <div className="card-corporate p-5">
+                                <div className="flex items-center gap-2 mb-5">
+                                    <Receipt className="w-4 h-4 text-slate-400" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Cobros vs Facturado
+                                    </h3>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center py-2">
+                                        <span className="text-sm text-slate-600">
+                                            Total Cobros
+                                        </span>
+                                        <span className="font-semibold tabular-nums">
+                                            {formatCurrency(totals.charges)}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-2">
+                                        <span className="text-sm text-slate-600">
+                                            Total Facturado
+                                        </span>
+                                        <span className="font-semibold tabular-nums">
+                                            {formatCurrency(totals.invoiced)}
+                                        </span>
+                                    </div>
+                                    <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
+                                        <span className="text-sm font-semibold text-slate-900">
+                                            Diferencia
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                "text-lg font-bold tabular-nums",
+                                                Math.abs(totals.charges - totals.invoiced) < 0.01
+                                                    ? "text-success-600"
+                                                    : "text-warning-600"
+                                            )}
+                                        >
+                                            {formatCurrency(
+                                                Math.abs(totals.charges - totals.invoiced)
+                                            )}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Modal: Add Charge */}
             <Dialog
                 open={isAddChargeModalOpen}
                 onOpenChange={setIsAddChargeModalOpen}
             >
-                <DialogContent>
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Agregar Cobro</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAddCharge} className="space-y-4">
                         <div>
-                            <Label>Servicio *</Label>
-                            <Select
+                            <Label className="label-corporate label-required">
+                                Servicio
+                            </Label>
+                            <select
                                 value={chargeFormData.service}
                                 onChange={(e) => {
                                     const service = services.find(
@@ -807,24 +1038,25 @@ function ServiceOrderDetail() {
                                     setChargeFormData({
                                         ...chargeFormData,
                                         service: e.target.value,
-                                        unit_price:
-                                            service?.default_price || "",
+                                        unit_price: service?.default_price || "",
                                     });
                                 }}
                                 required
+                                className="input-corporate"
                             >
-                                <option value="">Seleccionar...</option>
+                                <option value="">Seleccionar servicio...</option>
                                 {services.map((s) => (
                                     <option key={s.id} value={s.id}>
-                                        {s.name} - $
-                                        {parseFloat(s.default_price).toFixed(2)}
+                                        {s.name} - {formatCurrency(s.default_price)}
                                     </option>
                                 ))}
-                            </Select>
+                            </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label>Cantidad *</Label>
+                                <Label className="label-corporate label-required">
+                                    Cantidad
+                                </Label>
                                 <Input
                                     type="number"
                                     min="1"
@@ -836,10 +1068,13 @@ function ServiceOrderDetail() {
                                         })
                                     }
                                     required
+                                    className="input-corporate"
                                 />
                             </div>
                             <div>
-                                <Label>Precio Unitario *</Label>
+                                <Label className="label-corporate label-required">
+                                    Precio Unitario
+                                </Label>
                                 <Input
                                     type="number"
                                     step="0.01"
@@ -851,6 +1086,7 @@ function ServiceOrderDetail() {
                                         })
                                     }
                                     required
+                                    className="input-corporate"
                                 />
                             </div>
                         </div>
@@ -862,25 +1098,32 @@ function ServiceOrderDetail() {
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit">Agregar</Button>
+                            <Button
+                                type="submit"
+                                className="bg-brand-600 hover:bg-brand-700"
+                            >
+                                Agregar Cobro
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Modal Agregar Transferencia */}
+            {/* Modal: Add Transfer */}
             <Dialog
                 open={isAddTransferModalOpen}
                 onOpenChange={setIsAddTransferModalOpen}
             >
-                <DialogContent>
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>Agregar Gasto</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleAddTransfer} className="space-y-4">
                         <div>
-                            <Label>Tipo *</Label>
-                            <Select
+                            <Label className="label-corporate label-required">
+                                Tipo de Gasto
+                            </Label>
+                            <select
                                 value={transferFormData.transfer_type}
                                 onChange={(e) =>
                                     setTransferFormData({
@@ -889,16 +1132,19 @@ function ServiceOrderDetail() {
                                     })
                                 }
                                 required
+                                className="input-corporate"
                             >
                                 <option value="terceros">Terceros</option>
                                 <option value="propios">Propios</option>
                                 <option value="admin">Administrativos</option>
-                            </Select>
+                            </select>
                         </div>
                         {transferFormData.transfer_type === "terceros" && (
                             <div>
-                                <Label>Proveedor *</Label>
-                                <Select
+                                <Label className="label-corporate label-required">
+                                    Proveedor
+                                </Label>
+                                <select
                                     value={transferFormData.provider}
                                     onChange={(e) =>
                                         setTransferFormData({
@@ -907,18 +1153,21 @@ function ServiceOrderDetail() {
                                         })
                                     }
                                     required
+                                    className="input-corporate"
                                 >
-                                    <option value="">Seleccionar...</option>
+                                    <option value="">Seleccionar proveedor...</option>
                                     {providers.map((p) => (
                                         <option key={p.id} value={p.id}>
                                             {p.name}
                                         </option>
                                     ))}
-                                </Select>
+                                </select>
                             </div>
                         )}
                         <div>
-                            <Label>Monto *</Label>
+                            <Label className="label-corporate label-required">
+                                Monto
+                            </Label>
                             <Input
                                 type="number"
                                 step="0.01"
@@ -930,13 +1179,13 @@ function ServiceOrderDetail() {
                                     })
                                 }
                                 required
+                                className="input-corporate"
                             />
                         </div>
                         <div>
-                            <Label>Notas</Label>
+                            <Label className="label-corporate">Notas</Label>
                             <textarea
-                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                rows={3}
+                                className="input-corporate min-h-[80px] resize-none"
                                 value={transferFormData.notes}
                                 onChange={(e) =>
                                     setTransferFormData({
@@ -954,7 +1203,12 @@ function ServiceOrderDetail() {
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit">Agregar</Button>
+                            <Button
+                                type="submit"
+                                className="bg-brand-600 hover:bg-brand-700"
+                            >
+                                Agregar Gasto
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
