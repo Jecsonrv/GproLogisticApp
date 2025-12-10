@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from apps.orders.models import ServiceOrder
 from apps.catalogs.models import Provider, Bank
+from apps.validators import validate_document_file
 
 class Transfer(models.Model):
     TYPE_CHOICES = (
@@ -38,7 +39,14 @@ class Transfer(models.Model):
     bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     ccf = models.CharField(max_length=100, blank=True, verbose_name="CCF (Número de Factura)")
     invoice_number = models.CharField(max_length=100, blank=True, verbose_name="Número de Factura/Comprobante")
-    invoice_file = models.FileField(upload_to='transfers/invoices/', blank=True, null=True, verbose_name="Factura")
+    invoice_file = models.FileField(
+        upload_to='transfers/invoices/',
+        blank=True,
+        null=True,
+        verbose_name="Factura",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
 
     # Fechas
     transaction_date = models.DateField(default=timezone.now, verbose_name="Fecha de Transacción")

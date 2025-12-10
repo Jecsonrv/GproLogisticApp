@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from apps.clients.models import Client
 from apps.catalogs.models import SubClient, ShipmentType, Provider, CustomsAgent, Bank
+from apps.validators import validate_document_file
 
 class ServiceOrder(models.Model):
     order_number = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Orden")
@@ -93,7 +94,12 @@ class ServiceOrder(models.Model):
 
 class OrderDocument(models.Model):
     order = models.ForeignKey(ServiceOrder, related_name='documents', on_delete=models.CASCADE)
-    file = models.FileField(upload_to='orders/docs/', verbose_name="Archivo")
+    file = models.FileField(
+        upload_to='orders/docs/',
+        verbose_name="Archivo",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
     description = models.CharField(max_length=255, blank=True, verbose_name="Descripción")
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
@@ -186,6 +192,10 @@ class Invoice(models.Model):
     iva_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="IVA Servicios")
     total_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Total Servicios (con IVA)")
     subtotal_third_party = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Gastos a Terceros")
+
+    # Fiscalidad El Salvador - Retención Gran Contribuyente
+    retencion = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Retención 1% (Gran Contribuyente)")
+
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Total Factura")
     paid_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto Pagado")
     balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo Pendiente")
@@ -194,8 +204,22 @@ class Invoice(models.Model):
     payment_condition = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='credito', verbose_name="Condición de Pago")
 
     # Archivos
-    dte_file = models.FileField(upload_to='invoices/dte/', null=True, blank=True, verbose_name="Archivo DTE")
-    pdf_file = models.FileField(upload_to='invoices/pdf/', null=True, blank=True, verbose_name="PDF de Factura")
+    dte_file = models.FileField(
+        upload_to='invoices/dte/',
+        null=True,
+        blank=True,
+        verbose_name="Archivo DTE",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
+    pdf_file = models.FileField(
+        upload_to='invoices/pdf/',
+        null=True,
+        blank=True,
+        verbose_name="PDF de Factura",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
 
     notes = models.TextField(blank=True, verbose_name="Observaciones")
     created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Creado por")
@@ -231,7 +255,16 @@ class Invoice(models.Model):
                 new_num = 1
             self.invoice_number = f"{new_num:05d}-{year}"
 
-        self.balance = self.total_amount - self.paid_amount
+        # Calcular retención del 1% para Grandes Contribuyentes con CCF
+        client = self.service_order.client
+        if client.is_gran_contribuyente and self.invoice_type == 'CCF':
+            # Retención del 1% sobre el subtotal de servicios
+            self.retencion = (self.subtotal_services + self.subtotal_third_party) * Decimal('0.01')
+        else:
+            self.retencion = Decimal('0.00')
+
+        # El saldo a pagar se reduce por la retención
+        self.balance = (self.total_amount - self.retencion) - self.paid_amount
 
         if self.balance <= 0 and self.status != 'cancelled':
             self.status = 'paid'
@@ -241,7 +274,6 @@ class Invoice(models.Model):
             self.status = 'overdue'
 
         if self.payment_condition == 'credito' and not self.due_date:
-            client = self.service_order.client
             credit_days = getattr(client, 'credit_days', 30)
             self.due_date = self.issue_date + timedelta(days=credit_days)
 
@@ -287,7 +319,14 @@ class InvoicePayment(models.Model):
     reference_number = models.CharField(max_length=100, blank=True, verbose_name="Número de Referencia/Cheque")
     bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     notes = models.TextField(blank=True, verbose_name="Notas")
-    receipt_file = models.FileField(upload_to='invoices/payments/', null=True, blank=True, verbose_name="Comprobante de Pago")
+    receipt_file = models.FileField(
+        upload_to='invoices/payments/',
+        null=True,
+        blank=True,
+        verbose_name="Comprobante de Pago",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
     created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

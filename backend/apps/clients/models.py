@@ -19,7 +19,10 @@ class Client(models.Model):
     payment_condition = models.CharField(max_length=20, choices=PAYMENT_CONDITIONS, verbose_name="Condición de Pago")
     credit_days = models.IntegerField(default=0, verbose_name="Días de Crédito")
     credit_limit = models.DecimalField(max_digits=15, decimal_places=2, default=0, verbose_name="Límite de Crédito")
-    
+
+    # Configuración fiscal (El Salvador)
+    is_gran_contribuyente = models.BooleanField(default=False, verbose_name="Gran Contribuyente")
+
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
