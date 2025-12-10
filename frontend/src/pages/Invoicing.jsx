@@ -55,7 +55,7 @@ const Invoicing = () => {
     // Payment form
     const [paymentForm, setPaymentForm] = useState({
         amount: "",
-        payment_date: new Date().toISOString().split("T")[0],
+        payment_date: new Date().toLocaleDateString("en-CA"),
         payment_method: "transferencia",
         reference: "",
         notes: "",
@@ -64,7 +64,7 @@ const Invoicing = () => {
     // Generate invoice form
     const [generateForm, setGenerateForm] = useState({
         client: "",
-        invoice_date: new Date().toISOString().split("T")[0],
+        invoice_date: new Date().toLocaleDateString("en-CA"),
         due_date: "",
         ccf: "",
         selectedOrders: [],
@@ -124,7 +124,7 @@ const Invoicing = () => {
         setSelectedInvoice(invoice);
         setPaymentForm({
             amount: invoice.balance,
-            payment_date: new Date().toISOString().split("T")[0],
+            payment_date: new Date().toLocaleDateString("en-CA"),
             payment_method: "transferencia",
             reference: "",
             notes: "",
@@ -170,7 +170,7 @@ const Invoicing = () => {
             setIsGenerateModalOpen(false);
             setGenerateForm({
                 client: "",
-                invoice_date: new Date().toISOString().split("T")[0],
+                invoice_date: new Date().toLocaleDateString("en-CA"),
                 due_date: "",
                 ccf: "",
                 selectedOrders: [],
@@ -213,11 +213,11 @@ const Invoicing = () => {
             render: (row) => (
                 <div>
                     <div className="text-sm text-slate-900">
-                        {new Date(row.invoice_date).toLocaleDateString("es-SV")}
+                        {new Date(row.invoice_date + "T00:00:00").toLocaleDateString("es-SV")}
                     </div>
                     {row.due_date && (
                         <div className="text-xs text-slate-500">
-                            Vence: {new Date(row.due_date).toLocaleDateString("es-SV")}
+                            Vence: {new Date(row.due_date + "T00:00:00").toLocaleDateString("es-SV")}
                         </div>
                     )}
                 </div>
@@ -631,14 +631,14 @@ const Invoicing = () => {
                             <div>
                                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha de Factura</p>
                                 <p className="text-sm font-medium text-slate-900">
-                                    {new Date(selectedInvoice.invoice_date).toLocaleDateString("es-SV")}
+                                    {new Date(selectedInvoice.invoice_date + "T00:00:00").toLocaleDateString("es-SV")}
                                 </p>
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha de Vencimiento</p>
                                 <p className="text-sm font-medium text-slate-900">
                                     {selectedInvoice.due_date
-                                        ? new Date(selectedInvoice.due_date).toLocaleDateString("es-SV")
+                                        ? new Date(selectedInvoice.due_date + "T00:00:00").toLocaleDateString("es-SV")
                                         : "Sin vencimiento"}
                                 </p>
                             </div>
@@ -704,7 +704,7 @@ const Invoicing = () => {
                                             {selectedInvoice.payments.map((payment, idx) => (
                                                 <tr key={idx} className="hover:bg-slate-50">
                                                     <td className="px-4 py-2.5 text-sm text-slate-900">
-                                                        {new Date(payment.payment_date).toLocaleDateString("es-SV")}
+                                                        {new Date(payment.payment_date + "T00:00:00").toLocaleDateString("es-SV")}
                                                     </td>
                                                     <td className="px-4 py-2.5 text-sm font-semibold text-success-600 tabular-nums">
                                                         {formatCurrency(payment.amount)}

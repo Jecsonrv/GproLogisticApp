@@ -4,11 +4,6 @@ import useAuthStore from '../stores/authStore';
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const checkAuth = useAuthStore((state) => state.checkAuth);
-
-  React.useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

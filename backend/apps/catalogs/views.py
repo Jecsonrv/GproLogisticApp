@@ -32,7 +32,7 @@ class CustomsAgentViewSet(viewsets.ModelViewSet):
     queryset = CustomsAgent.objects.all()
     serializer_class = CustomsAgentSerializer
     permission_classes = [IsAdminOrReadOnly]
-    search_fields = ['name', 'code']
+    search_fields = ['name', 'email']
     filterset_fields = ['is_active']
 
     def get_queryset(self):
@@ -46,7 +46,7 @@ class BankViewSet(viewsets.ModelViewSet):
     queryset = Bank.objects.all()
     serializer_class = BankSerializer
     permission_classes = [IsAdminOrReadOnly]
-    search_fields = ['name', 'code', 'swift_code']
+    search_fields = ['name']
     filterset_fields = ['is_active']
 
     def get_queryset(self):
@@ -89,10 +89,10 @@ class ServiceViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['code', 'name', 'description']
+    search_fields = ['name', 'description']
     filterset_fields = ['is_active', 'applies_iva']
-    ordering_fields = ['code', 'name', 'default_price']
-    ordering = ['code']
+    ordering_fields = ['id', 'name', 'default_price']
+    ordering = ['name']
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -104,7 +104,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def activos(self, request):
         """Endpoint para obtener solo servicios activos (para dropdowns)"""
-        services = self.queryset.filter(is_active=True).order_by('code')
+        services = self.queryset.filter(is_active=True).order_by('name')
         serializer = self.get_serializer(services, many=True)
         return Response(serializer.data)
 

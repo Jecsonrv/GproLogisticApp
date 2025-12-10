@@ -1,6 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { PlusIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { DataTable, Modal, Button, Card, Input, Badge } from "../components/ui";
+import { Plus, DollarSign, Tag, FileText, Search } from "lucide-react";
+import {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    DataTable,
+    Button,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    Input,
+    Label,
+    Badge,
+    ConfirmDialog,
+    Tabs,
+    TabsList,
+    TabsTrigger,
+    TabsContent,
+} from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 
@@ -8,12 +28,18 @@ import toast from "react-hot-toast";
  * Página de Gestión de Servicios
  */
 const Services = () => {
+    const [activeTab, setActiveTab] = useState("general");
+
+    // Estados para Servicios Generales
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingService, setEditingService] = useState(null);
+    const [confirmDialog, setConfirmDialog] = useState({
+        open: false,
+        id: null,
+    });
     const [formData, setFormData] = useState({
-        code: "",
         name: "",
         description: "",
         default_price: "",
@@ -21,10 +47,39 @@ const Services = () => {
         is_active: true,
     });
 
+    // Estados para Precios Personalizados
+    const [customPrices, setCustomPrices] = useState([]);
+    const [loadingCustom, setLoadingCustom] = useState(true);
+    const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+    const [editingCustomPrice, setEditingCustomPrice] = useState(null);
+    const [confirmCustomDialog, setConfirmCustomDialog] = useState({
+        open: false,
+        id: null,
+    });
+    const [clients, setClients] = useState([]);
+    const [activeServices, setActiveServices] = useState([]);
+    const [customFormData, setCustomFormData] = useState({
+        client: "",
+        service: "",
+        custom_price: "",
+        is_active: true,
+        notes: "",
+        effective_date: new Date().toLocaleDateString("en-CA"),
+    });
+
     useEffect(() => {
         fetchServices();
+        fetchClients();
+        fetchActiveServices();
     }, []);
 
+    useEffect(() => {
+        if (activeTab === "custom") {
+            fetchCustomPrices();
+        }
+    }, [activeTab]);
+
+    // Funciones para Servicios Generales
     const fetchServices = async () => {
         try {
             setLoading(true);
@@ -37,6 +92,39 @@ const Services = () => {
         }
     };
 
+    // Funciones para Precios Personalizados
+    const fetchCustomPrices = async () => {
+        try {
+            setLoadingCustom(true);
+            const response = await axios.get(
+                "/catalogs/client-service-prices/"
+            );
+            setCustomPrices(response.data);
+        } catch (error) {
+            toast.error("Error al cargar precios personalizados");
+        } finally {
+            setLoadingCustom(false);
+        }
+    };
+
+    const fetchClients = async () => {
+        try {
+            const response = await axios.get("/clients/");
+            setClients(response.data);
+        } catch (error) {
+            console.error("Error al cargar clientes:", error);
+        }
+    };
+
+    const fetchActiveServices = async () => {
+        try {
+            const response = await axios.get("/catalogs/services/activos/");
+            setActiveServices(response.data);
+        } catch (error) {
+            console.error("Error al cargar servicios activos:", error);
+        }
+    };
+
     const handleOpenModal = (service = null) => {
         if (service) {
             setEditingService(service);
@@ -44,7 +132,6 @@ const Services = () => {
         } else {
             setEditingService(null);
             setFormData({
-                code: "",
                 name: "",
                 description: "",
                 default_price: "",
@@ -83,36 +170,240 @@ const Services = () => {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm("¿Está seguro de eliminar este servicio?")) return;
+    const handleDelete = (id) => {
+        setConfirmDialog({ open: true, id });
+    };
 
+    const confirmDelete = async () => {
+        const { id } = confirmDialog;
         try {
             await axios.delete(`/catalogs/services/${id}/`);
-            toast.success("Servicio eliminado");
+            toast.success("Servicio eliminado exitosamente");
             fetchServices();
         } catch (error) {
             toast.error("Error al eliminar servicio");
         }
     };
 
+    // Funciones para Precios Personalizados
+    const handleOpenCustomModal = (customPrice = null) => {
+        if (customPrice) {
+            setEditingCustomPrice(customPrice);
+            setCustomFormData({
+                client: customPrice.client,
+                service: customPrice.service,
+                custom_price: customPrice.custom_price,
+                is_active: customPrice.is_active,
+                notes: customPrice.notes || "",
+                effective_date:
+                    customPrice.effective_date ||
+                    new Date().toLocaleDateString("en-CA"),
+            });
+        } else {
+            setEditingCustomPrice(null);
+            setCustomFormData({
+                client: "",
+                service: "",
+                custom_price: "",
+                is_active: true,
+                notes: "",
+                effective_date: new Date().toLocaleDateString("en-CA"),
+            });
+        }
+        setIsCustomModalOpen(true);
+    };
+
+    const handleCloseCustomModal = () => {
+        setIsCustomModalOpen(false);
+        setEditingCustomPrice(null);
+    };
+
+    const handleCustomSubmit = async (e) => {
+        e.preventDefault();
+
+        try {
+            if (editingCustomPrice) {
+                await axios.put(
+                    `/catalogs/client-service-prices/${editingCustomPrice.id}/`,
+                    customFormData
+                );
+                toast.success("Precio personalizado actualizado exitosamente");
+            } else {
+                await axios.post(
+                    "/catalogs/client-service-prices/",
+                    customFormData
+                );
+                toast.success("Precio personalizado creado exitosamente");
+            }
+            fetchCustomPrices();
+            handleCloseCustomModal();
+        } catch (error) {
+            // Extraer mensaje de error descriptivo
+            let errorMessage = "Error al guardar precio personalizado";
+
+            if (error.response?.data) {
+                const errorData = error.response.data;
+
+                if (typeof errorData === "string") {
+                    errorMessage = errorData;
+                } else if (errorData.non_field_errors) {
+                    errorMessage = Array.isArray(errorData.non_field_errors)
+                        ? errorData.non_field_errors[0]
+                        : errorData.non_field_errors;
+                } else if (errorData.detail) {
+                    errorMessage = errorData.detail;
+                } else if (errorData.message) {
+                    errorMessage = errorData.message;
+                } else {
+                    // Buscar el primer error de campo
+                    const firstError = Object.entries(errorData).find(
+                        ([key, value]) => value
+                    );
+                    if (firstError) {
+                        const [field, message] = firstError;
+                        const fieldNames = {
+                            client: "Cliente",
+                            service: "Servicio",
+                            custom_price: "Precio",
+                        };
+                        const fieldLabel = fieldNames[field] || field;
+                        errorMessage = `${fieldLabel}: ${
+                            Array.isArray(message) ? message[0] : message
+                        }`;
+                    }
+                }
+            }
+
+            toast.error(errorMessage, { duration: 4000 });
+        }
+    };
+
+    const handleDeleteCustom = (id) => {
+        setConfirmCustomDialog({ open: true, id });
+    };
+
+    const confirmDeleteCustom = async () => {
+        const { id } = confirmCustomDialog;
+        try {
+            await axios.delete(`/catalogs/client-service-prices/${id}/`);
+            toast.success("Precio personalizado eliminado exitosamente");
+            fetchCustomPrices();
+        } catch (error) {
+            toast.error("Error al eliminar precio personalizado");
+        }
+    };
+
+    // Obtener el servicio seleccionado para mostrar si aplica IVA
+    const selectedService = activeServices.find(
+        (s) => s.id === parseInt(customFormData.service)
+    );
+    const calculatedPriceWithIva =
+        selectedService?.applies_iva && customFormData.custom_price
+            ? (parseFloat(customFormData.custom_price) * 1.13).toFixed(2)
+            : null;
+
+    // Columnas para Precios Personalizados
+    const customPriceColumns = [
+        {
+            header: "Cliente",
+            accessor: "client_name",
+            cell: (row) => (
+                <div className="font-medium text-gray-900">
+                    {row.client_name}
+                </div>
+            ),
+        },
+        {
+            header: "Servicio",
+            accessor: "service_name",
+            cell: (row) => (
+                <div className="font-medium text-gray-900">
+                    {row.service_name}
+                </div>
+            ),
+        },
+        {
+            header: "Precio Personalizado",
+            accessor: "custom_price",
+            cell: (row) => (
+                <div>
+                    <div className="font-semibold text-primary-600">
+                        ${parseFloat(row.custom_price).toFixed(2)}
+                    </div>
+                    {row.price_with_iva && (
+                        <div className="text-xs text-gray-500">
+                            Con IVA: $
+                            {parseFloat(row.price_with_iva).toFixed(2)}
+                        </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            header: "Vigencia",
+            accessor: "effective_date",
+            cell: (row) => (
+                <div className="text-sm text-gray-600">
+                    {row.effective_date
+                        ? new Date(row.effective_date + "T00:00:00").toLocaleDateString(
+                              "es-GT"
+                          )
+                        : "-"}
+                </div>
+            ),
+        },
+        {
+            header: "Estado",
+            accessor: "is_active",
+            cell: (row) => (
+                <Badge variant={row.is_active ? "success" : "default"}>
+                    {row.is_active ? "Activo" : "Inactivo"}
+                </Badge>
+            ),
+        },
+        {
+            header: "Acciones",
+            accessor: "actions",
+            cell: (row) => (
+                <div className="flex gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenCustomModal(row)}
+                    >
+                        Editar
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDeleteCustom(row.id)}
+                    >
+                        Eliminar
+                    </Button>
+                </div>
+            ),
+        },
+    ];
+
+    // Columnas para Servicios Generales
     const columns = [
         {
-            header: "Código",
-            accessor: "code",
-            render: (row) => (
-                <span className="font-mono font-medium text-gray-900">
-                    {row.code}
+            header: "#",
+            accessor: "sequence",
+            cell: (row, index) => (
+                <span className="font-mono font-semibold text-gray-600">
+                    {index + 1}
                 </span>
             ),
         },
         {
-            header: "Nombre",
+            header: "Nombre del Servicio",
             accessor: "name",
-            render: (row) => (
+            cell: (row) => (
                 <div>
                     <div className="font-medium text-gray-900">{row.name}</div>
                     {row.description && (
-                        <div className="text-sm text-gray-500 truncate max-w-xs">
+                        <div className="text-sm text-gray-500 truncate max-w-md">
                             {row.description}
                         </div>
                     )}
@@ -122,14 +413,15 @@ const Services = () => {
         {
             header: "Precio Base",
             accessor: "default_price",
-            render: (row) => (
+            cell: (row) => (
                 <div>
-                    <div className="font-medium text-gray-900">
+                    <div className="font-semibold text-gray-900">
                         ${parseFloat(row.default_price).toFixed(2)}
                     </div>
-                    {row.applies_iva && (
-                        <div className="text-sm text-gray-500">
-                            c/IVA: ${parseFloat(row.price_with_iva).toFixed(2)}
+                    {row.applies_iva && row.price_with_iva && (
+                        <div className="text-xs text-gray-500">
+                            Con IVA: $
+                            {parseFloat(row.price_with_iva).toFixed(2)}
                         </div>
                     )}
                 </div>
@@ -138,48 +430,40 @@ const Services = () => {
         {
             header: "IVA",
             accessor: "applies_iva",
-            sortable: false,
-            render: (row) => (
+            cell: (row) => (
                 <Badge variant={row.applies_iva ? "success" : "default"}>
-                    {row.applies_iva ? "Sí (13%)" : "No"}
+                    {row.applies_iva ? "Sí aplica" : "No aplica"}
                 </Badge>
             ),
         },
         {
             header: "Estado",
             accessor: "is_active",
-            sortable: false,
-            render: (row) => (
-                <Badge variant={row.is_active ? "success" : "danger"}>
+            cell: (row) => (
+                <Badge variant={row.is_active ? "success" : "default"}>
                     {row.is_active ? "Activo" : "Inactivo"}
                 </Badge>
             ),
         },
         {
             header: "Acciones",
-            sortable: false,
-            render: (row) => (
-                <div className="flex space-x-2">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(row);
-                        }}
-                        className="text-primary-600 hover:text-primary-900"
-                        title="Editar"
+            accessor: "actions",
+            cell: (row) => (
+                <div className="flex gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenModal(row)}
                     >
-                        <PencilIcon className="h-5 w-5" />
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(row.id);
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                        title="Eliminar"
+                        Editar
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleDelete(row.id)}
                     >
-                        <TrashIcon className="h-5 w-5" />
-                    </button>
+                        Eliminar
+                    </Button>
                 </div>
             ),
         },
@@ -188,161 +472,516 @@ const Services = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Catálogo de Servicios
-                    </h1>
-                    <p className="text-sm text-gray-600 mt-1">
-                        Gestiona los servicios disponibles
-                    </p>
-                </div>
-                <Button
-                    variant="primary"
-                    onClick={() => handleOpenModal()}
-                    icon={<PlusIcon className="h-5 w-5" />}
-                >
-                    Agregar Servicio
-                </Button>
+            <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                    Servicios y Tarifario
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">
+                    Gestiona servicios generales y precios personalizados por
+                    cliente
+                </p>
             </div>
 
-            {/* Tabla */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-100">
-                <DataTable
-                    data={services}
-                    columns={columns}
-                    loading={loading}
-                    searchPlaceholder="Buscar servicios..."
-                    emptyMessage="No hay servicios registrados"
-                />
-            </div>
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList>
+                    <TabsTrigger value="general">
+                        <Tag className="h-4 w-4 mr-2" />
+                        Servicios Generales
+                    </TabsTrigger>
+                    <TabsTrigger value="custom">
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        Precios por Cliente
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Servicios Generales */}
+                <TabsContent value="general" key="general">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle>Catálogo de Servicios</CardTitle>
+                            <Button onClick={() => handleOpenModal()}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Nuevo Servicio
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            <DataTable
+                                data={services}
+                                columns={columns}
+                                loading={loading}
+                                searchable
+                                searchPlaceholder="Buscar servicios..."
+                                emptyMessage="No hay servicios registrados"
+                                pagination
+                            />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Precios Personalizados */}
+                <TabsContent value="custom" key="custom">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle>
+                                    Tarifas Personalizadas por Cliente
+                                </CardTitle>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Configura precios especiales para clientes
+                                    específicos
+                                </p>
+                            </div>
+                            <Button onClick={() => handleOpenCustomModal()}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Nuevo Precio
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            <DataTable
+                                data={customPrices}
+                                columns={customPriceColumns}
+                                loading={loadingCustom}
+                                searchable
+                                searchPlaceholder="Buscar por cliente o servicio..."
+                                emptyMessage="No hay precios personalizados registrados"
+                                pagination
+                            />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
 
             {/* Modal Crear/Editar */}
-            <Modal
-                isOpen={isModalOpen}
-                onClose={handleCloseModal}
-                title={editingService ? "Editar Servicio" : "Nuevo Servicio"}
-                size="lg"
-                footer={
-                    <>
-                        <Button variant="secondary" onClick={handleCloseModal}>
-                            Cancelar
-                        </Button>
-                        <Button variant="primary" onClick={handleSubmit}>
-                            {editingService ? "Actualizar" : "Crear"}
-                        </Button>
-                    </>
-                }
-            >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Código"
-                            value={formData.code}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    code: e.target.value.toUpperCase(),
-                                })
-                            }
-                            placeholder="Ej: ASADMON"
-                            required
-                        />
-                        <Input
-                            label="Precio Base (Sin IVA)"
-                            type="number"
-                            step="0.01"
-                            value={formData.default_price}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    default_price: e.target.value,
-                                })
-                            }
-                            placeholder="0.00"
-                            required
-                        />
-                    </div>
+            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                <DialogContent size="xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">
+                            {editingService
+                                ? "Editar Servicio"
+                                : "Nuevo Servicio"}
+                        </DialogTitle>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {editingService
+                                ? "Modifica los datos del servicio"
+                                : "Define un nuevo servicio para el catálogo general"}
+                        </p>
+                    </DialogHeader>
 
-                    <Input
-                        label="Nombre del Servicio"
-                        value={formData.name}
-                        onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
-                        }
-                        placeholder="Ej: Asesoría y Gestión Aduanal"
-                        required
-                    />
+                    <form onSubmit={handleSubmit}>
+                        <div className="space-y-6 py-4">
+                            {/* Información Básica */}
+                            <div className="space-y-4">
+                                <div>
+                                    <Label>Nombre del Servicio *</Label>
+                                    <Input
+                                        value={formData.name}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                name: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: Asesoría y Gestión Aduanal"
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Nombre descriptivo del servicio
+                                    </p>
+                                </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Descripción
-                        </label>
-                        <textarea
-                            value={formData.description}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    description: e.target.value,
-                                })
-                            }
-                            rows={3}
-                            className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            placeholder="Descripción opcional del servicio..."
-                        />
-                    </div>
+                                <div>
+                                    <Label>Precio Base (Sin IVA) *</Label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                            $
+                                        </span>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={formData.default_price}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    default_price:
+                                                        e.target.value,
+                                                })
+                                            }
+                                            placeholder="0.00"
+                                            className="pl-7"
+                                            required
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Precio estándar del servicio sin incluir
+                                        IVA
+                                    </p>
+                                </div>
 
-                    <div className="flex items-center space-x-6">
-                        <label className="flex items-center">
-                            <input
-                                type="checkbox"
-                                checked={formData.applies_iva}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        applies_iva: e.target.checked,
-                                    })
-                                }
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">
-                                Aplica IVA (13%)
-                            </span>
-                        </label>
-
-                        <label className="flex items-center">
-                            <input
-                                type="checkbox"
-                                checked={formData.is_active}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        is_active: e.target.checked,
-                                    })
-                                }
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">
-                                Activo
-                            </span>
-                        </label>
-                    </div>
-
-                    {formData.applies_iva && formData.default_price && (
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <div className="text-sm text-gray-600">
-                                Precio con IVA (13%):
+                                <div>
+                                    <Label>Descripción</Label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                description: e.target.value,
+                                            })
+                                        }
+                                        rows={3}
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="Descripción detallada del servicio (opcional)"
+                                    />
+                                </div>
                             </div>
-                            <div className="text-2xl font-bold text-primary-600 mt-1">
-                                $
-                                {(
-                                    parseFloat(formData.default_price) * 1.13
-                                ).toFixed(2)}
+
+                            {/* Configuración */}
+                            <div className="border-t border-gray-200 pt-4 space-y-3">
+                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                    <input
+                                        type="checkbox"
+                                        id="applies_iva"
+                                        checked={
+                                            formData.applies_iva !== undefined
+                                                ? formData.applies_iva
+                                                : true
+                                        }
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                applies_iva: e.target.checked,
+                                            })
+                                        }
+                                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <div className="flex flex-col flex-1">
+                                        <Label
+                                            htmlFor="applies_iva"
+                                            className="font-medium text-gray-900 cursor-pointer"
+                                        >
+                                            Aplicar IVA (13%)
+                                        </Label>
+                                        <span className="text-xs text-gray-500">
+                                            El precio final incluirá el impuesto
+                                            al valor agregado
+                                        </span>
+                                    </div>
+                                    <div className="text-right min-w-[120px]">
+                                        {formData.applies_iva &&
+                                        formData.default_price ? (
+                                            <>
+                                                <div className="text-xs text-gray-500">
+                                                    Precio con IVA
+                                                </div>
+                                                <div className="text-lg font-bold text-primary-600">
+                                                    $
+                                                    {(
+                                                        parseFloat(
+                                                            formData.default_price
+                                                        ) * 1.13
+                                                    ).toFixed(2)}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="h-[52px]"></div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active"
+                                        checked={
+                                            formData.is_active !== undefined
+                                                ? formData.is_active
+                                                : true
+                                        }
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                is_active: e.target.checked,
+                                            })
+                                        }
+                                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <div className="flex flex-col">
+                                        <Label
+                                            htmlFor="is_active"
+                                            className="font-medium text-gray-900 cursor-pointer"
+                                        >
+                                            Estado Activo
+                                        </Label>
+                                        <span className="text-xs text-gray-500">
+                                            El servicio estará disponible para
+                                            usar en órdenes
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    )}
-                </form>
-            </Modal>
+
+                        <DialogFooter className="bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleCloseModal}
+                                className="min-w-[100px]"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button type="submit" className="min-w-[100px]">
+                                {editingService ? "Actualizar" : "Guardar"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal Crear/Editar Precio Personalizado */}
+            <Dialog
+                open={isCustomModalOpen}
+                onOpenChange={setIsCustomModalOpen}
+            >
+                <DialogContent size="xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">
+                            {editingCustomPrice
+                                ? "Editar Precio Personalizado"
+                                : "Nuevo Precio Personalizado"}
+                        </DialogTitle>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {editingCustomPrice
+                                ? "Modifica el precio personalizado para este cliente"
+                                : "Define un precio especial para un cliente específico"}
+                        </p>
+                    </DialogHeader>
+
+                    <form onSubmit={handleCustomSubmit}>
+                        <div className="space-y-6 py-4">
+                            {/* Selección Cliente y Servicio */}
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <Label>Cliente *</Label>
+                                        <select
+                                            value={customFormData.client}
+                                            onChange={(e) =>
+                                                setCustomFormData({
+                                                    ...customFormData,
+                                                    client: e.target.value,
+                                                })
+                                            }
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            required
+                                            disabled={!!editingCustomPrice}
+                                        >
+                                            <option value="">
+                                                Seleccione un cliente
+                                            </option>
+                                            {clients.map((client) => (
+                                                <option
+                                                    key={client.id}
+                                                    value={client.id}
+                                                >
+                                                    {client.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Cliente al que aplicará el precio
+                                            especial
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <Label>Servicio *</Label>
+                                        <select
+                                            value={customFormData.service}
+                                            onChange={(e) =>
+                                                setCustomFormData({
+                                                    ...customFormData,
+                                                    service: e.target.value,
+                                                })
+                                            }
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            required
+                                            disabled={!!editingCustomPrice}
+                                        >
+                                            <option value="">
+                                                Seleccione un servicio
+                                            </option>
+                                            {activeServices.map(
+                                                (service, index) => (
+                                                    <option
+                                                        key={service.id}
+                                                        value={service.id}
+                                                    >
+                                                        #{index + 1} -{" "}
+                                                        {service.name}
+                                                    </option>
+                                                )
+                                            )}
+                                        </select>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Servicio con precio personalizado
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <Label>
+                                            Precio Personalizado (Sin IVA) *
+                                        </Label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                                                $
+                                            </span>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={
+                                                    customFormData.custom_price
+                                                }
+                                                onChange={(e) =>
+                                                    setCustomFormData({
+                                                        ...customFormData,
+                                                        custom_price:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                placeholder="0.00"
+                                                className="pl-7"
+                                                required
+                                            />
+                                        </div>
+                                        {selectedService?.applies_iva &&
+                                            calculatedPriceWithIva && (
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Con IVA:{" "}
+                                                    <span className="font-semibold">
+                                                        $
+                                                        {calculatedPriceWithIva}
+                                                    </span>
+                                                </p>
+                                            )}
+                                    </div>
+
+                                    <div>
+                                        <Label>Fecha de Vigencia</Label>
+                                        <Input
+                                            type="date"
+                                            value={
+                                                customFormData.effective_date
+                                            }
+                                            onChange={(e) =>
+                                                setCustomFormData({
+                                                    ...customFormData,
+                                                    effective_date:
+                                                        e.target.value,
+                                                })
+                                            }
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Fecha desde la cual aplica este
+                                            precio
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label>Notas</Label>
+                                    <textarea
+                                        value={customFormData.notes}
+                                        onChange={(e) =>
+                                            setCustomFormData({
+                                                ...customFormData,
+                                                notes: e.target.value,
+                                            })
+                                        }
+                                        rows={3}
+                                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="Notas adicionales sobre este precio personalizado (opcional)"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Estado */}
+                            <div className="border-t border-gray-200 pt-4">
+                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                    <input
+                                        type="checkbox"
+                                        id="custom_is_active"
+                                        checked={customFormData.is_active}
+                                        onChange={(e) =>
+                                            setCustomFormData({
+                                                ...customFormData,
+                                                is_active: e.target.checked,
+                                            })
+                                        }
+                                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <div className="flex flex-col">
+                                        <Label
+                                            htmlFor="custom_is_active"
+                                            className="font-medium text-gray-900 cursor-pointer"
+                                        >
+                                            Estado Activo
+                                        </Label>
+                                        <span className="text-xs text-gray-500">
+                                            El precio personalizado estará
+                                            disponible para usar en órdenes
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleCloseCustomModal}
+                                className="min-w-[100px]"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button type="submit" className="min-w-[100px]">
+                                {editingCustomPrice ? "Actualizar" : "Guardar"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Confirm Delete Dialog - Servicios */}
+            <ConfirmDialog
+                open={confirmDialog.open}
+                onClose={() => setConfirmDialog({ open: false, id: null })}
+                onConfirm={confirmDelete}
+                title="¿Eliminar este servicio?"
+                description="Esta acción no se puede deshacer. El servicio será eliminado permanentemente del catálogo."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
+
+            {/* Confirm Delete Dialog - Precios Personalizados */}
+            <ConfirmDialog
+                open={confirmCustomDialog.open}
+                onClose={() =>
+                    setConfirmCustomDialog({ open: false, id: null })
+                }
+                onConfirm={confirmDeleteCustom}
+                title="¿Eliminar este precio personalizado?"
+                description="Esta acción no se puede deshacer. El precio personalizado será eliminado permanentemente."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
         </div>
     );
 };

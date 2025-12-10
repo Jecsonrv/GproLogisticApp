@@ -61,7 +61,7 @@ function Users() {
     const fetchUsers = async () => {
         try {
             setLoading(true);
-            const response = await axios.get("/api/users/");
+            const response = await axios.get("/users/");
             setUsers(response.data);
         } catch (error) {
             toast.error("Error al cargar usuarios");
@@ -73,7 +73,7 @@ function Users() {
     const handleCreate = async (e) => {
         e.preventDefault();
         try {
-            await axios.post("/api/users/", formData);
+            await axios.post("/users/", formData);
             toast.success("Usuario creado exitosamente");
             setIsCreateModalOpen(false);
             resetForm();
@@ -91,7 +91,7 @@ function Users() {
             const dataToSend = { ...formData };
             delete dataToSend.password; // No enviar password en edición
 
-            await axios.patch(`/api/users/${selectedUser.id}/`, dataToSend);
+            await axios.patch(`/users/${selectedUser.id}/`, dataToSend);
             toast.success("Usuario actualizado exitosamente");
             setIsEditModalOpen(false);
             resetForm();
@@ -110,7 +110,7 @@ function Users() {
         }
 
         try {
-            await axios.post(`/api/users/${selectedUser.id}/change_password/`, {
+            await axios.post(`/users/${selectedUser.id}/change_password/`, {
                 password: passwordData.new_password,
             });
             toast.success("Contraseña actualizada exitosamente");
@@ -130,7 +130,7 @@ function Users() {
             return;
 
         try {
-            await axios.delete(`/api/users/${id}/`);
+            await axios.delete(`/users/${id}/`);
             toast.success("Usuario eliminado exitosamente");
             fetchUsers();
         } catch (error) {

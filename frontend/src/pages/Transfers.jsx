@@ -74,9 +74,9 @@ function Transfers() {
     const fetchCatalogs = async () => {
         try {
             const [ordersRes, providersRes, banksRes] = await Promise.all([
-                axios.get("/api/orders/service-orders/"),
-                axios.get("/api/catalogs/providers/"),
-                axios.get("/api/catalogs/banks/"),
+                axios.get("/orders/service-orders/"),
+                axios.get("/catalogs/providers/"),
+                axios.get("/catalogs/banks/"),
             ]);
             setServiceOrders(ordersRes.data);
             setProviders(providersRes.data);
@@ -96,7 +96,7 @@ function Transfers() {
                 }
             });
 
-            await axios.post("/api/transfers/", formDataToSend, {
+            await axios.post("/transfers/", formDataToSend, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
@@ -142,7 +142,7 @@ function Transfers() {
         if (!window.confirm("¿Eliminar esta transferencia?")) return;
 
         try {
-            await axios.delete(`/api/transfers/${id}/`);
+            await axios.delete(`/transfers/${id}/`);
             toast.success("Transferencia eliminada");
             refetch();
         } catch (error) {
@@ -191,7 +191,7 @@ function Transfers() {
 
         try {
             setIsExporting(true);
-            const response = await axios.get("/api/transfers/export_excel/", {
+            const response = await axios.get("/transfers/export_excel/", {
                 responseType: "blob",
                 params: filters,
             });
@@ -220,7 +220,7 @@ function Transfers() {
     const handleDownloadPDF = async (transferId) => {
         try {
             const response = await axios.get(
-                `/api/transfers/${transferId}/download_pdf/`,
+                `/transfers/${transferId}/download_pdf/`,
                 {
                     responseType: "blob",
                 }

@@ -27,7 +27,7 @@ class CustomsAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomsAgent
         fields = [
-            'id', 'name', 'code', 'phone', 'email',
+            'id', 'name', 'phone', 'email',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
@@ -39,7 +39,7 @@ class BankSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bank
         fields = [
-            'id', 'name', 'code', 'swift_code', 'contact_phone',
+            'id', 'name', 'contact_phone',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
@@ -81,7 +81,7 @@ class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Service
         fields = [
-            'id', 'code', 'name', 'description',
+            'id', 'name', 'description',
             'default_price', 'price_with_iva', 'applies_iva',
             'is_active', 'created_at', 'updated_at'
         ]
@@ -96,20 +96,20 @@ class ClientServicePriceSerializer(serializers.ModelSerializer):
     """Serializer para Tarifario de Clientes"""
     client_name = serializers.CharField(source='client.name', read_only=True)
     service_name = serializers.CharField(source='service.name', read_only=True)
-    service_code = serializers.CharField(source='service.code', read_only=True)
+    service_id = serializers.IntegerField(source='service.id', read_only=True)
     price_with_iva = serializers.SerializerMethodField()
 
     class Meta:
         model = ClientServicePrice
         fields = [
             'id', 'client', 'client_name', 'service', 'service_name',
-            'service_code', 'custom_price', 'price_with_iva',
+            'service_id', 'custom_price', 'price_with_iva',
             'is_active', 'notes', 'effective_date',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at',
-            'client_name', 'service_name', 'service_code', 'price_with_iva'
+            'client_name', 'service_name', 'service_id', 'price_with_iva'
         ]
 
     def get_price_with_iva(self, obj):

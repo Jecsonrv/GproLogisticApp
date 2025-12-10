@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse
 from .models import ServiceOrder, OrderDocument, OrderCharge
 from .serializers import ServiceOrderSerializer, OrderDocumentSerializer
+from .serializers_new import ServiceOrderDetailSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -17,6 +18,11 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return ServiceOrderDetailSerializer
+        return ServiceOrderSerializer
 
     @action(detail=True, methods=['get'])
     def charges(self, request, pk=None):
@@ -38,7 +44,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 'subtotal': str(charge.subtotal),
                 'iva_amount': str(charge.iva_amount),
                 'total': str(charge.total),
-                'notes': charge.notes,
+                'notes': charge.description,
             })
 
         return Response(charges_data)
@@ -58,14 +64,14 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             from apps.catalogs.models import Service
             service = Service.objects.get(id=request.data.get('service'))
 
+            # The frontend sends 'notes' but model has 'description'.
+            # 'discount' and 'created_by' are not in the OrderCharge model, so we ignore them for now.
             charge = OrderCharge.objects.create(
-                order=order,
+                service_order=order,
                 service=service,
                 quantity=request.data.get('quantity', 1),
                 unit_price=request.data.get('unit_price', service.default_price),
-                discount=request.data.get('discount', 0),
-                notes=request.data.get('notes', ''),
-                created_by=request.user
+                description=request.data.get('notes', '')
             )
 
             return Response({
@@ -84,7 +90,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    @action(detail=False, methods=['get'], permission_classes=[IsOperativo2])
+    @action(detail=False, methods=['get'])
     def export_excel(self, request):
         # Create a workbook and add a worksheet.
         wb = openpyxl.Workbook()

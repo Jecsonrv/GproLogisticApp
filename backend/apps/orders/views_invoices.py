@@ -12,15 +12,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     """ViewSet for managing invoices (CXC)"""
     permission_classes = [IsOperativo]
     serializer_class = InvoiceSerializer
-    filterset_fields = ['status', 'client', 'mes']
+    filterset_fields = ['status']
     search_fields = ['invoice_number', 'client__name', 'ccf']
     ordering_fields = ['invoice_date', 'due_date', 'total_amount', 'balance']
     ordering = ['-invoice_date']
 
     def get_queryset(self):
         queryset = Invoice.objects.all().select_related(
-            'client', 'sub_client', 'created_by'
-        ).prefetch_related('payments', 'service_orders')
+            'service_order', 'service_order__client', 'service_order__sub_client', 'created_by'
+        ).prefetch_related('payments')
 
         # Filter by status
         status_filter = self.request.query_params.get('status')

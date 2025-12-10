@@ -98,16 +98,18 @@ export function Sidebar({ isOpen, onClose }) {
             >
                 {/* Header */}
                 <div className="flex h-14 items-center justify-between px-4 border-b border-slate-200 flex-shrink-0">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded bg-brand-600 flex items-center justify-center">
-                            <Ship className="w-5 h-5 text-white" />
-                        </div>
+                    <div className="flex items-center gap-3">
+                        <img
+                            src="/logo/logo.png"
+                            alt="G-PRO LOGISTIC"
+                            className="h-8 w-auto"
+                        />
                         <div className="flex flex-col">
                             <span className="text-sm font-bold text-slate-900 leading-tight">
-                                GPRO
+                                G-PRO LOGISTIC
                             </span>
                             <span className="text-2xs text-slate-500 leading-tight">
-                                Logistic ERP
+                                Sistema ERP
                             </span>
                         </div>
                     </div>
@@ -137,7 +139,9 @@ export function Sidebar({ isOpen, onClose }) {
                                         const isActive =
                                             location.pathname === item.path ||
                                             (item.path !== "/" &&
-                                                location.pathname.startsWith(item.path));
+                                                location.pathname.startsWith(
+                                                    item.path
+                                                ));
                                         const Icon = item.icon;
                                         return (
                                             <Link
@@ -159,7 +163,9 @@ export function Sidebar({ isOpen, onClose }) {
                                                             : "text-slate-400"
                                                     )}
                                                 />
-                                                <span className="truncate">{item.name}</span>
+                                                <span className="truncate">
+                                                    {item.name}
+                                                </span>
                                             </Link>
                                         );
                                     })}

@@ -1,9 +1,10 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Spinner } from "./components/ui";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import useAuthStore from "./stores/authStore";
 
 // Login se carga inmediatamente (página crítica)
 import Login from "./pages/Login";
@@ -34,6 +35,17 @@ function LoadingFallback() {
 }
 
 function App() {
+    const checkAuth = useAuthStore((state) => state.checkAuth);
+    const isCheckingAuth = useAuthStore((state) => state.isCheckingAuth);
+
+    useEffect(() => {
+        checkAuth();
+    }, [checkAuth]);
+
+    if (isCheckingAuth) {
+        return <LoadingFallback />;
+    }
+
     return (
         <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>

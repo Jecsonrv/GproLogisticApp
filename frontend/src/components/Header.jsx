@@ -1,5 +1,5 @@
 import React from "react";
-import { Menu, LogOut, Bell, User, Settings, HelpCircle, ChevronDown } from "lucide-react";
+import { Menu, LogOut, Bell, HelpCircle, ChevronDown } from "lucide-react";
 import useAuthStore from "../stores/authStore";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -44,10 +44,12 @@ export function Header({ onMenuClick }) {
 
     // Obtener título de la página actual
     const currentPath = location.pathname;
-    const pageTitle = pageTitles[currentPath] ||
-        Object.entries(pageTitles).find(([path]) =>
-            path !== "/" && currentPath.startsWith(path)
-        )?.[1] || "GPRO Logistic";
+    const pageTitle =
+        pageTitles[currentPath] ||
+        Object.entries(pageTitles).find(
+            ([path]) => path !== "/" && currentPath.startsWith(path)
+        )?.[1] ||
+        "GPRO Logistic";
 
     // Obtener fecha formateada
     const formattedDate = new Date().toLocaleDateString("es-SV", {
@@ -145,15 +147,6 @@ export function Header({ onMenuClick }) {
                                 </p>
                             </div>
                         </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => navigate("/profile")}>
-                            <User className="mr-2 h-4 w-4 text-slate-400" />
-                            <span>Mi Perfil</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate("/settings")}>
-                            <Settings className="mr-2 h-4 w-4 text-slate-400" />
-                            <span>Configuración</span>
-                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={handleLogout}

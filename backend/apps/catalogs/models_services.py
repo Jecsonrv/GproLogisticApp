@@ -12,11 +12,6 @@ class Service(models.Model):
     Catálogo de servicios que ofrece la agencia aduanal
     Ej: ASESORÍA Y GESTIÓN ADUANAL, GESTIÓN DE PERMISO DE SALUD, etc.
     """
-    code = models.CharField(
-        max_length=20,
-        unique=True,
-        verbose_name="Código"
-    )
     name = models.CharField(
         max_length=255,
         verbose_name="Nombre del Servicio"
@@ -51,14 +46,14 @@ class Service(models.Model):
     class Meta:
         verbose_name = "Servicio"
         verbose_name_plural = "Servicios"
-        ordering = ['code', 'name']
+        ordering = ['name']
         indexes = [
-            models.Index(fields=['code']),
+            models.Index(fields=['name']),
             models.Index(fields=['is_active']),
         ]
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f"#{self.id} - {self.name}"
 
     def get_price_with_iva(self):
         """Calcula el precio con IVA (13% en El Salvador)"""
@@ -116,7 +111,7 @@ class ClientServicePrice(models.Model):
         verbose_name = "Precio Personalizado"
         verbose_name_plural = "Tarifario de Clientes"
         unique_together = ['client', 'service']
-        ordering = ['client__name', 'service__code']
+        ordering = ['client__name', 'service__name']
         indexes = [
             models.Index(fields=['client', 'service']),
             models.Index(fields=['is_active']),

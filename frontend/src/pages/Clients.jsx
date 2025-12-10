@@ -51,7 +51,7 @@ function Clients() {
     const fetchClients = async () => {
         try {
             setLoading(true);
-            const response = await api.get("/clients/clients/");
+            const response = await api.get("/clients/");
             setClients(response.data);
         } catch (error) {
             console.error("Error fetching clients:", error);
@@ -62,7 +62,7 @@ function Clients() {
 
     const fetchClientDetails = async (clientId) => {
         try {
-            const response = await api.get(`/clients/clients/${clientId}/`);
+            const response = await api.get(`/clients/${clientId}/`);
             setSelectedClient(response.data);
             setShowDetailsModal(true);
         } catch (error) {
@@ -74,7 +74,8 @@ function Clients() {
         const matchesSearch =
             client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             client.nit.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase()));
+            (client.email &&
+                client.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
         const matchesFilter =
             filterStatus === "all" ||
@@ -89,8 +90,12 @@ function Clients() {
         total: clients.length,
         active: clients.filter((c) => c.is_active).length,
         inactive: clients.filter((c) => !c.is_active).length,
-        withCredit: clients.filter((c) => c.payment_condition === "credito").length,
-        totalCreditLimit: clients.reduce((sum, c) => sum + parseFloat(c.credit_limit || 0), 0),
+        withCredit: clients.filter((c) => c.payment_condition === "credito")
+            .length,
+        totalCreditLimit: clients.reduce(
+            (sum, c) => sum + parseFloat(c.credit_limit || 0),
+            0
+        ),
     };
 
     if (loading) {
@@ -102,12 +107,18 @@ function Clients() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-xl font-semibold text-slate-900">Clientes</h1>
+                    <h1 className="text-xl font-semibold text-slate-900">
+                        Clientes
+                    </h1>
                     <p className="text-sm text-slate-500 mt-0.5">
-                        Gestiona tu directorio de clientes y condiciones de crédito
+                        Gestiona tu directorio de clientes y condiciones de
+                        crédito
                     </p>
                 </div>
-                <Button onClick={() => navigate("/clients/new")} className="gap-1.5">
+                <Button
+                    onClick={() => navigate("/clients/new")}
+                    className="gap-1.5"
+                >
                     <Plus className="h-4 w-4" />
                     Nuevo Cliente
                 </Button>
@@ -132,7 +143,9 @@ function Clients() {
                 />
                 <StatCard
                     title="Crédito Total"
-                    value={formatCurrency(stats.totalCreditLimit, { maximumFractionDigits: 0 })}
+                    value={formatCurrency(stats.totalCreditLimit, {
+                        maximumFractionDigits: 0,
+                    })}
                     icon={DollarSign}
                 />
             </div>
@@ -147,7 +160,9 @@ function Clients() {
                                 <Input
                                     placeholder="Buscar por nombre, NIT o email..."
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchTerm(e.target.value)
+                                    }
                                     className="pl-9"
                                 />
                             </div>
@@ -155,21 +170,33 @@ function Clients() {
 
                         <div className="flex gap-2">
                             <Button
-                                variant={filterStatus === "all" ? "default" : "outline"}
+                                variant={
+                                    filterStatus === "all"
+                                        ? "default"
+                                        : "outline"
+                                }
                                 size="sm"
                                 onClick={() => setFilterStatus("all")}
                             >
                                 Todos ({stats.total})
                             </Button>
                             <Button
-                                variant={filterStatus === "active" ? "success" : "outline"}
+                                variant={
+                                    filterStatus === "active"
+                                        ? "success"
+                                        : "outline"
+                                }
                                 size="sm"
                                 onClick={() => setFilterStatus("active")}
                             >
                                 Activos ({stats.active})
                             </Button>
                             <Button
-                                variant={filterStatus === "inactive" ? "destructive" : "outline"}
+                                variant={
+                                    filterStatus === "inactive"
+                                        ? "destructive"
+                                        : "outline"
+                                }
                                 size="sm"
                                 onClick={() => setFilterStatus("inactive")}
                             >
@@ -187,7 +214,10 @@ function Clients() {
                     title="No se encontraron clientes"
                     description="Intenta ajustar los filtros o crea un nuevo cliente"
                     action={
-                        <Button onClick={() => navigate("/clients/new")} className="gap-1.5">
+                        <Button
+                            onClick={() => navigate("/clients/new")}
+                            className="gap-1.5"
+                        >
                             <Plus className="h-4 w-4" />
                             Crear Primer Cliente
                         </Button>
@@ -212,8 +242,16 @@ function Clients() {
                                             NIT: {client.nit}
                                         </p>
                                     </div>
-                                    <Badge variant={client.is_active ? "success" : "danger"}>
-                                        {client.is_active ? "Activo" : "Inactivo"}
+                                    <Badge
+                                        variant={
+                                            client.is_active
+                                                ? "success"
+                                                : "danger"
+                                        }
+                                    >
+                                        {client.is_active
+                                            ? "Activo"
+                                            : "Inactivo"}
                                     </Badge>
                                 </div>
 
@@ -222,7 +260,9 @@ function Clients() {
                                     {client.email && (
                                         <div className="flex items-center text-xs text-slate-600">
                                             <Mail className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />
-                                            <span className="truncate">{client.email}</span>
+                                            <span className="truncate">
+                                                {client.email}
+                                            </span>
                                         </div>
                                     )}
                                     {client.phone && (
@@ -241,7 +281,10 @@ function Clients() {
                                                 Límite de Crédito
                                             </span>
                                             <span className="text-sm font-bold text-brand-900 tabular-nums">
-                                                {formatCurrency(client.credit_limit || 0, { maximumFractionDigits: 0 })}
+                                                {formatCurrency(
+                                                    client.credit_limit || 0,
+                                                    { maximumFractionDigits: 0 }
+                                                )}
                                             </span>
                                         </div>
                                         <div className="flex justify-between items-center">
@@ -292,14 +335,25 @@ function Clients() {
                                     <h2 className="text-lg font-semibold text-slate-900">
                                         {selectedClient.name}
                                     </h2>
-                                    <Badge variant={selectedClient.is_active ? "success" : "danger"}>
-                                        {selectedClient.is_active ? "Activo" : "Inactivo"}
+                                    <Badge
+                                        variant={
+                                            selectedClient.is_active
+                                                ? "success"
+                                                : "danger"
+                                        }
+                                    >
+                                        {selectedClient.is_active
+                                            ? "Activo"
+                                            : "Inactivo"}
                                     </Badge>
                                 </div>
-                                <p className="text-sm text-slate-600">NIT: {selectedClient.nit}</p>
+                                <p className="text-sm text-slate-600">
+                                    NIT: {selectedClient.nit}
+                                </p>
                                 {selectedClient.iva_registration && (
                                     <p className="text-sm text-slate-600">
-                                        Registro IVA: {selectedClient.iva_registration}
+                                        Registro IVA:{" "}
+                                        {selectedClient.iva_registration}
                                     </p>
                                 )}
                             </div>
@@ -316,7 +370,8 @@ function Clients() {
                                         Email
                                     </p>
                                     <p className="text-sm text-slate-900">
-                                        {selectedClient.email || "No especificado"}
+                                        {selectedClient.email ||
+                                            "No especificado"}
                                     </p>
                                 </div>
                                 <div>
@@ -324,7 +379,8 @@ function Clients() {
                                         Teléfono
                                     </p>
                                     <p className="text-sm text-slate-900">
-                                        {selectedClient.phone || "No especificado"}
+                                        {selectedClient.phone ||
+                                            "No especificado"}
                                     </p>
                                 </div>
                                 <div className="col-span-2">
@@ -332,7 +388,8 @@ function Clients() {
                                         Dirección
                                     </p>
                                     <p className="text-sm text-slate-900">
-                                        {selectedClient.address || "No especificada"}
+                                        {selectedClient.address ||
+                                            "No especificada"}
                                     </p>
                                 </div>
                                 <div>
@@ -340,7 +397,8 @@ function Clients() {
                                         Persona de Contacto
                                     </p>
                                     <p className="text-sm text-slate-900">
-                                        {selectedClient.contact_person || "No especificado"}
+                                        {selectedClient.contact_person ||
+                                            "No especificado"}
                                     </p>
                                 </div>
                             </div>
@@ -356,8 +414,18 @@ function Clients() {
                                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
                                         Condición
                                     </p>
-                                    <Badge variant={selectedClient.payment_condition === "credito" ? "primary" : "secondary"}>
-                                        {selectedClient.payment_condition === "credito" ? "Crédito" : "Contado"}
+                                    <Badge
+                                        variant={
+                                            selectedClient.payment_condition ===
+                                            "credito"
+                                                ? "primary"
+                                                : "secondary"
+                                        }
+                                    >
+                                        {selectedClient.payment_condition ===
+                                        "credito"
+                                            ? "Crédito"
+                                            : "Contado"}
                                     </Badge>
                                 </div>
                                 <div>
@@ -365,7 +433,9 @@ function Clients() {
                                         Límite de Crédito
                                     </p>
                                     <p className="text-lg font-semibold text-slate-900 tabular-nums">
-                                        {formatCurrency(selectedClient.credit_limit || 0)}
+                                        {formatCurrency(
+                                            selectedClient.credit_limit || 0
+                                        )}
                                     </p>
                                 </div>
                                 <div>
@@ -386,18 +456,27 @@ function Clients() {
                                     Notas
                                 </h3>
                                 <div className="bg-slate-50 rounded p-3">
-                                    <p className="text-sm text-slate-700">{selectedClient.notes}</p>
+                                    <p className="text-sm text-slate-700">
+                                        {selectedClient.notes}
+                                    </p>
                                 </div>
                             </div>
                         )}
                     </div>
 
                     <ModalFooter>
-                        <Button variant="ghost" onClick={() => setShowDetailsModal(false)}>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setShowDetailsModal(false)}
+                        >
                             Cerrar
                         </Button>
                         <Button
-                            onClick={() => navigate(`/service-orders?client=${selectedClient.id}`)}
+                            onClick={() =>
+                                navigate(
+                                    `/service-orders?client=${selectedClient.id}`
+                                )
+                            }
                             className="gap-1.5"
                         >
                             <Plus className="h-4 w-4" />

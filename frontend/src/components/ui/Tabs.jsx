@@ -3,13 +3,25 @@ import { cn } from "../../lib/utils";
 
 const TabsContext = createContext();
 
-export function Tabs({ children, defaultValue, className, onValueChange }) {
-    const [activeTab, setActiveTab] = useState(defaultValue);
+export function Tabs({
+    children,
+    defaultValue,
+    value,
+    className,
+    onValueChange,
+}) {
+    const [internalTab, setInternalTab] = useState(defaultValue);
 
-    const handleTabChange = (value) => {
-        setActiveTab(value);
+    // Modo controlado si se pasa 'value', sino modo no controlado
+    const isControlled = value !== undefined;
+    const activeTab = isControlled ? value : internalTab;
+
+    const handleTabChange = (newValue) => {
+        if (!isControlled) {
+            setInternalTab(newValue);
+        }
         if (onValueChange) {
-            onValueChange(value);
+            onValueChange(newValue);
         }
     };
 

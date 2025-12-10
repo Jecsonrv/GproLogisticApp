@@ -9,15 +9,15 @@ class ProviderAdmin(admin.ModelAdmin):
 
 @admin.register(CustomsAgent)
 class CustomsAgentAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'phone', 'email', 'is_active']
+    list_display = ['name', 'phone', 'email', 'is_active']
     list_filter = ['is_active']
-    search_fields = ['name', 'code']
+    search_fields = ['name', 'email']
 
 @admin.register(Bank)
 class BankAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'swift_code', 'contact_phone', 'is_active']
+    list_display = ['name', 'contact_phone', 'is_active']
     list_filter = ['is_active']
-    search_fields = ['name', 'code', 'swift_code']
+    search_fields = ['name']
     ordering = ['name']
 
 @admin.register(ShipmentType)
@@ -34,10 +34,10 @@ class SubClientAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'default_price', 'applies_iva', 'is_active']
+    list_display = ['id', 'name', 'default_price', 'applies_iva', 'is_active']
     list_filter = ['is_active', 'applies_iva']
-    search_fields = ['code', 'name']
-    ordering = ['code']
+    search_fields = ['name']
+    ordering = ['id']
 
 @admin.register(ClientServicePrice)
 class ClientServicePriceAdmin(admin.ModelAdmin):

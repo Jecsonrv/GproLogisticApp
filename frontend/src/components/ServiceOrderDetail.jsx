@@ -21,6 +21,7 @@ import {
 } from './ui';
 import axios from '../lib/axios';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../lib/utils';
 
 /**
  * ServiceOrderDetail - Vista detallada de Orden de Servicio con Tabs
@@ -33,6 +34,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
   // Data for dropdowns
   const [services, setServices] = useState([]);
   const [providers, setProviders] = useState([]);
+  const [clientPrices, setClientPrices] = useState([]);
 
   // Charges
   const [charges, setCharges] = useState([]);
@@ -41,7 +43,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
     service: '',
     quantity: 1,
     unit_price: '',
-    discount: 0,
+    discount: '',
     notes: ''
   });
 
@@ -55,6 +57,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
       fetchProviders();
     }
   }, [orderId]);
+
+  // Fetch client prices when order is loaded (and we know the client)
+  useEffect(() => {
+      if (order?.client) {
+          fetchClientPrices(order.client);
+      }
+  }, [order?.client]);
 
   const fetchOrderDetail = async () => {
     try {
@@ -89,13 +98,28 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
     }
   };
 
+  const fetchClientPrices = async (clientId) => {
+      try {
+          const response = await axios.get(
+              `/catalogs/client-service-prices/by-client/${clientId}/`
+          );
+          setClientPrices(response.data);
+      } catch (error) {
+          console.error("Error loading client prices", error);
+      }
+  };
+
   const handleAddCharge = async () => {
     try {
-      await axios.post(`/orders/service-orders/${orderId}/add_charge/`, chargeForm);
+      await axios.post(`/orders/service-orders/${orderId}/add_charge/`, {
+          ...chargeForm,
+          discount: parseFloat(chargeForm.discount || 0)
+      });
       toast.success('Cargo agregado exitosamente');
       fetchOrderDetail();
       setIsAddingCharge(false);
       resetChargeForm();
+      if(onUpdate) onUpdate(); // Update parent list totals
     } catch (error) {
       toast.error(error.response?.data?.error || 'Error al agregar cargo');
     }
@@ -108,6 +132,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
       await axios.delete(`/orders/charges/${chargeId}/`);
       toast.success('Cargo eliminado');
       fetchOrderDetail();
+      if(onUpdate) onUpdate(); // Update parent list totals
     } catch (error) {
       toast.error(error.response?.data?.error || 'Error al eliminar cargo');
     }
@@ -118,17 +143,29 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
       service: '',
       quantity: 1,
       unit_price: '',
-      discount: 0,
+      discount: '',
       notes: ''
     });
   };
 
   const calculateChargeTotal = (charge) => {
     const subtotal = charge.quantity * charge.unit_price;
-    const discount = subtotal * (charge.discount / 100);
+    const discount = subtotal * ((parseFloat(charge.discount || 0)) / 100);
     const base = subtotal - discount;
     const iva = charge.applies_iva ? base * 0.13 : 0;
     return base + iva;
+  };
+
+  const getServicePrice = (serviceId) => {
+      // 1. Check if there is a custom price for this client
+      const customPrice = clientPrices.find(cp => cp.service === parseInt(serviceId));
+      if (customPrice) {
+          return parseFloat(customPrice.custom_price);
+      }
+      
+      // 2. Fallback to default service price
+      const service = services.find(s => s.id === parseInt(serviceId));
+      return service ? parseFloat(service.default_price) : 0;
   };
 
   const tabs = [
@@ -142,7 +179,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -162,14 +199,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
               {order.status === 'abierta' ? 'Abierta' : 'Cerrada'}
             </Badge>
             {order.facturado && (
-              <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Facturado</Badge>
+              <Badge variant="outline" className="text-emerald-600 border-emerald-200 bg-emerald-50">Facturado</Badge>
             )}
           </div>
         </div>
         <div className="text-right">
           <div className="text-sm text-gray-500">Total</div>
-          <div className="text-3xl font-bold text-primary-700">
-            ${order.total_amount?.toFixed(2) || '0.00'}
+          <div className="text-3xl font-bold text-blue-700">
+            {formatCurrency(order.total_amount || 0)}
           </div>
         </div>
       </div>
@@ -186,12 +223,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                 className={`
                   group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
                   ${activeTab === tab.id
-                    ? 'border-primary-500 text-primary-700'
+                    ? 'border-blue-500 text-blue-700'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }
                 `}
               >
-                <Icon className={`-ml-0.5 mr-2 h-4 w-4 ${activeTab === tab.id ? 'text-primary-500' : 'text-gray-400 group-hover:text-gray-500'}`} />
+                <Icon className={`-ml-0.5 mr-2 h-4 w-4 ${activeTab === tab.id ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'}`} />
                 {tab.name}
               </button>
             );
@@ -242,7 +279,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                     <div>
                         <dt className="text-sm font-medium text-gray-500">ETA</dt>
                         <dd className="mt-1 text-base text-gray-900">
-                        {new Date(order.eta).toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        {order.eta ? new Date(order.eta + "T00:00:00").toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}
                         </dd>
                     </div>
                     <div>
@@ -260,22 +297,22 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                 <div className="mt-8 pt-6 border-t border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen Financiero</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-primary-50 p-4 rounded-lg border border-primary-100">
-                    <div className="text-sm text-primary-700 font-medium">Servicios (Ingresos)</div>
-                    <div className="text-2xl font-bold text-primary-900 mt-1">
-                        ${order.total_services?.toFixed(2) || '0.00'}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <div className="text-sm text-blue-700 font-medium">Servicios (Ingresos)</div>
+                    <div className="text-2xl font-bold text-blue-900 mt-1">
+                        {formatCurrency(order.total_services || 0)}
                     </div>
                     </div>
                     <div className="bg-orange-50 p-4 rounded-lg border border-orange-100">
                     <div className="text-sm text-orange-700 font-medium">Gastos a Terceros</div>
                     <div className="text-2xl font-bold text-orange-900 mt-1">
-                        ${order.total_third_party?.toFixed(2) || '0.00'}
+                        {formatCurrency(order.total_third_party || 0)}
                     </div>
                     </div>
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-100">
-                    <div className="text-sm text-green-700 font-medium">Total General</div>
-                    <div className="text-2xl font-bold text-green-900 mt-1">
-                        ${order.total_amount?.toFixed(2) || '0.00'}
+                    <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+                    <div className="text-sm text-emerald-700 font-medium">Total General</div>
+                    <div className="text-2xl font-bold text-emerald-900 mt-1">
+                        {formatCurrency(order.total_amount || 0)}
                     </div>
                     </div>
                 </div>
@@ -311,19 +348,28 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                 label="Servicio"
                                 value={chargeForm.service}
                                 onChange={(value) => {
-                                    const service = services.find(s => s.id === value);
+                                    const price = getServicePrice(value);
                                     setChargeForm({
-                                    ...chargeForm,
-                                    service: value,
-                                    unit_price: service?.default_price || ''
+                                        ...chargeForm,
+                                        service: value,
+                                        unit_price: price
                                     });
                                 }}
                                 options={services}
-                                getOptionLabel={(opt) => `${opt.code} - ${opt.name}`}
+                                getOptionLabel={(opt) => opt.code ? `${opt.code} - ${opt.name}` : opt.name}
                                 getOptionValue={(opt) => opt.id}
                                 searchable
                                 required
                                 />
+                                {chargeForm.service && (
+                                    <div className="mt-1 text-xs">
+                                        {clientPrices.some(cp => cp.service === parseInt(chargeForm.service)) ? (
+                                            <span className="text-emerald-600 font-medium">✓ Precio preferencial aplicado</span>
+                                        ) : (
+                                            <span className="text-gray-500">Precio de lista base</span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Label className="mb-2 block">Cantidad</Label>
@@ -340,7 +386,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <Label className="mb-2 block">Precio Unitario</Label>
+                                <Label className="mb-2 block">Precio Unitario (Sin IVA)</Label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-2 text-gray-500">$</span>
                                     <Input
@@ -356,12 +402,15 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                             <div>
                                 <Label className="mb-2 block">Descuento (%)</Label>
                                 <Input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                value={chargeForm.discount}
-                                onChange={(e) => setChargeForm({ ...chargeForm, discount: parseFloat(e.target.value) || 0 })}
+                                    type="text"
+                                    placeholder="0.00"
+                                    value={chargeForm.discount}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                            setChargeForm({ ...chargeForm, discount: val });
+                                        }
+                                    }}
                                 />
                             </div>
                         </div>
@@ -434,7 +483,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                             <tr key={charge.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-4 py-3">
                                 <div className="text-sm font-medium text-gray-900">
-                                {charge.service_code} - {charge.service_name}
+                                {charge.service_code ? `${charge.service_code} - ` : ''}{charge.service_name}
                                 </div>
                                 {charge.notes && (
                                 <div className="text-xs text-gray-500 mt-0.5">{charge.notes}</div>
@@ -444,7 +493,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                 {charge.quantity}
                             </td>
                             <td className="px-4 py-3 text-right text-sm text-gray-600">
-                                ${parseFloat(charge.unit_price).toFixed(2)}
+                                {formatCurrency(charge.unit_price)}
                             </td>
                             <td className="px-4 py-3 text-right text-sm text-gray-600">
                                 {charge.discount > 0 ? `${charge.discount}%` : '-'}
@@ -457,7 +506,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                 )}
                             </td>
                             <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                                ${calculateChargeTotal(charge).toFixed(2)}
+                                {formatCurrency(calculateChargeTotal(charge))}
                             </td>
                             {order.status === 'abierta' && (
                                 <td className="px-4 py-3 text-center">
@@ -478,8 +527,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                             <td colSpan={5} className="px-4 py-3 text-right font-semibold text-gray-900">
                             Total Servicios:
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-primary-700 text-base">
-                            ${order.total_services?.toFixed(2) || '0.00'}
+                            <td className="px-4 py-3 text-right font-bold text-blue-700 text-base">
+                            {formatCurrency(order.total_services || 0)}
                             </td>
                             {order.status === 'abierta' && <td></td>}
                         </tr>

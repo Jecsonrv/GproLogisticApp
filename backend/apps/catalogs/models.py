@@ -21,7 +21,6 @@ class Provider(models.Model):
 
 class CustomsAgent(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nombre")
-    code = models.CharField(max_length=50, blank=True, verbose_name="Código")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono")
     email = models.EmailField(blank=True, verbose_name="Email")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
@@ -38,8 +37,6 @@ class CustomsAgent(models.Model):
 class Bank(models.Model):
     """Catálogo de bancos para transferencias y pagos"""
     name = models.CharField(max_length=100, unique=True, verbose_name="Nombre del Banco")
-    code = models.CharField(max_length=20, unique=True, verbose_name="Código")
-    swift_code = models.CharField(max_length=11, blank=True, verbose_name="Código SWIFT")
     contact_phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono de Contacto")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
@@ -49,12 +46,11 @@ class Bank(models.Model):
         verbose_name_plural = "Bancos"
         ordering = ['name']
         indexes = [
-            models.Index(fields=['code']),
             models.Index(fields=['is_active']),
         ]
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return self.name
 
 class ShipmentType(models.Model):
     name = models.CharField(max_length=255, unique=True, verbose_name="Nombre")
@@ -88,7 +84,6 @@ class SubClient(models.Model):
 
 class Service(models.Model):
     """Catálogo de servicios que ofrece la agencia aduanal"""
-    code = models.CharField(max_length=20, unique=True, verbose_name="Código")
     name = models.CharField(max_length=255, verbose_name="Nombre del Servicio")
     description = models.TextField(blank=True, verbose_name="Descripción")
     default_price = models.DecimalField(
@@ -105,14 +100,14 @@ class Service(models.Model):
     class Meta:
         verbose_name = "Servicio"
         verbose_name_plural = "Servicios"
-        ordering = ['code', 'name']
+        ordering = ['name']
         indexes = [
-            models.Index(fields=['code']),
+            models.Index(fields=['name']),
             models.Index(fields=['is_active']),
         ]
 
     def __str__(self):
-        return f"{self.code} - {self.name}"
+        return f"#{self.id} - {self.name}"
 
     def get_price_with_iva(self):
         """Calcula el precio con IVA (13% en El Salvador)"""
@@ -151,7 +146,7 @@ class ClientServicePrice(models.Model):
         verbose_name = "Precio Personalizado"
         verbose_name_plural = "Tarifario de Clientes"
         unique_together = ['client', 'service']
-        ordering = ['client__name', 'service__code']
+        ordering = ['client__name', 'service__name']
         indexes = [
             models.Index(fields=['client', 'service']),
             models.Index(fields=['is_active']),

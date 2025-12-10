@@ -46,7 +46,7 @@ function AccountStatements() {
     const fetchClients = async () => {
         try {
             setLoadingClients(true);
-            const response = await axios.get("/api/clients/");
+            const response = await axios.get("/clients/");
             setClients(response.data);
         } catch (err) {
             toast.error("Error al cargar clientes");
@@ -209,12 +209,6 @@ function AccountStatements() {
                     </div>
                 </div>
             </div>
-
-            {error && (
-                <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4">
-                    <p className="text-red-800">{error}</p>
-                </div>
-            )}
 
             {loading && (
                 <div className="flex justify-center items-center py-12">

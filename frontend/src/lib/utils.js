@@ -1,5 +1,5 @@
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 /**
  * Combina clases de Tailwind CSS de forma inteligente
@@ -10,7 +10,7 @@ import { twMerge } from 'tailwind-merge';
  * cn('text-red-500', condition && 'text-blue-500')
  */
 export function cn(...inputs) {
-  return twMerge(clsx(inputs));
+    return twMerge(clsx(inputs));
 }
 
 /**
@@ -20,19 +20,22 @@ export function cn(...inputs) {
  * @returns {string} - Valor formateado
  */
 export function formatCurrency(value, options = {}) {
-  const {
-    locale = 'en-US',
-    currency = 'USD',
-    minimumFractionDigits = 2,
-    maximumFractionDigits = 2
-  } = options;
+    const {
+        locale = "en-US",
+        currency = "USD",
+        minimumFractionDigits = 2,
+        maximumFractionDigits = 2,
+    } = options;
 
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits,
-    maximumFractionDigits,
-  }).format(value || 0);
+    // Ensure minimumFractionDigits doesn't exceed maximumFractionDigits
+    const minDigits = Math.min(minimumFractionDigits, maximumFractionDigits);
+
+    return new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency,
+        minimumFractionDigits: minDigits,
+        maximumFractionDigits,
+    }).format(value || 0);
 }
 
 /**
@@ -42,20 +45,28 @@ export function formatCurrency(value, options = {}) {
  * @returns {string} - Fecha formateada
  */
 export function formatDate(date, options = {}) {
-  if (!date) return 'N/A';
+    if (!date) return "N/A";
 
-  const {
-    locale = 'es-SV',
-    format = 'short' // 'short', 'medium', 'long'
-  } = options;
+    const {
+        locale = "es-SV",
+        format = "short", // 'short', 'medium', 'long'
+    } = options;
 
-  const formats = {
-    short: { day: '2-digit', month: 'short' },
-    medium: { day: '2-digit', month: 'short', year: 'numeric' },
-    long: { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' },
-  };
+    const formats = {
+        short: { day: "2-digit", month: "short" },
+        medium: { day: "2-digit", month: "short", year: "numeric" },
+        long: {
+            weekday: "long",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+        },
+    };
 
-  return new Date(date).toLocaleDateString(locale, formats[format] || formats.short);
+    return new Date(date).toLocaleDateString(
+        locale,
+        formats[format] || formats.short
+    );
 }
 
 /**
@@ -64,20 +75,21 @@ export function formatDate(date, options = {}) {
  * @returns {string} - Texto relativo
  */
 export function formatRelativeDate(date) {
-  if (!date) return 'N/A';
+    if (!date) return "N/A";
 
-  const now = new Date();
-  const target = new Date(date);
-  const diffTime = target - now;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const now = new Date();
+    const target = new Date(date);
+    const diffTime = target - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return 'Hoy';
-  if (diffDays === 1) return 'Mañana';
-  if (diffDays === -1) return 'Ayer';
-  if (diffDays > 0 && diffDays <= 7) return `En ${diffDays} días`;
-  if (diffDays < 0 && diffDays >= -7) return `Hace ${Math.abs(diffDays)} días`;
+    if (diffDays === 0) return "Hoy";
+    if (diffDays === 1) return "Mañana";
+    if (diffDays === -1) return "Ayer";
+    if (diffDays > 0 && diffDays <= 7) return `En ${diffDays} días`;
+    if (diffDays < 0 && diffDays >= -7)
+        return `Hace ${Math.abs(diffDays)} días`;
 
-  return formatDate(date, { format: 'medium' });
+    return formatDate(date, { format: "medium" });
 }
 
 /**
@@ -87,8 +99,8 @@ export function formatRelativeDate(date) {
  * @returns {string}
  */
 export function truncate(text, maxLength = 50) {
-  if (!text || text.length <= maxLength) return text || '';
-  return `${text.slice(0, maxLength)}...`;
+    if (!text || text.length <= maxLength) return text || "";
+    return `${text.slice(0, maxLength)}...`;
 }
 
 /**
@@ -96,7 +108,7 @@ export function truncate(text, maxLength = 50) {
  * @returns {string}
  */
 export function generateId() {
-  return Math.random().toString(36).substring(2, 9);
+    return Math.random().toString(36).substring(2, 9);
 }
 
 /**
@@ -106,15 +118,15 @@ export function generateId() {
  * @returns {Function}
  */
 export function debounce(func, wait = 300) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
     };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
 }
 
 /**
@@ -123,8 +135,8 @@ export function debounce(func, wait = 300) {
  * @returns {string}
  */
 export function capitalize(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    if (!str) return "";
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
 /**
@@ -133,11 +145,11 @@ export function capitalize(str) {
  * @returns {string}
  */
 export function getInitials(name) {
-  if (!name) return '';
-  return name
-    .split(' ')
-    .map(word => word[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+    if (!name) return "";
+    return name
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
 }
