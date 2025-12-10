@@ -5,7 +5,6 @@ import {
     DollarSign,
     FileText,
     TrendingUp,
-    Activity,
     CheckCircle,
     AlertCircle,
     ArrowUpRight,
@@ -13,15 +12,14 @@ import {
     XCircle,
     AlertTriangle,
     Clock,
+    RefreshCw,
+    BarChart3,
 } from "lucide-react";
 import {
     LineChart,
     Line,
     BarChart,
     Bar,
-    PieChart,
-    Pie,
-    Cell,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -35,9 +33,19 @@ import {
     CardTitle,
     CardContent,
     CardDescription,
+    StatCard,
+    StatusBadge,
 } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
 import api from "../lib/axios";
+import { cn, formatCurrency } from "../lib/utils";
+
+/**
+ * Dashboard - Panel de Control Ejecutivo
+ * Design System Corporativo GPRO
+ */
 
 // Mock data generator for development if API fails
 const generateMockData = () => {
@@ -80,7 +88,7 @@ function Dashboard() {
         try {
             setLoading(true);
             setError(null);
-            
+
             let data = {};
             let isOfflineMode = false;
 
@@ -105,46 +113,19 @@ function Dashboard() {
                 profitability:
                     data.current_month?.profitability ||
                     (data.current_month?.billed_amount || 15400) * 0.35,
-                profitabilityTrend:
-                    data.current_month?.profitability_trend || 8.2,
-                averageOrderValue:
-                    data.current_month?.avg_order_value || 1250.0,
+                profitabilityTrend: data.current_month?.profitability_trend || 8.2,
+                averageOrderValue: data.current_month?.avg_order_value || 1250.0,
                 completionRate: data.current_month?.completion_rate || 95,
             });
 
             setRecentOrders(data.recent_orders || []);
             setTopClients(
                 data.top_clients || [
-                    {
-                        id: 1,
-                        client_name: "Cliente A (Demo)",
-                        total_revenue: 45000,
-                        orders_count: 12,
-                    },
-                    {
-                        id: 2,
-                        client_name: "Cliente B (Demo)",
-                        total_revenue: 38000,
-                        orders_count: 9,
-                    },
-                    {
-                        id: 3,
-                        client_name: "Cliente C (Demo)",
-                        total_revenue: 32000,
-                        orders_count: 8,
-                    },
-                    {
-                        id: 4,
-                        client_name: "Cliente D (Demo)",
-                        total_revenue: 28000,
-                        orders_count: 7,
-                    },
-                    {
-                        id: 5,
-                        client_name: "Cliente E (Demo)",
-                        total_revenue: 22000,
-                        orders_count: 5,
-                    },
+                    { id: 1, client_name: "Cliente A (Demo)", total_revenue: 45000, orders_count: 12 },
+                    { id: 2, client_name: "Cliente B (Demo)", total_revenue: 38000, orders_count: 9 },
+                    { id: 3, client_name: "Cliente C (Demo)", total_revenue: 32000, orders_count: 8 },
+                    { id: 4, client_name: "Cliente D (Demo)", total_revenue: 28000, orders_count: 7 },
+                    { id: 5, client_name: "Cliente E (Demo)", total_revenue: 22000, orders_count: 5 },
                 ]
             );
             setAlerts(
@@ -155,7 +136,7 @@ function Dashboard() {
                         message: "Sistema: Visualizando datos demostrativos",
                         severity: "medium",
                         client: "Sistema",
-                    }
+                    },
                 ]
             );
 
@@ -171,21 +152,9 @@ function Dashboard() {
                         gastos: Math.floor(d.revenue * 0.65),
                     })),
                 statusDistribution: [
-                    {
-                        name: "Abiertas",
-                        value: data.overall?.os_abiertas || 5,
-                        color: "#3B82F6",
-                    },
-                    {
-                        name: "Cerradas",
-                        value: data.overall?.os_cerradas || 15,
-                        color: "#10B981",
-                    },
-                    {
-                        name: "Pendientes",
-                        value: data.overall?.os_pendientes || 2,
-                        color: "#F97316",
-                    },
+                    { name: "Abiertas", value: data.overall?.os_abiertas || 5, color: "#0052cc" },
+                    { name: "Cerradas", value: data.overall?.os_cerradas || 15, color: "#16a34a" },
+                    { name: "Pendientes", value: data.overall?.os_pendientes || 2, color: "#d97706" },
                 ].filter((i) => i.value > 0),
             });
         } catch (fatalError) {
@@ -200,56 +169,48 @@ function Dashboard() {
         fetchDashboardData();
     }, [fetchDashboardData]);
 
-    // Optimizar los KPI cards con useMemo (solo recalculan cuando stats cambia)
+    // KPI Cards data
     const kpiCards = useMemo(
         () => [
             {
                 title: "Órdenes Activas",
                 value: stats.activeOrders,
                 icon: Truck,
-                color: "text-primary-600",
-                bg: "bg-primary-50",
+                variant: "primary",
             },
             {
                 title: "Ingresos del Mes",
-                value: `$${stats.monthlyRevenue.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                })}`,
+                value: formatCurrency(stats.monthlyRevenue),
                 icon: DollarSign,
-                color: "text-secondary-600",
-                bg: "bg-secondary-50",
+                variant: "success",
             },
             {
                 title: "OS del Mes",
                 value: stats.ordersThisMonth,
-                trend: stats.ordersThisMonthTrend,
+                trend: stats.ordersThisMonthTrend > 0 ? "up" : stats.ordersThisMonthTrend < 0 ? "down" : "neutral",
+                trendValue: `${Math.abs(stats.ordersThisMonthTrend)}%`,
                 icon: FileText,
-                color: "text-blue-600",
-                bg: "bg-blue-50",
+                variant: "info",
             },
             {
                 title: "Rentabilidad",
-                value: `$${stats.profitability.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                })}`,
-                trend: stats.profitabilityTrend,
+                value: formatCurrency(stats.profitability),
+                trend: stats.profitabilityTrend > 0 ? "up" : stats.profitabilityTrend < 0 ? "down" : "neutral",
+                trendValue: `${Math.abs(stats.profitabilityTrend)}%`,
                 icon: TrendingUp,
-                color: "text-green-600",
-                bg: "bg-green-50",
+                variant: "success",
             },
             {
                 title: "Facturas Pendientes",
                 value: stats.pendingInvoices,
                 icon: AlertCircle,
-                color: "text-accent-600",
-                bg: "bg-accent-50",
+                variant: "warning",
             },
             {
                 title: "Total Clientes",
                 value: stats.totalClients,
                 icon: Users,
-                color: "text-gray-600",
-                bg: "bg-gray-100",
+                variant: "default",
             },
         ],
         [stats]
@@ -257,40 +218,91 @@ function Dashboard() {
 
     if (loading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse p-6">
-                {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-32 bg-gray-200 rounded-lg"></div>
-                ))}
+            <div className="space-y-6">
+                {/* Header Skeleton */}
+                <div className="flex flex-col gap-1">
+                    <Skeleton className="h-7 w-48" />
+                    <Skeleton className="h-4 w-72" />
+                </div>
+
+                {/* KPI Grid Skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <SkeletonCard key={i} />
+                    ))}
+                </div>
+
+                {/* Charts Skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+                    <Card className="lg:col-span-4">
+                        <CardHeader>
+                            <Skeleton className="h-5 w-40" />
+                            <Skeleton className="h-4 w-56" />
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-[320px] w-full" />
+                        </CardContent>
+                    </Card>
+                    <Card className="lg:col-span-3">
+                        <CardHeader>
+                            <Skeleton className="h-5 w-40" />
+                            <Skeleton className="h-4 w-32" />
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-[320px] w-full" />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         );
     }
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                    Panel de Control
-                </h1>
-                <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-500">
-                        Resumen ejecutivo de tus operaciones logísticas.
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex flex-col gap-0.5">
+                    <h1 className="text-xl font-semibold text-slate-900">
+                        Panel de Control
+                    </h1>
+                    <p className="text-sm text-slate-500">
+                        Resumen ejecutivo de operaciones logísticas
                     </p>
+                </div>
+
+                <div className="flex items-center gap-2">
                     {error && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                        <Badge variant="warning" className="gap-1.5">
                             <AlertCircle className="w-3 h-3" />
-                            Modo Offline / Datos Simulados
-                        </span>
+                            Modo Offline
+                        </Badge>
                     )}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchDashboardData}
+                        className="gap-1.5"
+                    >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Actualizar
+                    </Button>
                 </div>
             </div>
 
+            {/* Error Alert */}
             {error && (
-                <div className="bg-amber-50 border border-amber-200 rounded-md p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="bg-warning-50 border border-warning-200 rounded-md p-4 flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-warning-600 mt-0.5 flex-shrink-0" />
                     <div className="flex-1">
-                        <h3 className="text-sm font-medium text-amber-800">Aviso del Sistema</h3>
-                        <p className="text-sm text-amber-700 mt-1">
-                            {error} <button onClick={fetchDashboardData} className="underline hover:text-amber-900 ml-1 font-medium">Reintentar conexión</button>
+                        <h3 className="text-sm font-medium text-warning-800">Aviso del Sistema</h3>
+                        <p className="text-sm text-warning-700 mt-1">
+                            {error}{" "}
+                            <button
+                                onClick={fetchDashboardData}
+                                className="underline hover:text-warning-900 font-medium"
+                            >
+                                Reintentar conexión
+                            </button>
                         </p>
                     </div>
                 </div>
@@ -298,64 +310,26 @@ function Dashboard() {
 
             {/* KPI Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {kpiCards.map((kpi, index) => {
-                    const Icon = kpi.icon;
-                    const hasTrend = kpi.trend !== undefined;
-                    const isPositiveTrend = hasTrend && kpi.trend > 0;
-                    const TrendIcon = isPositiveTrend
-                        ? ArrowUpRight
-                        : ArrowDownRight;
-
-                    return (
-                        <Card
-                            key={index}
-                            className="border-l-4 border-l-transparent hover:border-l-primary-500 transition-all"
-                        >
-                            <CardContent className="p-6">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-sm font-medium text-gray-500">
-                                            {kpi.title}
-                                        </span>
-                                        <span className="text-2xl font-bold text-gray-900">
-                                            {kpi.value}
-                                        </span>
-                                        {hasTrend && (
-                                            <div
-                                                className={`flex items-center gap-1 text-sm font-medium ${
-                                                    isPositiveTrend
-                                                        ? "text-green-600"
-                                                        : "text-red-600"
-                                                }`}
-                                            >
-                                                <TrendIcon className="h-4 w-4" />
-                                                <span>
-                                                    {Math.abs(kpi.trend)}% vs
-                                                    mes anterior
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className={`p-3 rounded-lg ${kpi.bg}`}>
-                                        <Icon
-                                            className={`h-6 w-6 ${kpi.color}`}
-                                        />
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    );
-                })}
+                {kpiCards.map((kpi, index) => (
+                    <StatCard
+                        key={index}
+                        title={kpi.title}
+                        value={kpi.value}
+                        icon={kpi.icon}
+                        trend={kpi.trend}
+                        trendValue={kpi.trendValue}
+                        description={kpi.trend ? "vs mes anterior" : undefined}
+                    />
+                ))}
             </div>
 
+            {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
                 {/* Main Chart - Revenue vs Expenses */}
                 <Card className="lg:col-span-4">
                     <CardHeader>
                         <CardTitle>Ingresos vs Gastos</CardTitle>
-                        <CardDescription>
-                            Comparativa últimos 6 meses
-                        </CardDescription>
+                        <CardDescription>Comparativa últimos 6 meses</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-[320px] w-full">
@@ -364,65 +338,51 @@ function Dashboard() {
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         vertical={false}
-                                        stroke="#E5E7EB"
+                                        stroke="#e2e8f0"
                                     />
                                     <XAxis
                                         dataKey="name"
-                                        stroke="#9CA3AF"
+                                        stroke="#94a3b8"
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
                                     />
                                     <YAxis
-                                        stroke="#9CA3AF"
+                                        stroke="#94a3b8"
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
-                                        tickFormatter={(value) =>
-                                            `$${(value / 1000).toFixed(0)}k`
-                                        }
+                                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                                     />
                                     <Tooltip
                                         contentStyle={{
-                                            borderRadius: "8px",
-                                            border: "none",
-                                            boxShadow:
-                                                "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                            borderRadius: "6px",
+                                            border: "1px solid #e2e8f0",
+                                            boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                            fontSize: "13px",
                                         }}
-                                        formatter={(value) =>
-                                            `$${value.toLocaleString()}`
-                                        }
+                                        formatter={(value) => formatCurrency(value)}
                                     />
                                     <Legend
-                                        wrapperStyle={{ paddingTop: "20px" }}
+                                        wrapperStyle={{ paddingTop: "16px", fontSize: "13px" }}
                                         iconType="line"
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="ingresos"
-                                        stroke="#10B981"
-                                        strokeWidth={3}
-                                        dot={{
-                                            fill: "#10B981",
-                                            r: 4,
-                                            strokeWidth: 2,
-                                            stroke: "#fff",
-                                        }}
-                                        activeDot={{ r: 6 }}
+                                        stroke="#16a34a"
+                                        strokeWidth={2.5}
+                                        dot={{ fill: "#16a34a", r: 3, strokeWidth: 2, stroke: "#fff" }}
+                                        activeDot={{ r: 5 }}
                                         name="Ingresos"
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="gastos"
-                                        stroke="#EF4444"
-                                        strokeWidth={3}
-                                        dot={{
-                                            fill: "#EF4444",
-                                            r: 4,
-                                            strokeWidth: 2,
-                                            stroke: "#fff",
-                                        }}
-                                        activeDot={{ r: 6 }}
+                                        stroke="#dc2626"
+                                        strokeWidth={2.5}
+                                        dot={{ fill: "#dc2626", r: 3, strokeWidth: 2, stroke: "#fff" }}
+                                        activeDot={{ r: 5 }}
                                         name="Gastos"
                                     />
                                 </LineChart>
@@ -444,34 +404,35 @@ function Dashboard() {
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         vertical={false}
-                                        stroke="#E5E7EB"
+                                        stroke="#e2e8f0"
                                     />
                                     <XAxis
                                         dataKey="name"
-                                        stroke="#9CA3AF"
+                                        stroke="#94a3b8"
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
                                     />
                                     <YAxis
-                                        stroke="#9CA3AF"
+                                        stroke="#94a3b8"
                                         fontSize={12}
                                         tickLine={false}
                                         axisLine={false}
                                     />
                                     <Tooltip
-                                        cursor={{ fill: "#F3F4F6" }}
+                                        cursor={{ fill: "#f1f5f9" }}
                                         contentStyle={{
-                                            borderRadius: "8px",
-                                            border: "none",
-                                            boxShadow:
-                                                "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                            borderRadius: "6px",
+                                            border: "1px solid #e2e8f0",
+                                            boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                            fontSize: "13px",
                                         }}
                                     />
                                     <Bar
                                         dataKey="value"
-                                        fill="#3B82F6"
+                                        fill="#0052cc"
                                         radius={[4, 4, 0, 0]}
+                                        name="Órdenes"
                                     />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -480,49 +441,47 @@ function Dashboard() {
                 </Card>
             </div>
 
+            {/* Bottom Row - Tables */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Top Clients Table */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Top 5 Clientes</CardTitle>
-                        <CardDescription>
-                            Clientes con mayor facturación
-                        </CardDescription>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Top 5 Clientes</CardTitle>
+                                <CardDescription>Mayor facturación</CardDescription>
+                            </div>
+                            <BarChart3 className="h-4 w-4 text-slate-400" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
+                    <CardContent className="pt-0">
+                        <div className="space-y-2">
                             {topClients.length === 0 ? (
-                                <div className="py-8 text-center text-gray-500">
+                                <div className="py-8 text-center text-slate-500">
                                     No hay datos de clientes
                                 </div>
                             ) : (
                                 topClients.map((client, index) => (
                                     <div
                                         key={client.id}
-                                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                        className="flex items-center justify-between p-3 bg-slate-50 rounded hover:bg-slate-100 transition-colors"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-sm">
+                                            <div className="flex items-center justify-center w-7 h-7 rounded bg-brand-100 text-brand-700 font-bold text-xs">
                                                 {index + 1}
                                             </div>
                                             <div>
-                                                <p className="font-medium text-gray-900">
+                                                <p className="text-sm font-medium text-slate-900">
                                                     {client.client_name}
                                                 </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {client.orders_count}{" "}
-                                                    órdenes
+                                                <p className="text-xs text-slate-500">
+                                                    {client.orders_count} órdenes
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold text-gray-900">
-                                                $
-                                                {(
-                                                    client.total_revenue || 0
-                                                ).toLocaleString("en-US", {
-                                                    minimumFractionDigits: 2,
-                                                })}
+                                            <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                                                {formatCurrency(client.total_revenue || 0)}
                                             </p>
                                         </div>
                                     </div>
@@ -535,62 +494,68 @@ function Dashboard() {
                 {/* Alerts Panel */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Alertas y Pendientes</CardTitle>
-                        <CardDescription>Requieren tu atención</CardDescription>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle>Alertas y Pendientes</CardTitle>
+                                <CardDescription>Requieren atención</CardDescription>
+                            </div>
+                            <AlertTriangle className="h-4 w-4 text-slate-400" />
+                        </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
+                    <CardContent className="pt-0">
+                        <div className="space-y-2">
                             {alerts.length === 0 ? (
-                                <div className="py-8 text-center text-gray-500">
-                                    <CheckCircle className="h-12 w-12 mx-auto mb-2 text-green-500" />
-                                    <p>
-                                        ¡Todo en orden! No hay alertas
-                                        pendientes.
-                                    </p>
+                                <div className="py-8 text-center text-slate-500">
+                                    <CheckCircle className="h-10 w-10 mx-auto mb-2 text-success-500" />
+                                    <p className="text-sm">¡Todo en orden! No hay alertas pendientes.</p>
                                 </div>
                             ) : (
                                 alerts.map((alert) => {
                                     const severityConfig = {
                                         high: {
-                                            bg: "bg-red-50",
-                                            border: "border-red-200",
+                                            bg: "bg-danger-50",
+                                            border: "border-danger-200",
                                             icon: XCircle,
-                                            iconColor: "text-red-600",
+                                            iconColor: "text-danger-600",
                                         },
                                         warning: {
-                                            bg: "bg-yellow-50",
-                                            border: "border-yellow-200",
+                                            bg: "bg-warning-50",
+                                            border: "border-warning-200",
                                             icon: AlertTriangle,
-                                            iconColor: "text-yellow-600",
+                                            iconColor: "text-warning-600",
                                         },
                                         medium: {
-                                            bg: "bg-orange-50",
-                                            border: "border-orange-200",
+                                            bg: "bg-warning-50",
+                                            border: "border-warning-200",
                                             icon: Clock,
-                                            iconColor: "text-orange-600",
+                                            iconColor: "text-warning-600",
                                         },
                                     };
-                                    const config =
-                                        severityConfig[alert.severity] ||
-                                        severityConfig.medium;
+                                    const config = severityConfig[alert.severity] || severityConfig.medium;
                                     const AlertIcon = config.icon;
 
                                     return (
                                         <div
                                             key={alert.id}
-                                            className={`p-4 rounded-lg border ${config.bg} ${config.border}`}
+                                            className={cn(
+                                                "p-3 rounded border",
+                                                config.bg,
+                                                config.border
+                                            )}
                                         >
-                                            <div className="flex items-start gap-3">
+                                            <div className="flex items-start gap-2.5">
                                                 <AlertIcon
-                                                    className={`h-5 w-5 mt-0.5 flex-shrink-0 ${config.iconColor}`}
+                                                    className={cn(
+                                                        "h-4 w-4 mt-0.5 flex-shrink-0",
+                                                        config.iconColor
+                                                    )}
                                                 />
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium text-gray-900">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-slate-900">
                                                         {alert.message}
                                                     </p>
-                                                    {(alert.client ||
-                                                        alert.order) && (
-                                                        <p className="text-xs text-gray-600 mt-1">
+                                                    {(alert.client || alert.order) && (
+                                                        <p className="text-xs text-slate-600 mt-0.5">
                                                             {alert.client
                                                                 ? `Cliente: ${alert.client}`
                                                                 : `Orden: ${alert.order}`}
@@ -610,91 +575,62 @@ function Dashboard() {
             {/* Recent Orders Table */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Órdenes Recientes</CardTitle>
-                    <CardDescription>
-                        Últimos movimientos registrados
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>Órdenes Recientes</CardTitle>
+                            <CardDescription>Últimos movimientos registrados</CardDescription>
+                        </div>
+                        <FileText className="h-4 w-4 text-slate-400" />
+                    </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-gray-500 uppercase bg-gray-50/50">
-                                <tr>
-                                    <th className="px-4 py-3 font-medium">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-slate-200">
+                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                                         Orden
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                                         Cliente
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                                         Fecha
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
                                         Monto
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                                         Estado
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-slate-100">
                                 {recentOrders.length === 0 ? (
                                     <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="px-4 py-8 text-center text-gray-500"
-                                        >
+                                        <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
                                             No hay órdenes recientes
                                         </td>
                                     </tr>
                                 ) : (
                                     recentOrders.slice(0, 8).map((order) => (
-                                        <tr
-                                            key={order.id}
-                                            className="hover:bg-gray-50/50 transition-colors"
-                                        >
-                                            <td className="px-4 py-3 font-medium text-gray-900">
+                                        <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-3 py-2.5 font-mono text-sm font-medium text-brand-600">
                                                 {order.order_number}
                                             </td>
-                                            <td className="px-4 py-3 text-gray-600">
+                                            <td className="px-3 py-2.5 text-slate-700">
                                                 {order.client_name}
                                             </td>
-                                            <td className="px-4 py-3 text-gray-600">
+                                            <td className="px-3 py-2.5 text-slate-600">
                                                 {order.created_at
-                                                    ? new Date(
-                                                          order.created_at
-                                                      ).toLocaleDateString(
-                                                          "es-SV"
-                                                      )
+                                                    ? new Date(order.created_at).toLocaleDateString("es-SV")
                                                     : "-"}
                                             </td>
-                                            <td className="px-4 py-3 font-medium">
-                                                $
-                                                {(
-                                                    order.total_amount || 0
-                                                ).toLocaleString("en-US", {
-                                                    minimumFractionDigits: 2,
-                                                })}
+                                            <td className="px-3 py-2.5 text-right font-medium text-slate-900 tabular-nums">
+                                                {formatCurrency(order.total_amount || 0)}
                                             </td>
-                                            <td className="px-4 py-3">
-                                                <Badge
-                                                    variant={
-                                                        order.status ===
-                                                        "abierta"
-                                                            ? "default"
-                                                            : order.status ===
-                                                              "cerrada"
-                                                            ? "secondary"
-                                                            : "warning"
-                                                    }
-                                                >
-                                                    {order.status === "abierta"
-                                                        ? "Abierta"
-                                                        : order.status ===
-                                                          "cerrada"
-                                                        ? "Cerrada"
-                                                        : order.status}
-                                                </Badge>
+                                            <td className="px-3 py-2.5">
+                                                <StatusBadge status={order.status} />
                                             </td>
                                         </tr>
                                     ))
