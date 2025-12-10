@@ -4,21 +4,22 @@ import { cn } from "../lib/utils";
 import {
     LayoutDashboard,
     ClipboardList,
-    PlusCircle,
     Banknote,
     ArrowRightLeft,
     FileText,
     Users,
-    Tags,
-    Settings,
     Package,
     ShieldCheck,
     X,
     Boxes,
-    ChevronDown,
-    ChevronRight,
+    Ship,
 } from "lucide-react";
 import useAuthStore from "../stores/authStore";
+
+/**
+ * Sidebar Navigation - Design System Corporativo GPRO
+ * Estilo: Sobrio, Corporativo, Profesional
+ */
 
 const menuSections = [
     {
@@ -69,54 +70,74 @@ export function Sidebar({ isOpen, onClose }) {
     const location = useLocation();
     const user = useAuthStore((state) => state.user);
 
+    const getInitials = (name) => {
+        if (!name) return "U";
+        return name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+    };
+
     return (
         <>
             {/* Mobile Backdrop */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 z-40 bg-gray-900/50 lg:hidden"
+                    className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden transition-opacity"
                     onClick={onClose}
                 />
             )}
 
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0",
+                    "fixed inset-y-0 left-0 z-50 w-60 bg-white border-r border-slate-200 transition-transform duration-200 ease-out lg:static lg:translate-x-0 flex flex-col",
                     isOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200">
-                    <div className="flex items-center gap-3">
-                        <img
-                            src="/logo.png"
-                            alt="GPRO Logistic"
-                            className="h-10 w-auto"
-                        />
+                {/* Header */}
+                <div className="flex h-14 items-center justify-between px-4 border-b border-slate-200 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded bg-brand-600 flex items-center justify-center">
+                            <Ship className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold text-slate-900 leading-tight">
+                                GPRO
+                            </span>
+                            <span className="text-2xs text-slate-500 leading-tight">
+                                Logistic ERP
+                            </span>
+                        </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="lg:hidden text-gray-500 hover:text-gray-900"
+                        className="lg:hidden p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
                     >
-                        <X className="h-6 w-6" />
+                        <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <nav className="flex-1 overflow-y-auto py-4 px-3">
-                    <div className="space-y-6">
+                {/* Navigation */}
+                <nav className="flex-1 overflow-y-auto py-3 px-2.5 scrollbar-hide">
+                    <div className="space-y-5">
                         {menuSections.map((section, sectionIndex) => (
                             <div key={sectionIndex}>
                                 {/* Section Title */}
                                 {section.title && (
-                                    <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                    <h3 className="px-2.5 text-2xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                                         {section.title}
                                     </h3>
                                 )}
 
                                 {/* Section Items */}
-                                <div className="space-y-1">
+                                <div className="space-y-0.5">
                                     {section.items.map((item) => {
                                         const isActive =
-                                            location.pathname === item.path;
+                                            location.pathname === item.path ||
+                                            (item.path !== "/" &&
+                                                location.pathname.startsWith(item.path));
                                         const Icon = item.icon;
                                         return (
                                             <Link
@@ -124,21 +145,21 @@ export function Sidebar({ isOpen, onClose }) {
                                                 to={item.path}
                                                 onClick={onClose}
                                                 className={cn(
-                                                    "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors",
+                                                    "flex items-center gap-2.5 px-2.5 py-2 text-sm font-medium rounded-sm transition-all duration-150",
                                                     isActive
-                                                        ? "bg-blue-50 text-blue-800"
-                                                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                                        ? "bg-brand-50 text-brand-700 border-l-2 border-brand-600 -ml-0.5 pl-2"
+                                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                                                 )}
                                             >
                                                 <Icon
                                                     className={cn(
-                                                        "mr-3 h-5 w-5 flex-shrink-0",
+                                                        "h-4 w-4 flex-shrink-0",
                                                         isActive
-                                                            ? "text-blue-800"
-                                                            : "text-gray-400"
+                                                            ? "text-brand-600"
+                                                            : "text-slate-400"
                                                     )}
                                                 />
-                                                {item.name}
+                                                <span className="truncate">{item.name}</span>
                                             </Link>
                                         );
                                     })}
@@ -148,17 +169,18 @@ export function Sidebar({ isOpen, onClose }) {
                     </div>
                 </nav>
 
-                <div className="p-4 border-t border-gray-200 bg-gray-50">
-                    <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-semibold">
-                            {user?.first_name?.[0] || "U"}
+                {/* User Profile */}
+                <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex-shrink-0">
+                    <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-xs flex-shrink-0">
+                            {getInitials(user?.first_name)}
                         </div>
-                        <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-gray-900 truncate">
+                        <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-sm font-medium text-slate-900 truncate">
                                 {user?.first_name || "Usuario"}
                             </span>
-                            <span className="text-xs text-gray-500 truncate">
-                                {user?.email}
+                            <span className="text-2xs text-slate-500 truncate">
+                                {user?.email || "usuario@gpro.com"}
                             </span>
                         </div>
                     </div>

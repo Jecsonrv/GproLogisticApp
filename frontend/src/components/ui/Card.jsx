@@ -1,22 +1,37 @@
 import * as React from "react"
 import { cn } from "../../lib/utils"
 
-const Card = React.forwardRef(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "rounded-lg border border-gray-200 bg-white text-gray-950 shadow-sm",
-      className
-    )}
-    {...props}
-  />
-))
+/**
+ * Card Components - Design System Corporativo GPRO
+ * Sistema de tarjetas composables para contenido estructurado
+ */
+
+const Card = React.forwardRef(({ className, variant = "default", ...props }, ref) => {
+  const variants = {
+    default: "bg-white border border-slate-200 shadow-card",
+    elevated: "bg-white border border-slate-200 shadow-md",
+    flat: "bg-white border border-slate-200",
+    ghost: "bg-slate-50 border border-slate-100",
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-md text-slate-900",
+        variants[variant],
+        className
+      )}
+      {...props}
+    />
+  )
+})
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    className={cn("flex flex-col space-y-1 p-5 pb-0", className)}
     {...props}
   />
 ))
@@ -26,7 +41,7 @@ const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
   <h3
     ref={ref}
     className={cn(
-      "text-lg font-semibold leading-none tracking-tight",
+      "text-base font-semibold leading-tight tracking-tight text-slate-900",
       className
     )}
     {...props}
@@ -37,24 +52,147 @@ CardTitle.displayName = "CardTitle"
 const CardDescription = React.forwardRef(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-sm text-gray-500", className)}
+    className={cn("text-sm text-slate-500", className)}
     {...props}
   />
 ))
 CardDescription.displayName = "CardDescription"
 
 const CardContent = React.forwardRef(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+  <div ref={ref} className={cn("p-5", className)} {...props} />
 ))
 CardContent.displayName = "CardContent"
 
 const CardFooter = React.forwardRef(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center p-6 pt-0", className)}
+    className={cn("flex items-center p-5 pt-0", className)}
     {...props}
   />
 ))
 CardFooter.displayName = "CardFooter"
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+/**
+ * StatCard - Tarjeta de estadística/KPI
+ */
+const StatCard = React.forwardRef(({
+  className,
+  title,
+  value,
+  description,
+  icon: Icon,
+  trend,
+  trendValue,
+  variant = "default",
+  ...props
+}, ref) => {
+  const trendColors = {
+    up: "text-success-600",
+    down: "text-danger-600",
+    neutral: "text-slate-500",
+  }
+
+  const trendIcons = {
+    up: "↑",
+    down: "↓",
+    neutral: "→",
+  }
+
+  return (
+    <Card ref={ref} className={cn("p-4", className)} {...props}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            {title}
+          </p>
+          <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums tracking-tight">
+            {value}
+          </p>
+          {(description || trend) && (
+            <div className="flex items-center gap-2 mt-1">
+              {trend && trendValue && (
+                <span className={cn("text-xs font-medium", trendColors[trend])}>
+                  {trendIcons[trend]} {trendValue}
+                </span>
+              )}
+              {description && (
+                <span className="text-xs text-slate-500 truncate">
+                  {description}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        {Icon && (
+          <div className="flex-shrink-0 p-2 bg-slate-100 rounded">
+            <Icon className="w-4 h-4 text-slate-500" />
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+})
+StatCard.displayName = "StatCard"
+
+/**
+ * MetricCard - Tarjeta de métrica con variante de color
+ */
+const MetricCard = React.forwardRef(({
+  className,
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  variant = "default",
+  ...props
+}, ref) => {
+  const variants = {
+    default: "bg-slate-50 border-slate-200 text-slate-900",
+    primary: "bg-brand-50 border-brand-200 text-brand-700",
+    success: "bg-success-50 border-success-200 text-success-700",
+    warning: "bg-warning-50 border-warning-200 text-warning-700",
+    danger: "bg-danger-50 border-danger-200 text-danger-700",
+    info: "bg-info-50 border-info-200 text-info-700",
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "p-4 rounded-md border",
+        variants[variant],
+        className
+      )}
+      {...props}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium opacity-75 uppercase tracking-wide">
+            {title}
+          </p>
+          <p className="text-xl font-bold mt-1 tabular-nums">{value}</p>
+          {subtitle && (
+            <p className="text-xs opacity-75 mt-0.5">{subtitle}</p>
+          )}
+        </div>
+        {Icon && (
+          <div className="opacity-50">
+            <Icon className="w-6 h-6" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+MetricCard.displayName = "MetricCard"
+
+export {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  StatCard,
+  MetricCard,
+}
