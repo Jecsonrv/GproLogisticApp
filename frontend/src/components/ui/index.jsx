@@ -1,8 +1,29 @@
-// Exportación centralizada de componentes UI
+/**
+ * GPRO Logistic - Design System Components
+ * Exportación centralizada de componentes UI
+ */
+
+// Data Display
 export { default as DataTable } from "./DataTable";
+export { default as EmptyState } from "./EmptyState";
+
+// Feedback
 export { default as Modal, ModalFooter } from "./Modal";
-export { Badge, badgeVariants } from "./Badge";
+export { default as Spinner, LoadingState, LoadingOverlay } from "./Spinner";
+export {
+    Skeleton,
+    SkeletonTable,
+    SkeletonCard,
+    SkeletonForm,
+} from "./Skeleton";
+
+// Badges
+export { Badge, StatusBadge, badgeVariants } from "./Badge";
+
+// Buttons
 export { Button, buttonVariants } from "./Button";
+
+// Cards
 export {
     Card,
     CardHeader,
@@ -10,12 +31,17 @@ export {
     CardDescription,
     CardContent,
     CardFooter,
+    StatCard,
+    MetricCard,
 } from "./Card";
+
+// Form Controls
 export { default as Select } from "./Select";
-export { Input } from "./Input";
+export { Input, Textarea, FormField } from "./Input";
 export { Label } from "./Label";
-export { default as EmptyState } from "./EmptyState";
-export { default as Spinner, LoadingState, LoadingOverlay } from "./Spinner";
+export { FileUpload } from "./FileUpload";
+
+// Navigation & Menus
 export {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -25,6 +51,8 @@ export {
     DropdownMenuSeparator,
 } from "./DropdownMenu";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
+
+// Dialog
 export {
     Dialog,
     DialogContent,
@@ -34,10 +62,3 @@ export {
     DialogFooter,
     DialogClose,
 } from "./Dialog";
-export {
-    Skeleton,
-    SkeletonTable,
-    SkeletonCard,
-    SkeletonForm,
-} from "./Skeleton";
-export { FileUpload } from "./FileUpload";
