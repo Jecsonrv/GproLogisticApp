@@ -4,7 +4,12 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import update_session_auth_hash
 from .models import User
-from .serializers import UserSerializer, UserListSerializer, ChangePasswordSerializer
+from .serializers import (
+    UserSerializer,
+    UserListSerializer,
+    ChangePasswordSerializer,
+    UserProfileSerializer
+)
 from .permissions import IsAdminUser
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -20,11 +25,29 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserListSerializer
         return UserSerializer
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get', 'patch'], permission_classes=[IsAuthenticated])
     def me(self, request):
-        """Obtener información del usuario autenticado"""
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        """
+        GET: Obtener información del usuario autenticado
+        PATCH: Actualizar perfil (first_name, last_name, email)
+        """
+        if request.method == 'GET':
+            serializer = UserProfileSerializer(request.user)
+            return Response(serializer.data)
+
+        elif request.method == 'PATCH':
+            serializer = UserProfileSerializer(
+                request.user,
+                data=request.data,
+                partial=True,
+                context={'request': request}
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response({
+                'message': 'Perfil actualizado correctamente',
+                'user': serializer.data
+            })
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def change_password(self, request):

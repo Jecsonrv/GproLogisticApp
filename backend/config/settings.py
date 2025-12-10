@@ -115,6 +115,35 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Seguridad: No revelar detalles de errores internos
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+}
+
+# Configuración de JWT Segura
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 60 minutos
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=24),   # 24 horas
+    'ROTATE_REFRESH_TOKENS': True,  # Rotar tokens de refresco
+    'BLACKLIST_AFTER_ROTATION': False,  # Opcional: activar si se usa blacklist
+    'UPDATE_LAST_LOGIN': True,  # Actualizar last_login en cada autenticación
+
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+
+    'JTI_CLAIM': 'jti',
 }
 
 SPECTACULAR_SETTINGS = {
