@@ -35,11 +35,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             charges_data.append({
                 'id': charge.id,
                 'service': charge.service.id,
-                'service_code': charge.service.code,
                 'service_name': charge.service.name,
                 'quantity': str(charge.quantity),
                 'unit_price': str(charge.unit_price),
-                'discount': str(charge.discount),
                 'applies_iva': charge.service.applies_iva,
                 'subtotal': str(charge.subtotal),
                 'iva_amount': str(charge.iva_amount),
@@ -73,6 +71,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 unit_price=request.data.get('unit_price', service.default_price),
                 description=request.data.get('notes', '')
             )
+            
+            # Set current user for signal
+            charge._current_user = request.user
 
             return Response({
                 'id': charge.id,
@@ -157,6 +158,11 @@ class OrderDocumentViewSet(viewsets.ModelViewSet):
     queryset = OrderDocument.objects.all()
     serializer_class = OrderDocumentSerializer
     permission_classes = [IsOperativo]
+    
+    def perform_destroy(self, instance):
+        """Set current user before deletion for signal"""
+        instance._current_user = self.request.user
+        instance.delete()
 
 
 class OrderChargeViewSet(viewsets.ModelViewSet):
@@ -165,17 +171,37 @@ class OrderChargeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
 
     def get_queryset(self):
-        return self.queryset.select_related('order', 'service', 'created_by')
+        return self.queryset.select_related('service_order', 'service')
 
     def destroy(self, request, *args, **kwargs):
         """Delete a charge only if the order is still open"""
         charge = self.get_object()
 
-        if charge.order.status != 'abierta':
+        if charge.service_order.status != 'abierta':
             return Response(
                 {'error': 'No se pueden eliminar cargos de una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Set current user for signal
+        charge._current_user = request.user
         charge.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class OrderHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for order history (read-only)"""
+    from .serializers_new import OrderHistorySerializer
+    serializer_class = OrderHistorySerializer
+    permission_classes = [IsOperativo]
+    
+    def get_queryset(self):
+        from .models import OrderHistory
+        queryset = OrderHistory.objects.select_related('user', 'service_order')
+        
+        # Filtrar por service_order si se proporciona
+        service_order_id = self.request.query_params.get('service_order', None)
+        if service_order_id:
+            queryset = queryset.filter(service_order_id=service_order_id)
+        
+        return queryset

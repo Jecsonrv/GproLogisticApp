@@ -48,7 +48,20 @@ class TransferViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Asignar usuario que crea la transferencia"""
-        serializer.save(created_by=self.request.user)
+        transfer = serializer.save(created_by=self.request.user)
+        transfer._current_user = self.request.user
+        return transfer
+    
+    def perform_update(self, serializer):
+        """Set current user for signal on update"""
+        transfer = serializer.save()
+        transfer._current_user = self.request.user
+        return transfer
+    
+    def perform_destroy(self, instance):
+        """Set current user before deletion for signal"""
+        instance._current_user = self.request.user
+        instance.delete()
     
     @action(detail=False, methods=['get'], permission_classes=[IsOperativo2])
     def export_excel(self, request):

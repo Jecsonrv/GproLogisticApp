@@ -22,6 +22,7 @@ import {
     Select,
     Skeleton,
     EmptyState,
+    ConfirmDialog,
 } from "../components/ui";
 import {
     ArrowLeft,
@@ -57,7 +58,9 @@ import { formatCurrency, formatDate, cn } from "../lib/utils";
 const DataField = ({ label, value, mono = false, className = "" }) => (
     <div className={className}>
         <dt className="data-label">{label}</dt>
-        <dd className={cn("data-value", mono && "font-mono")}>{value || "N/A"}</dd>
+        <dd className={cn("data-value", mono && "font-mono")}>
+            {value || "N/A"}
+        </dd>
     </div>
 );
 
@@ -84,7 +87,10 @@ const StatusBadge = ({ status, size = "default" }) => {
         },
     };
 
-    const { label, className } = config[status] || { label: status, className: "badge-default" };
+    const { label, className } = config[status] || {
+        label: status,
+        className: "badge-default",
+    };
 
     return <span className={className}>{label}</span>;
 };
@@ -93,26 +99,42 @@ const StatusBadge = ({ status, size = "default" }) => {
 // SUMMARY CARD COMPONENT
 // ============================================
 const SummaryCard = ({ title, value, variant = "default", icon: Icon }) => {
-    const variants = {
-        default: "bg-slate-50 border-slate-200 text-slate-900",
-        success: "bg-success-50 border-success-200 text-success-700",
-        warning: "bg-warning-50 border-warning-200 text-warning-700",
-        danger: "bg-danger-50 border-danger-200 text-danger-700",
-        info: "bg-brand-50 border-brand-200 text-brand-700",
+    // Professional ERP styling: subtle backgrounds, neutral colors
+    const iconColors = {
+        default: "text-slate-400",
+        success: "text-slate-500",
+        warning: "text-slate-500",
+        danger: "text-slate-500",
+        info: "text-slate-500",
+    };
+
+    const valueColors = {
+        default: "text-slate-900",
+        success: "text-slate-900",
+        warning: "text-slate-900",
+        danger: "text-slate-900",
+        info: "text-slate-900",
     };
 
     return (
-        <div className={cn("p-4 rounded border", variants[variant])}>
+        <div className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
             <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-xs font-medium opacity-75 uppercase tracking-wide">
+                <div className="flex-1">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                         {title}
                     </p>
-                    <p className="text-xl font-bold mt-1 tabular-nums">{value}</p>
+                    <p
+                        className={cn(
+                            "text-xl font-bold mt-1.5 tabular-nums",
+                            valueColors[variant]
+                        )}
+                    >
+                        {value}
+                    </p>
                 </div>
                 {Icon && (
-                    <div className="opacity-50">
-                        <Icon className="w-6 h-6" />
+                    <div className={cn("ml-3", iconColors[variant])}>
+                        <Icon className="w-5 h-5" />
                     </div>
                 )}
             </div>
@@ -139,6 +161,10 @@ function ServiceOrderDetail() {
     const [activeTab, setActiveTab] = useState("general");
     const [isAddChargeModalOpen, setIsAddChargeModalOpen] = useState(false);
     const [isAddTransferModalOpen, setIsAddTransferModalOpen] = useState(false);
+    const [confirmDialog, setConfirmDialog] = useState({
+        open: false,
+        id: null,
+    });
 
     // Form state
     const [chargeFormData, setChargeFormData] = useState({
@@ -214,20 +240,26 @@ function ServiceOrderDetail() {
         [id, chargeFormData]
     );
 
-    const handleDeleteCharge = useCallback(
-        async (chargeId) => {
-            if (!window.confirm("¿Eliminar este cobro?")) return;
+    const handleDeleteCharge = useCallback((chargeId) => {
+        setConfirmDialog({ open: true, id: chargeId });
+    }, []);
 
-            try {
-                await axios.delete(`/orders/order-charges/${chargeId}/`);
-                toast.success("Cobro eliminado");
-                fetchOrderDetails();
-            } catch (error) {
-                toast.error("Error al eliminar cobro");
-            }
-        },
-        []
-    );
+    const confirmDeleteCharge = async () => {
+        const { id } = confirmDialog;
+        setConfirmDialog({ open: false, id: null });
+
+        try {
+            await axios.delete(`/orders/order-charges/${id}/`);
+            toast.success("Cobro eliminado exitosamente");
+            fetchOrderDetails();
+        } catch (error) {
+            const errorMessage =
+                error.response?.data?.error ||
+                error.response?.data?.detail ||
+                "Error al eliminar cobro";
+            toast.error(errorMessage);
+        }
+    };
 
     const handleAddTransfer = useCallback(
         async (e) => {
@@ -273,7 +305,8 @@ function ServiceOrderDetail() {
 
     const margin = useMemo(() => {
         const value = totals.charges - totals.transfers;
-        const percentage = totals.charges > 0 ? (value / totals.charges) * 100 : 0;
+        const percentage =
+            totals.charges > 0 ? (value / totals.charges) * 100 : 0;
         return { value, percentage };
     }, [totals]);
 
@@ -283,10 +316,10 @@ function ServiceOrderDetail() {
     const chargesColumns = [
         {
             header: "Servicio",
-            accessor: "service",
-            render: (row) => (
+            accessor: "service_name",
+            cell: (row) => (
                 <span className="font-medium text-slate-900">
-                    {row.service?.name || "N/A"}
+                    {row.service_name || "N/A"}
                 </span>
             ),
         },
@@ -294,15 +327,13 @@ function ServiceOrderDetail() {
             header: "Cantidad",
             accessor: "quantity",
             className: "w-20 text-center",
-            render: (row) => (
-                <span className="tabular-nums">{row.quantity}</span>
-            ),
+            cell: (row) => <span className="tabular-nums">{row.quantity}</span>,
         },
         {
             header: "Precio Unit.",
             accessor: "unit_price",
             className: "w-28 text-right",
-            render: (row) => (
+            cell: (row) => (
                 <span className="tabular-nums">
                     {formatCurrency(row.unit_price)}
                 </span>
@@ -312,7 +343,7 @@ function ServiceOrderDetail() {
             header: "Subtotal",
             accessor: "subtotal",
             className: "w-28 text-right",
-            render: (row) => (
+            cell: (row) => (
                 <span className="tabular-nums">
                     {formatCurrency(row.subtotal)}
                 </span>
@@ -322,7 +353,7 @@ function ServiceOrderDetail() {
             header: "IVA 13%",
             accessor: "iva_amount",
             className: "w-24 text-right",
-            render: (row) => (
+            cell: (row) => (
                 <span className="tabular-nums text-slate-500">
                     {formatCurrency(row.iva_amount)}
                 </span>
@@ -332,7 +363,7 @@ function ServiceOrderDetail() {
             header: "Total",
             accessor: "total",
             className: "w-28 text-right",
-            render: (row) => (
+            cell: (row) => (
                 <span className="font-semibold tabular-nums text-slate-900">
                     {formatCurrency(row.total)}
                 </span>
@@ -342,7 +373,7 @@ function ServiceOrderDetail() {
             header: "",
             accessor: "actions",
             className: "w-16",
-            render: (row) => (
+            cell: (row) => (
                 <button
                     onClick={() => handleDeleteCharge(row.id)}
                     className="p-1.5 text-slate-400 hover:text-danger-600 hover:bg-danger-50 rounded transition-colors"
@@ -359,7 +390,7 @@ function ServiceOrderDetail() {
             header: "Tipo",
             accessor: "transfer_type",
             className: "w-28",
-            render: (row) => {
+            cell: (row) => {
                 const types = {
                     terceros: { label: "Terceros", className: "badge-warning" },
                     propios: { label: "Propios", className: "badge-info" },
@@ -372,7 +403,7 @@ function ServiceOrderDetail() {
         {
             header: "Proveedor",
             accessor: "provider",
-            render: (row) => (
+            cell: (row) => (
                 <span className="text-slate-900">
                     {row.provider?.name || "-"}
                 </span>
@@ -382,7 +413,7 @@ function ServiceOrderDetail() {
             header: "Monto",
             accessor: "amount",
             className: "w-32 text-right",
-            render: (row) => (
+            cell: (row) => (
                 <span className="font-semibold tabular-nums">
                     {formatCurrency(row.amount)}
                 </span>
@@ -392,12 +423,12 @@ function ServiceOrderDetail() {
             header: "Estado",
             accessor: "status",
             className: "w-28",
-            render: (row) => <StatusBadge status={row.status} />,
+            cell: (row) => <StatusBadge status={row.status} />,
         },
         {
             header: "Notas",
             accessor: "notes",
-            render: (row) => (
+            cell: (row) => (
                 <span className="text-sm text-slate-500 truncate max-w-[200px] block">
                     {row.notes || "-"}
                 </span>
@@ -486,7 +517,8 @@ function ServiceOrderDetail() {
                                     )}
                                 </div>
                                 <p className="text-sm text-slate-500 mt-0.5">
-                                    {order.client?.name} • {order.shipment_type?.name}
+                                    {order.client?.name} •{" "}
+                                    {order.shipment_type?.name}
                                 </p>
                             </div>
                         </div>
@@ -577,7 +609,11 @@ function ServiceOrderDetail() {
                                 title="Margen"
                                 value={formatCurrency(margin.value)}
                                 variant={margin.value >= 0 ? "info" : "danger"}
-                                icon={margin.value >= 0 ? TrendingUp : TrendingDown}
+                                icon={
+                                    margin.value >= 0
+                                        ? TrendingUp
+                                        : TrendingDown
+                                }
                             />
                             <SummaryCard
                                 title="Facturado"
@@ -680,22 +716,30 @@ function ServiceOrderDetail() {
                                 <dl className="grid grid-cols-2 gap-4">
                                     <DataField
                                         label="ETA"
-                                        value={formatDate(order.eta, { format: "medium" })}
+                                        value={formatDate(order.eta, {
+                                            format: "medium",
+                                        })}
                                     />
                                     <DataField
                                         label="Fecha de Creación"
-                                        value={formatDate(order.created_at, { format: "medium" })}
+                                        value={formatDate(order.created_at, {
+                                            format: "medium",
+                                        })}
                                     />
                                     <div>
                                         <dt className="data-label">Estado</dt>
                                         <dd className="mt-1">
-                                            <StatusBadge status={order.status} />
+                                            <StatusBadge
+                                                status={order.status}
+                                            />
                                         </dd>
                                     </div>
                                     {order.closed_at && (
                                         <DataField
                                             label="Fecha de Cierre"
-                                            value={formatDate(order.closed_at, { format: "medium" })}
+                                            value={formatDate(order.closed_at, {
+                                                format: "medium",
+                                            })}
                                         />
                                     )}
                                 </dl>
@@ -719,7 +763,9 @@ function ServiceOrderDetail() {
                                 </div>
                                 <Button
                                     size="sm"
-                                    onClick={() => setIsAddChargeModalOpen(true)}
+                                    onClick={() =>
+                                        setIsAddChargeModalOpen(true)
+                                    }
                                     className="bg-brand-600 hover:bg-brand-700"
                                 >
                                     <Plus className="w-4 h-4 mr-1.5" />
@@ -740,7 +786,9 @@ function ServiceOrderDetail() {
                                                     Total Cobros
                                                 </p>
                                                 <p className="text-2xl font-bold text-success-600 tabular-nums">
-                                                    {formatCurrency(totals.charges)}
+                                                    {formatCurrency(
+                                                        totals.charges
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
@@ -756,7 +804,9 @@ function ServiceOrderDetail() {
                                             <Button
                                                 size="sm"
                                                 onClick={() =>
-                                                    setIsAddChargeModalOpen(true)
+                                                    setIsAddChargeModalOpen(
+                                                        true
+                                                    )
                                                 }
                                                 className="bg-brand-600 hover:bg-brand-700"
                                             >
@@ -781,12 +831,15 @@ function ServiceOrderDetail() {
                                         Gastos y Transferencias
                                     </h3>
                                     <p className="text-xs text-slate-500 mt-0.5">
-                                        Gastos a terceros, propios y administrativos
+                                        Gastos a terceros, propios y
+                                        administrativos
                                     </p>
                                 </div>
                                 <Button
                                     size="sm"
-                                    onClick={() => setIsAddTransferModalOpen(true)}
+                                    onClick={() =>
+                                        setIsAddTransferModalOpen(true)
+                                    }
                                     className="bg-brand-600 hover:bg-brand-700"
                                 >
                                     <Plus className="w-4 h-4 mr-1.5" />
@@ -807,7 +860,9 @@ function ServiceOrderDetail() {
                                                     Total Gastos
                                                 </p>
                                                 <p className="text-2xl font-bold text-warning-600 tabular-nums">
-                                                    {formatCurrency(totals.transfers)}
+                                                    {formatCurrency(
+                                                        totals.transfers
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
@@ -823,7 +878,9 @@ function ServiceOrderDetail() {
                                             <Button
                                                 size="sm"
                                                 onClick={() =>
-                                                    setIsAddTransferModalOpen(true)
+                                                    setIsAddTransferModalOpen(
+                                                        true
+                                                    )
                                                 }
                                                 className="bg-brand-600 hover:bg-brand-700"
                                             >
@@ -858,20 +915,28 @@ function ServiceOrderDetail() {
                                             mono
                                         />
                                         <div>
-                                            <dt className="data-label">Estado</dt>
+                                            <dt className="data-label">
+                                                Estado
+                                            </dt>
                                             <dd className="mt-1">
-                                                <StatusBadge status={invoice.status} />
+                                                <StatusBadge
+                                                    status={invoice.status}
+                                                />
                                             </dd>
                                         </div>
                                         <DataField
                                             label="Total Facturado"
-                                            value={formatCurrency(invoice.total_amount)}
+                                            value={formatCurrency(
+                                                invoice.total_amount
+                                            )}
                                         />
                                         <DataField
                                             label="Saldo Pendiente"
                                             value={
                                                 <span className="text-danger-600 font-semibold">
-                                                    {formatCurrency(invoice.balance)}
+                                                    {formatCurrency(
+                                                        invoice.balance
+                                                    )}
                                                 </span>
                                             }
                                         />
@@ -956,7 +1021,8 @@ function ServiceOrderDetail() {
                                         </span>
                                         {totals.charges > 0 && (
                                             <span className="text-sm text-slate-500 ml-2">
-                                                ({margin.percentage.toFixed(1)}%)
+                                                ({margin.percentage.toFixed(1)}
+                                                %)
                                             </span>
                                         )}
                                     </div>
@@ -998,13 +1064,19 @@ function ServiceOrderDetail() {
                                         <span
                                             className={cn(
                                                 "text-lg font-bold tabular-nums",
-                                                Math.abs(totals.charges - totals.invoiced) < 0.01
+                                                Math.abs(
+                                                    totals.charges -
+                                                        totals.invoiced
+                                                ) < 0.01
                                                     ? "text-success-600"
                                                     : "text-warning-600"
                                             )}
                                         >
                                             {formatCurrency(
-                                                Math.abs(totals.charges - totals.invoiced)
+                                                Math.abs(
+                                                    totals.charges -
+                                                        totals.invoiced
+                                                )
                                             )}
                                         </span>
                                     </div>
@@ -1038,16 +1110,20 @@ function ServiceOrderDetail() {
                                     setChargeFormData({
                                         ...chargeFormData,
                                         service: e.target.value,
-                                        unit_price: service?.default_price || "",
+                                        unit_price:
+                                            service?.default_price || "",
                                     });
                                 }}
                                 required
                                 className="input-corporate"
                             >
-                                <option value="">Seleccionar servicio...</option>
+                                <option value="">
+                                    Seleccionar servicio...
+                                </option>
                                 {services.map((s) => (
                                     <option key={s.id} value={s.id}>
-                                        {s.name} - {formatCurrency(s.default_price)}
+                                        {s.name} -{" "}
+                                        {formatCurrency(s.default_price)}
                                     </option>
                                 ))}
                             </select>
@@ -1155,7 +1231,9 @@ function ServiceOrderDetail() {
                                     required
                                     className="input-corporate"
                                 >
-                                    <option value="">Seleccionar proveedor...</option>
+                                    <option value="">
+                                        Seleccionar proveedor...
+                                    </option>
                                     {providers.map((p) => (
                                         <option key={p.id} value={p.id}>
                                             {p.name}
@@ -1213,6 +1291,18 @@ function ServiceOrderDetail() {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            {/* Confirm Delete Dialog - Cobros */}
+            <ConfirmDialog
+                open={confirmDialog.open}
+                onClose={() => setConfirmDialog({ open: false, id: null })}
+                onConfirm={confirmDeleteCharge}
+                title="¿Eliminar este cobro?"
+                description="Esta acción no se puede deshacer. El cobro será eliminado permanentemente de la orden de servicio."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
         </div>
     );
 }

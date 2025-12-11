@@ -93,7 +93,21 @@ class ServiceOrder(models.Model):
         return self.get_total_services() + self.get_total_third_party()
 
 class OrderDocument(models.Model):
+    """Documentos asociados a una Orden de Servicio"""
+    DOCUMENT_TYPE_CHOICES = (
+        ('tramite', 'Documentos del Trámite'),  # DUCA, BL, Levante, Manifiestos
+        ('factura_venta', 'Facturas de Venta'),  # Facturas emitidas al cliente
+        ('factura_costo', 'Facturas de Costo / Comprobantes'),  # Facturas de proveedores
+        ('otros', 'Otros Documentos / Evidencias'),
+    )
+    
     order = models.ForeignKey(ServiceOrder, related_name='documents', on_delete=models.CASCADE)
+    document_type = models.CharField(
+        max_length=20, 
+        choices=DOCUMENT_TYPE_CHOICES, 
+        default='tramite',
+        verbose_name="Tipo de Documento"
+    )
     file = models.FileField(
         upload_to='orders/docs/',
         verbose_name="Archivo",
@@ -101,11 +115,22 @@ class OrderDocument(models.Model):
         help_text="Solo PDF, JPG, PNG. Máximo 5MB"
     )
     description = models.CharField(max_length=255, blank=True, verbose_name="Descripción")
+    uploaded_by = models.ForeignKey(
+        'users.User', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        verbose_name="Subido por"
+    )
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Documento de Orden"
         verbose_name_plural = "Documentos de Ordenes"
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.get_document_type_display()} - {self.order.order_number}"
 
 
 # Importar modelos de facturación
@@ -345,3 +370,60 @@ class InvoicePayment(models.Model):
         invoice = self.invoice
         invoice.paid_amount = sum(payment.amount for payment in invoice.payments.all())
         invoice.save()
+
+
+class OrderHistory(models.Model):
+    """Historial de cambios y eventos en una Orden de Servicio"""
+    EVENT_TYPE_CHOICES = (
+        ('created', 'Orden Creada'),
+        ('updated', 'Orden Actualizada'),
+        ('status_changed', 'Cambio de Estado'),
+        ('charge_added', 'Cobro Agregado'),
+        ('charge_deleted', 'Cobro Eliminado'),
+        ('payment_added', 'Pago a Proveedor Agregado'),
+        ('payment_updated', 'Pago a Proveedor Actualizado'),
+        ('payment_approved', 'Pago a Proveedor Aprobado'),
+        ('payment_paid', 'Pago a Proveedor Ejecutado'),
+        ('payment_deleted', 'Pago a Proveedor Eliminado'),
+        ('document_uploaded', 'Documento Subido'),
+        ('document_deleted', 'Documento Eliminado'),
+        ('invoice_generated', 'Factura Generada'),
+        ('invoice_payment', 'Pago de Cliente Recibido'),
+        ('closed', 'Orden Cerrada'),
+        ('reopened', 'Orden Reabierta'),
+    )
+    
+    service_order = models.ForeignKey(
+        ServiceOrder, 
+        on_delete=models.CASCADE, 
+        related_name='history',
+        verbose_name="Orden de Servicio"
+    )
+    event_type = models.CharField(
+        max_length=30, 
+        choices=EVENT_TYPE_CHOICES,
+        verbose_name="Tipo de Evento"
+    )
+    description = models.TextField(verbose_name="Descripción")
+    user = models.ForeignKey(
+        'users.User', 
+        on_delete=models.SET_NULL, 
+        null=True,
+        verbose_name="Usuario"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha y Hora")
+    
+    # Datos adicionales en JSON (opcional)
+    metadata = models.JSONField(null=True, blank=True, verbose_name="Metadatos")
+    
+    class Meta:
+        verbose_name = "Historial de Orden"
+        verbose_name_plural = "Historial de Ordenes"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['service_order', '-created_at']),
+            models.Index(fields=['event_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.service_order.order_number} - {self.get_event_type_display()} - {self.created_at}"

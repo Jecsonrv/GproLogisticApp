@@ -6,7 +6,7 @@ from django.db.models import Sum
 from decimal import Decimal
 from .models import (
     ServiceOrder, OrderDocument, OrderCharge,
-    Invoice, InvoicePayment
+    Invoice, InvoicePayment, OrderHistory
 )
 from apps.transfers.models import Transfer
 from apps.catalogs.models import Service
@@ -18,14 +18,22 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     file_name = serializers.SerializerMethodField()
     file_size = serializers.SerializerMethodField()
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True, allow_null=True)
 
     class Meta:
         model = OrderDocument
         fields = [
-            'id', 'order', 'file', 'file_url', 'file_name',
-            'file_size', 'description', 'uploaded_at'
+            'id', 'order', 'document_type', 'document_type_display', 'file', 'file_url', 'file_name',
+            'file_size', 'description', 'uploaded_by', 'uploaded_by_username', 'uploaded_at'
         ]
-        read_only_fields = ['id', 'uploaded_at', 'file_url', 'file_name', 'file_size']
+        read_only_fields = ['id', 'uploaded_at', 'file_url', 'file_name', 'file_size', 'document_type_display', 'uploaded_by_username']
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['uploaded_by'] = request.user
+        return super().create(validated_data)
 
     def get_file_url(self, obj):
         if obj.file:
@@ -48,19 +56,18 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
 class OrderChargeSerializer(serializers.ModelSerializer):
     """Serializer para cobros de una OS"""
     service_name = serializers.CharField(source='service.name', read_only=True)
-    service_code = serializers.CharField(source='service.code', read_only=True)
 
     class Meta:
         model = OrderCharge
         fields = [
-            'id', 'service_order', 'service', 'service_name', 'service_code',
+            'id', 'service_order', 'service', 'service_name',
             'description', 'quantity', 'unit_price',
             'subtotal', 'iva_amount', 'total',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'subtotal', 'iva_amount', 'total',
-            'created_at', 'updated_at', 'service_name', 'service_code'
+            'created_at', 'updated_at', 'service_name'
         ]
 
 
@@ -320,3 +327,19 @@ class InvoiceCreateSerializer(serializers.ModelSerializer):
             invoice.calculate_totals()
 
         return invoice
+
+
+class OrderHistorySerializer(serializers.ModelSerializer):
+    """Serializer para el historial de una Orden de Servicio"""
+    event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True, allow_null=True)
+    user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = OrderHistory
+        fields = [
+            'id', 'service_order', 'event_type', 'event_type_display',
+            'description', 'user', 'user_name', 'user_username',
+            'created_at', 'metadata'
+        ]
+        read_only_fields = ['id', 'created_at', 'event_type_display', 'user_name', 'user_username']

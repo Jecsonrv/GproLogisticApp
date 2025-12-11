@@ -5,18 +5,25 @@ from apps.catalogs.models import Provider, Bank
 from apps.validators import validate_document_file
 
 class Transfer(models.Model):
+    """Pagos a Proveedores - Registro de gastos y costos"""
     TYPE_CHOICES = (
-        ('terceros', 'Cargos a Clientes (Terceros)'),
-        ('propios', 'Costos Operativos (Propios)'),
-        ('admin', 'Gastos Administrativos'),
+        ('costos', 'Costos Directos'),  # Pagos para ejecutar servicio de cliente
+        ('cargos', 'Cargos a Clientes'),  # Facturables al cliente
+        ('admin', 'Gastos de Operación'),  # No vinculados a OS
+        # Mantener compatibilidad
+        ('terceros', 'Cargos a Clientes (Legacy)'),
+        ('propios', 'Costos Operativos (Legacy)'),
     )
     transfer_type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Tipo de Gasto")
 
     STATUS_CHOICES = (
-        ('provisionada', 'Provisionada'),
-        ('pagada', 'Pagada'),
+        ('pendiente', 'Pendiente'),  # Registrado, esperando aprobación
+        ('aprobado', 'Aprobado'),  # Validado, listo para pagar
+        ('pagado', 'Pagado'),  # Pago ejecutado
+        # Mantener compatibilidad
+        ('provisionada', 'Provisionada (Legacy)'),
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='provisionada', verbose_name="Estado")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pendiente', verbose_name="Estado")
 
     PAYMENT_METHOD_CHOICES = (
         ('efectivo', 'Efectivo'),

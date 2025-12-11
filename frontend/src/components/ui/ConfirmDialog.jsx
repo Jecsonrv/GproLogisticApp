@@ -31,9 +31,9 @@ const ConfirmDialog = ({
     };
 
     const variantStyles = {
-        danger: "bg-red-600 hover:bg-red-700 text-white",
-        warning: "bg-yellow-600 hover:bg-yellow-700 text-white",
-        primary: "bg-primary-600 hover:bg-primary-700 text-white",
+        danger: "bg-danger-600 hover:bg-danger-700 text-white shadow-sm",
+        warning: "bg-warning-600 hover:bg-warning-700 text-white shadow-sm",
+        primary: "bg-brand-600 hover:bg-brand-700 text-white shadow-sm",
     };
 
     return (
@@ -46,48 +46,48 @@ const ConfirmDialog = ({
 
             {/* Dialog */}
             <div className="relative z-50 w-full max-w-md">
-                <div className="bg-white rounded-lg shadow-xl border border-gray-200">
+                <div className="bg-white rounded-lg shadow-xl border border-slate-200">
                     {/* Header */}
                     <div className="flex items-start justify-between p-6 pb-4">
                         <div className="flex items-start gap-4">
                             <div
                                 className={`p-3 rounded-full ${
                                     variant === "danger"
-                                        ? "bg-red-100"
+                                        ? "bg-danger-50"
                                         : variant === "warning"
-                                        ? "bg-yellow-100"
-                                        : "bg-primary-100"
+                                        ? "bg-warning-50"
+                                        : "bg-brand-50"
                                 }`}
                             >
                                 <AlertTriangle
                                     className={`h-6 w-6 ${
                                         variant === "danger"
-                                            ? "text-red-600"
+                                            ? "text-danger-600"
                                             : variant === "warning"
-                                            ? "text-yellow-600"
-                                            : "text-primary-600"
+                                            ? "text-warning-600"
+                                            : "text-brand-600"
                                     }`}
                                 />
                             </div>
                             <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-gray-900">
+                                <h3 className="text-lg font-semibold text-slate-900">
                                     {title}
                                 </h3>
-                                <p className="mt-2 text-sm text-gray-600">
+                                <p className="mt-2 text-sm text-slate-600">
                                     {description}
                                 </p>
                             </div>
                         </div>
                         <button
                             onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="text-slate-400 hover:text-slate-600 transition-colors"
                         >
                             <X className="h-5 w-5" />
                         </button>
                     </div>
 
                     {/* Footer con botones */}
-                    <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
+                    <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50 rounded-b-lg">
                         <Button variant="outline" onClick={onClose}>
                             {cancelText}
                         </Button>

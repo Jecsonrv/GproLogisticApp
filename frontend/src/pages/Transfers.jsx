@@ -153,14 +153,16 @@ function Transfers() {
     const openEditModal = (transfer) => {
         setSelectedTransfer(transfer);
         setFormData({
-            service_order: transfer.service_order?.id || "",
-            transfer_type: transfer.transfer_type,
-            provider: transfer.provider?.id || "",
-            amount: transfer.amount,
-            bank: transfer.bank?.id || "",
-            payment_method: transfer.payment_method,
-            supplier_invoice: transfer.supplier_invoice,
-            status: transfer.status,
+            service_order: transfer.service_order?.id
+                ? String(transfer.service_order.id)
+                : "",
+            transfer_type: transfer.transfer_type || "",
+            provider: transfer.provider?.id ? String(transfer.provider.id) : "",
+            amount: transfer.amount ? String(transfer.amount) : "",
+            bank: transfer.bank?.id ? String(transfer.bank.id) : "",
+            payment_method: transfer.payment_method || "transferencia",
+            supplier_invoice: transfer.supplier_invoice || "",
+            status: transfer.status || "pendiente",
             notes: transfer.notes || "",
             pdf_file: null,
         });
@@ -267,11 +269,32 @@ function Transfers() {
                 .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0) || 0,
     };
 
+    const getTransferTypeLabel = (type) => {
+        const labels = {
+            costos: "Costos Directos",
+            cargos: "Cargos a Cliente",
+            admin: "Gastos de Operación",
+            terceros: "Terceros (Legacy)",
+            propios: "Propios (Legacy)",
+        };
+        return labels[type] || type;
+    };
+
+    const getStatusLabel = (status) => {
+        const labels = {
+            pendiente: "Pendiente",
+            aprobado: "Aprobado",
+            pagado: "Pagado",
+            provisionada: "Provisionada (Legacy)",
+        };
+        return labels[status] || status;
+    };
+
     const columns = [
         {
             key: "service_order",
             label: "OS",
-            render: (row) => row.service_order?.os_number || "N/A",
+            render: (row) => row.service_order_number || "Sin OS",
         },
         {
             key: "transfer_type",
@@ -279,68 +302,108 @@ function Transfers() {
             render: (row) => (
                 <Badge
                     variant={
-                        row.transfer_type === "terceros" ? "warning" : "default"
+                        row.transfer_type === "costos"
+                            ? "danger"
+                            : row.transfer_type === "cargos"
+                            ? "success"
+                            : row.transfer_type === "terceros"
+                            ? "warning"
+                            : "default"
                     }
                 >
-                    {row.transfer_type === "terceros"
-                        ? "Terceros"
-                        : row.transfer_type === "propios"
-                        ? "Propios"
-                        : "Admin"}
+                    {getTransferTypeLabel(row.transfer_type)}
                 </Badge>
             ),
         },
         {
             key: "provider",
             label: "Proveedor",
-            render: (row) => row.provider?.name || "-",
+            render: (row) => (
+                <div className="min-w-[150px]">
+                    <div className="font-medium text-slate-900">
+                        {row.provider_name || "-"}
+                    </div>
+                    {row.description && (
+                        <div
+                            className="text-xs text-slate-500 truncate max-w-[200px]"
+                            title={row.description}
+                        >
+                            {row.description}
+                        </div>
+                    )}
+                </div>
+            ),
         },
         {
             key: "amount",
             label: "Monto",
-            render: (row) => `$${parseFloat(row.amount).toFixed(2)}`,
+            render: (row) => (
+                <span className="font-semibold text-slate-900 tabular-nums">
+                    ${parseFloat(row.amount || 0).toFixed(2)}
+                </span>
+            ),
         },
         {
-            key: "bank",
-            label: "Banco",
-            render: (row) => row.bank?.name || "-",
+            key: "payment_method",
+            label: "Método",
+            render: (row) => {
+                const methods = {
+                    transferencia: "Transferencia",
+                    efectivo: "Efectivo",
+                    cheque: "Cheque",
+                    tarjeta: "Tarjeta",
+                };
+                return (
+                    <span className="text-sm text-slate-600">
+                        {methods[row.payment_method] || "-"}
+                    </span>
+                );
+            },
         },
         {
             key: "status",
             label: "Estado",
             render: (row) => (
                 <Badge
-                    variant={row.status === "pagada" ? "success" : "warning"}
+                    variant={
+                        row.status === "pagado"
+                            ? "success"
+                            : row.status === "aprobado"
+                            ? "default"
+                            : row.status === "pagada"
+                            ? "success"
+                            : "warning"
+                    }
                 >
-                    {row.status === "provisionada" ? "Provisionada" : "Pagada"}
+                    {getStatusLabel(row.status)}
                 </Badge>
             ),
         },
         {
-            key: "pdf_file",
-            label: "Archivo",
-            render: (row) =>
-                row.pdf_file ? (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownloadPDF(row.id);
-                        }}
-                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Descargar PDF"
-                    >
-                        <FileText className="h-4 w-4" />
-                        <span className="text-xs">PDF</span>
-                    </button>
-                ) : (
-                    <span className="text-gray-400 text-sm">-</span>
-                ),
+            key: "invoice_number",
+            label: "Factura",
+            render: (row) => (
+                <span className="text-xs text-slate-600 font-mono">
+                    {row.invoice_number || "-"}
+                </span>
+            ),
         },
         {
             key: "actions",
             label: "Acciones",
             render: (row) => (
                 <div className="flex gap-2">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTransfer(row);
+                        }}
+                        title="Ver detalles"
+                    >
+                        <Eye className="h-4 w-4" />
+                    </Button>
                     <Button
                         size="sm"
                         variant="outline"
@@ -742,15 +805,93 @@ function Transfers() {
                 </DialogContent>
             </Dialog>
 
-            {/* Modal Editar - Similar al de crear */}
+            {/* Modal Editar */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent size="lg">
+                <DialogContent size="xl">
                     <DialogHeader>
-                        <DialogTitle>Editar Transferencia</DialogTitle>
+                        <DialogTitle>Editar Pago a Proveedor</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
-                        {/* Mismo contenido que el modal de crear */}
                         <div className="grid grid-cols-2 gap-4">
+                            {/* Orden de Servicio */}
+                            <div>
+                                <Label>Orden de Servicio</Label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    value={formData.service_order}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            service_order: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="">Sin OS</option>
+                                    {serviceOrders.map((os) => (
+                                        <option key={os.id} value={os.id}>
+                                            {os.order_number}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Tipo de Pago */}
+                            <div>
+                                <Label>Tipo de Pago</Label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    value={formData.transfer_type}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            transfer_type: e.target.value,
+                                        })
+                                    }
+                                    required
+                                >
+                                    <option value="costos">
+                                        Costos Directos
+                                    </option>
+                                    <option value="cargos">
+                                        Cargos a Cliente
+                                    </option>
+                                    <option value="admin">
+                                        Gastos de Operación
+                                    </option>
+                                    <option value="terceros">
+                                        Terceros (Legacy)
+                                    </option>
+                                    <option value="propios">
+                                        Propios (Legacy)
+                                    </option>
+                                </select>
+                            </div>
+
+                            {/* Proveedor */}
+                            <div>
+                                <Label>Proveedor</Label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    value={formData.provider}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            provider: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="">
+                                        Seleccionar proveedor
+                                    </option>
+                                    {providers.map((prov) => (
+                                        <option key={prov.id} value={prov.id}>
+                                            {prov.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Monto */}
                             <div>
                                 <Label>Monto</Label>
                                 <Input
@@ -766,9 +907,34 @@ function Transfers() {
                                     required
                                 />
                             </div>
+
+                            {/* Método de Pago */}
+                            <div>
+                                <Label>Método de Pago</Label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    value={formData.payment_method}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            payment_method: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="transferencia">
+                                        Transferencia
+                                    </option>
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="cheque">Cheque</option>
+                                    <option value="tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+
+                            {/* Estado */}
                             <div>
                                 <Label>Estado</Label>
-                                <Select
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                                     value={formData.status}
                                     onChange={(e) =>
                                         setFormData({
@@ -777,12 +943,68 @@ function Transfers() {
                                         })
                                     }
                                 >
+                                    <option value="pendiente">Pendiente</option>
+                                    <option value="aprobado">Aprobado</option>
+                                    <option value="pagado">Pagado</option>
                                     <option value="provisionada">
-                                        Provisionada
+                                        Provisionada (Legacy)
                                     </option>
-                                    <option value="pagada">Pagada</option>
-                                </Select>
+                                </select>
                             </div>
+
+                            {/* Banco */}
+                            <div>
+                                <Label>Banco</Label>
+                                <select
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    value={formData.bank}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            bank: e.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="">Seleccionar banco</option>
+                                    {banks.map((bank) => (
+                                        <option key={bank.id} value={bank.id}>
+                                            {bank.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Número de Factura */}
+                            <div>
+                                <Label>Número de Factura/CCF</Label>
+                                <Input
+                                    type="text"
+                                    value={formData.supplier_invoice}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            supplier_invoice: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Ej: F-2025-001"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Notas */}
+                        <div>
+                            <Label>Notas Adicionales</Label>
+                            <textarea
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm min-h-[80px]"
+                                value={formData.notes}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        notes: e.target.value,
+                                    })
+                                }
+                                placeholder="Información adicional..."
+                            />
                         </div>
 
                         <DialogFooter>
@@ -799,6 +1021,249 @@ function Transfers() {
                             <Button type="submit">Actualizar</Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal de Detalles */}
+            <Dialog
+                open={!!selectedTransfer && !isEditModalOpen}
+                onOpenChange={(open) => !open && setSelectedTransfer(null)}
+            >
+                <DialogContent size="xl" className="!max-w-4xl w-full">
+                    <DialogHeader>
+                        <DialogTitle>Detalles del Pago</DialogTitle>
+                    </DialogHeader>
+                    {selectedTransfer && (
+                        <div className="space-y-6">
+                            {/* Header con monto y estado */}
+                            <div className="flex items-start justify-between pb-4 border-b border-slate-200">
+                                <div>
+                                    <div className="text-sm text-slate-500 mb-1">
+                                        Monto Total
+                                    </div>
+                                    <div className="text-3xl font-bold text-brand-600 tabular-nums">
+                                        $
+                                        {parseFloat(
+                                            selectedTransfer.amount || 0
+                                        ).toFixed(2)}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <Badge
+                                        variant={
+                                            selectedTransfer.status ===
+                                                "pagado" ||
+                                            selectedTransfer.status === "pagada"
+                                                ? "success"
+                                                : selectedTransfer.status ===
+                                                  "aprobado"
+                                                ? "default"
+                                                : "warning"
+                                        }
+                                        className="mb-2"
+                                    >
+                                        {getStatusLabel(
+                                            selectedTransfer.status
+                                        )}
+                                    </Badge>
+                                    <div className="text-xs text-slate-500">
+                                        {selectedTransfer.transaction_date &&
+                                            new Date(
+                                                selectedTransfer.transaction_date
+                                            ).toLocaleDateString("es-SV", {
+                                                day: "2-digit",
+                                                month: "short",
+                                                year: "numeric",
+                                            })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Información General */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Tipo de Pago
+                                    </div>
+                                    <Badge
+                                        variant={
+                                            selectedTransfer.transfer_type ===
+                                            "costos"
+                                                ? "danger"
+                                                : selectedTransfer.transfer_type ===
+                                                  "cargos"
+                                                ? "success"
+                                                : "default"
+                                        }
+                                    >
+                                        {getTransferTypeLabel(
+                                            selectedTransfer.transfer_type
+                                        )}
+                                    </Badge>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Orden de Servicio
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                        {selectedTransfer.service_order_number ||
+                                            "Sin OS vinculada"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Proveedor y Método */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Proveedor
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                        {selectedTransfer.provider_name ||
+                                            "No especificado"}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Método de Pago
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                        {selectedTransfer.payment_method
+                                            ? {
+                                                  transferencia:
+                                                      "Transferencia Bancaria",
+                                                  efectivo: "Efectivo",
+                                                  cheque: "Cheque",
+                                                  tarjeta: "Tarjeta",
+                                              }[
+                                                  selectedTransfer
+                                                      .payment_method
+                                              ] ||
+                                              selectedTransfer.payment_method
+                                            : "No especificado"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Factura y Banco */}
+                            {(selectedTransfer.invoice_number ||
+                                selectedTransfer.bank) && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    {selectedTransfer.invoice_number && (
+                                        <div>
+                                            <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                                Número de Factura
+                                            </div>
+                                            <div className="text-sm font-mono text-slate-900">
+                                                {
+                                                    selectedTransfer.invoice_number
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+                                    {selectedTransfer.bank && (
+                                        <div>
+                                            <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                                Banco
+                                            </div>
+                                            <div className="text-sm text-slate-900">
+                                                {selectedTransfer.bank.name ||
+                                                    selectedTransfer.bank}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Descripción */}
+                            {selectedTransfer.description && (
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Descripción
+                                    </div>
+                                    <div className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        {selectedTransfer.description}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Notas */}
+                            {selectedTransfer.notes && (
+                                <div>
+                                    <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                        Notas Adicionales
+                                    </div>
+                                    <div className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        {selectedTransfer.notes}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Fechas */}
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                                {selectedTransfer.created_at && (
+                                    <div>
+                                        <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                            Fecha de Registro
+                                        </div>
+                                        <div className="text-sm text-slate-600">
+                                            {new Date(
+                                                selectedTransfer.created_at
+                                            ).toLocaleDateString("es-SV", {
+                                                day: "2-digit",
+                                                month: "long",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {selectedTransfer.payment_date && (
+                                    <div>
+                                        <div className="text-xs font-medium text-slate-500 uppercase mb-1">
+                                            Fecha de Pago
+                                        </div>
+                                        <div className="text-sm text-slate-600">
+                                            {new Date(
+                                                selectedTransfer.payment_date
+                                            ).toLocaleDateString("es-SV", {
+                                                day: "2-digit",
+                                                month: "long",
+                                                year: "numeric",
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Usuario creador */}
+                            {selectedTransfer.created_by_username && (
+                                <div className="text-xs text-slate-500 pt-2 border-t border-slate-200">
+                                    Registrado por:{" "}
+                                    <span className="font-medium text-slate-700">
+                                        {selectedTransfer.created_by_username}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setSelectedTransfer(null)}
+                        >
+                            Cerrar
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                openEditModal(selectedTransfer);
+                                setSelectedTransfer(null);
+                            }}
+                        >
+                            Editar Pago
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
