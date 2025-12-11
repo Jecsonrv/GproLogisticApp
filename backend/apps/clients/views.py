@@ -29,35 +29,42 @@ class ClientViewSet(viewsets.ModelViewSet):
     def account_statement(self, request, pk=None):
         """Estado de cuenta detallado de un cliente"""
         client = self.get_object()
-        
-        # Calculate Credit Used: Sum of 'terceros' transfers for Open Service Orders
+
+        # Get year filter
+        year = request.query_params.get('year', datetime.now().year)
+
+        # Calculate Credit Used: Sum of transfers for Open Service Orders
         pending_orders = ServiceOrder.objects.filter(client=client, status='abierta')
-        
+
+        # Calcular crédito usado - incluir costos y cargos pendientes
         credit_used = Transfer.objects.filter(
-            service_order__in=pending_orders,
-            transfer_type='terceros',
-            status='provisionada'
+            Q(service_order__in=pending_orders) |
+            Q(service_order__client=client, service_order__status='abierta'),
+            transfer_type__in=['terceros', 'cargos', 'costos'],
+            status__in=['pendiente', 'aprobado', 'provisionada']
         ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
-        available_credit = client.credit_limit - credit_used
-        
-        # List of pending invoices (Open Orders with their total cost)
+
+        available_credit = max(0, float(client.credit_limit) - float(credit_used))
+
+        # List of pending orders with their total cost
         pending_invoices_data = []
         for order in pending_orders:
             order_total = order.transfers.filter(
-                transfer_type='terceros',
-                status='provisionada'
+                transfer_type__in=['terceros', 'cargos', 'costos'],
+                status__in=['pendiente', 'aprobado', 'provisionada']
             ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
-            if order_total > 0:
-                pending_invoices_data.append({
-                    'order_number': order.order_number,
-                    'date': order.created_at,
-                    'eta': order.eta,
-                    'amount': float(order_total),
-                    'duca': order.duca,
-                    'po': order.purchase_order
-                })
+
+            pending_invoices_data.append({
+                'order_number': order.order_number,
+                'date': order.created_at,
+                'eta': order.eta,
+                'amount': float(order_total) if order_total else 0,
+                'duca': order.duca or '',
+                'po': order.purchase_order or ''
+            })
+
+        # Ordenar por fecha
+        pending_invoices_data.sort(key=lambda x: x['date'], reverse=True)
 
         data = {
             'client_id': client.id,
@@ -69,9 +76,10 @@ class ClientViewSet(viewsets.ModelViewSet):
             'credit_used': float(credit_used),
             'available_credit': float(available_credit),
             'total_pending_orders': pending_orders.count(),
-            'pending_invoices': pending_invoices_data
+            'pending_invoices': pending_invoices_data,
+            'year': year
         }
-        
+
         return Response(data)
     
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo2])

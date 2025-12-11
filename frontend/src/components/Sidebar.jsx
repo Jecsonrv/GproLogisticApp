@@ -35,9 +35,9 @@ const menuSections = [
                 icon: ClipboardList,
             },
             {
-                name: "Transferencias",
-                path: "/transfers",
-                icon: ArrowRightLeft,
+                name: "Pagos a Proveedores",
+                path: "/provider-payments",
+                icon: Banknote,
             },
         ],
     },
