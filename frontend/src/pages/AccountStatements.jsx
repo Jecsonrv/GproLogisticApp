@@ -8,7 +8,6 @@ import {
     TrendingDown,
     CreditCard,
     FileText,
-    Plus,
     Eye,
     Receipt,
     Clock,
@@ -17,15 +16,10 @@ import {
     XCircle,
     RefreshCw,
     Building2,
-    Calendar,
     Banknote,
-    ArrowDownCircle,
-    ArrowUpCircle,
     User,
-    ChevronRight,
-    Printer,
-    Mail,
     Phone,
+    Mail,
 } from "lucide-react";
 import {
     Button,
@@ -42,7 +36,6 @@ import {
     SkeletonTable,
     Modal,
     ModalFooter,
-    EmptyState,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -94,7 +87,7 @@ const StatusBadge = ({ status }) => {
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border",
+                "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full border",
                 config.bgColor,
                 config.textColor,
                 config.borderColor
@@ -109,7 +102,7 @@ const StatusBadge = ({ status }) => {
 // ============================================
 // KPI CARD COMPONENT
 // ============================================
-const KPICard = ({ label, value, subtext, icon: Icon, variant = "default", onClick }) => {
+const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => {
     const variants = {
         default: "text-slate-900",
         primary: "text-blue-600",
@@ -118,36 +111,22 @@ const KPICard = ({ label, value, subtext, icon: Icon, variant = "default", onCli
         danger: "text-red-600",
     };
 
-    const iconBg = {
-        default: "bg-slate-100",
-        primary: "bg-blue-100",
-        success: "bg-emerald-100",
-        warning: "bg-amber-100",
-        danger: "bg-red-100",
-    };
-
     return (
-        <Card
-            className={cn(
-                "hover:shadow-md transition-all",
-                onClick && "cursor-pointer hover:border-blue-300"
-            )}
-            onClick={onClick}
-        >
-            <CardContent className="p-5">
+        <Card>
+            <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                    <div className="space-y-1">
+                    <div>
                         <p className="text-sm font-medium text-gray-500">{label}</p>
-                        <p className={cn("text-2xl font-bold tabular-nums", variants[variant])}>
+                        <p className={cn("text-2xl font-bold mt-1 tabular-nums", variants[variant])}>
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400">{subtext}</p>
+                            <p className="text-xs text-gray-400 mt-1">{subtext}</p>
                         )}
                     </div>
                     {Icon && (
-                        <div className={cn("p-3 rounded-xl", iconBg[variant])}>
-                            <Icon className={cn("w-5 h-5", variants[variant])} />
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <Icon className="w-5 h-5 text-gray-400" />
                         </div>
                     )}
                 </div>
@@ -157,7 +136,7 @@ const KPICard = ({ label, value, subtext, icon: Icon, variant = "default", onCli
 };
 
 // ============================================
-// CLIENT CARD COMPONENT
+// CLIENT CARD COMPONENT (Sidebar)
 // ============================================
 const ClientCard = ({ client, isSelected, onClick }) => {
     const hasOverdue = client.overdue_amount > 0;
@@ -169,40 +148,37 @@ const ClientCard = ({ client, isSelected, onClick }) => {
         <div
             onClick={onClick}
             className={cn(
-                "p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md",
+                "p-3 rounded-lg border cursor-pointer transition-all",
                 isSelected
-                    ? "border-blue-500 bg-blue-50/50 shadow-md"
-                    : "border-gray-200 hover:border-gray-300 bg-white"
+                    ? "border-blue-500 bg-blue-50 shadow-sm"
+                    : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50"
             )}
         >
-            <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
+            <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
                     <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm",
+                        "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
                         isSelected ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-600"
                     )}>
                         {client.name?.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <h3 className="font-semibold text-slate-900 text-sm leading-tight">
+                        <h3 className="font-medium text-slate-900 text-sm leading-tight">
                             {client.name}
                         </h3>
                         <p className="text-xs text-slate-500">{client.nit}</p>
                     </div>
                 </div>
                 {hasOverdue && (
-                    <Badge variant="danger" className="text-xs">
-                        <AlertCircle className="w-3 h-3 mr-1" />
-                        Vencido
-                    </Badge>
+                    <AlertCircle className="w-4 h-4 text-red-500" />
                 )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
                 <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Saldo Pendiente</span>
+                    <span className="text-slate-500">Saldo</span>
                     <span className={cn(
-                        "font-semibold",
+                        "font-medium",
                         client.total_pending > 0 ? "text-amber-600" : "text-emerald-600"
                     )}>
                         {formatCurrency(client.total_pending || 0)}
@@ -211,13 +187,7 @@ const ClientCard = ({ client, isSelected, onClick }) => {
 
                 {client.credit_limit > 0 && (
                     <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">Crédito Utilizado</span>
-                            <span className="text-slate-600">
-                                {utilizationPercent.toFixed(0)}%
-                            </span>
-                        </div>
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                             <div
                                 className={cn(
                                     "h-full rounded-full transition-all",
@@ -230,12 +200,33 @@ const ClientCard = ({ client, isSelected, onClick }) => {
                                 style={{ width: `${utilizationPercent}%` }}
                             />
                         </div>
+                        <div className="text-[10px] text-slate-400 text-right">
+                            {utilizationPercent.toFixed(0)}% utilizado
+                        </div>
                     </div>
                 )}
             </div>
         </div>
     );
 };
+
+// ============================================
+// YEAR OPTIONS
+// ============================================
+const YEAR_OPTIONS = [
+    { id: 2025, name: "2025" },
+    { id: 2024, name: "2024" },
+    { id: 2023, name: "2023" },
+    { id: 2022, name: "2022" },
+];
+
+const STATUS_OPTIONS = [
+    { id: "", name: "Todos los estados" },
+    { id: "pending", name: "Pendientes" },
+    { id: "partial", name: "Pago Parcial" },
+    { id: "paid", name: "Pagadas" },
+    { id: "overdue", name: "Vencidas" },
+];
 
 // ============================================
 // MAIN COMPONENT
@@ -253,10 +244,9 @@ function AccountStatements() {
     const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [clientSearchQuery, setClientSearchQuery] = useState("");
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedYear, setSelectedYear] = useState(2025);
     const [statusFilter, setStatusFilter] = useState("");
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -267,16 +257,6 @@ function AccountStatements() {
         payment_date: new Date().toISOString().split('T')[0],
         payment_method: "transferencia",
         reference: "",
-        notes: "",
-    });
-
-    // Invoice form (para control)
-    const [invoiceForm, setInvoiceForm] = useState({
-        invoice_number: "",
-        invoice_type: "CCF",
-        issue_date: new Date().toISOString().split('T')[0],
-        due_date: "",
-        total_amount: "",
         notes: "",
     });
 
@@ -304,7 +284,7 @@ function AccountStatements() {
                             ...client,
                             credit_used: stmtRes.data.credit_used || 0,
                             total_pending: stmtRes.data.credit_used || 0,
-                            overdue_amount: 0, // Se calculará después si es necesario
+                            overdue_amount: 0,
                         };
                     } catch {
                         return {
@@ -623,11 +603,6 @@ function AccountStatements() {
             ),
         },
         {
-            header: "PO",
-            accessor: "po",
-            cell: (row) => row.po || "—",
-        },
-        {
             header: "Monto",
             accessor: "amount",
             cell: (row) => (
@@ -641,12 +616,12 @@ function AccountStatements() {
     // Loading
     if (loading) {
         return (
-            <div className="space-y-6 p-6">
+            <div className="space-y-6">
                 <Skeleton className="h-10 w-64" />
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                     <div className="space-y-4">
                         {[1, 2, 3, 4].map((i) => (
-                            <Skeleton key={i} className="h-28" />
+                            <Skeleton key={i} className="h-24" />
                         ))}
                     </div>
                     <div className="lg:col-span-3">
@@ -658,273 +633,276 @@ function AccountStatements() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="space-y-6">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            Estados de Cuenta
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Gestión de cuentas por cobrar y facturación por cliente
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Select
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                            className="w-32"
-                        >
-                            {[2025, 2024, 2023, 2022].map(year => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </Select>
-                        <Button
-                            variant="outline"
-                            onClick={handleExportExcel}
-                            disabled={isExporting || !selectedClient}
-                        >
-                            <Download className={cn("w-4 h-4 mr-2", isExporting && "animate-bounce")} />
-                            Exportar
-                        </Button>
-                    </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        Estados de Cuenta
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Gestión de cuentas por cobrar y facturación por cliente
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Select
+                        value={selectedYear}
+                        onChange={(val) => setSelectedYear(val)}
+                        options={YEAR_OPTIONS}
+                        getOptionLabel={(opt) => opt.name}
+                        getOptionValue={(opt) => opt.id}
+                    />
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            fetchClients();
+                            if (selectedClient) {
+                                fetchStatement(selectedClient.id);
+                                fetchInvoices(selectedClient.id);
+                            }
+                        }}
+                        disabled={loading}
+                    >
+                        <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+                        Actualizar
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={handleExportExcel}
+                        disabled={isExporting || !selectedClient}
+                    >
+                        <Download className={cn("w-4 h-4 mr-2", isExporting && "animate-bounce")} />
+                        Exportar
+                    </Button>
                 </div>
             </div>
 
-            <div className="p-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* Sidebar de Clientes */}
-                    <div className="lg:col-span-3 space-y-4">
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                    <User className="w-4 h-4" />
-                                    Clientes
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="pt-0 space-y-3">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                    <Input
-                                        placeholder="Buscar cliente..."
-                                        value={clientSearchQuery}
-                                        onChange={(e) => setClientSearchQuery(e.target.value)}
-                                        className="pl-9 text-sm"
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Sidebar de Clientes */}
+                <div className="lg:col-span-3">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <User className="w-4 h-4" />
+                                Clientes
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <Input
+                                    placeholder="Buscar cliente..."
+                                    value={clientSearchQuery}
+                                    onChange={(e) => setClientSearchQuery(e.target.value)}
+                                    className="pl-9 text-sm"
+                                />
+                            </div>
+                            <div className="space-y-2 max-h-[calc(100vh-350px)] overflow-y-auto pr-1">
+                                {filteredClients.map((client) => (
+                                    <ClientCard
+                                        key={client.id}
+                                        client={client}
+                                        isSelected={selectedClient?.id === client.id}
+                                        onClick={() => setSelectedClient(client)}
                                     />
-                                </div>
-                                <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto pr-1">
-                                    {filteredClients.map((client) => (
-                                        <ClientCard
-                                            key={client.id}
-                                            client={client}
-                                            isSelected={selectedClient?.id === client.id}
-                                            onClick={() => setSelectedClient(client)}
-                                        />
-                                    ))}
-                                    {filteredClients.length === 0 && (
-                                        <div className="text-center py-8 text-gray-500 text-sm">
-                                            No se encontraron clientes
-                                        </div>
-                                    )}
+                                ))}
+                                {filteredClients.length === 0 && (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        No se encontraron clientes
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Contenido Principal */}
+                <div className="lg:col-span-9 space-y-6">
+                    {!selectedClient ? (
+                        <Card>
+                            <CardContent className="py-16">
+                                <div className="text-center">
+                                    <Building2 className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                        Selecciona un Cliente
+                                    </h3>
+                                    <p className="text-gray-500 max-w-md mx-auto">
+                                        Selecciona un cliente de la lista para ver su estado de cuenta,
+                                        historial de facturas y registrar pagos.
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>
-                    </div>
-
-                    {/* Contenido Principal */}
-                    <div className="lg:col-span-9 space-y-6">
-                        {!selectedClient ? (
+                    ) : (
+                        <>
+                            {/* Client Header Card */}
                             <Card>
-                                <CardContent className="py-16">
-                                    <div className="text-center">
-                                        <Building2 className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                            Selecciona un Cliente
-                                        </h3>
-                                        <p className="text-gray-500 max-w-md mx-auto">
-                                            Selecciona un cliente de la lista para ver su estado de cuenta,
-                                            historial de facturas y registrar pagos.
-                                        </p>
+                                <CardContent className="p-6">
+                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xl text-slate-600">
+                                                {selectedClient.name?.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <h2 className="text-xl font-bold text-gray-900">
+                                                    {selectedClient.name}
+                                                </h2>
+                                                <div className="flex items-center gap-4 mt-1 text-gray-500 text-sm">
+                                                    <span>NIT: {selectedClient.nit}</span>
+                                                    {selectedClient.payment_condition && (
+                                                        <Badge variant="outline">
+                                                            {selectedClient.payment_condition === 'credito' ? 'Crédito' : 'Contado'}
+                                                        </Badge>
+                                                    )}
+                                                    {selectedClient.credit_days > 0 && (
+                                                        <span>{selectedClient.credit_days} días</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {selectedClient.phone && (
+                                                <Button variant="outline" size="sm">
+                                                    <Phone className="w-4 h-4 mr-2" />
+                                                    {selectedClient.phone}
+                                                </Button>
+                                            )}
+                                            {selectedClient.email && (
+                                                <Button variant="outline" size="sm">
+                                                    <Mail className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>
-                        ) : (
-                            <>
-                                {/* Client Header */}
-                                <Card className="bg-gradient-to-r from-slate-900 to-slate-800 text-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center font-bold text-2xl">
-                                                    {selectedClient.name?.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <h2 className="text-xl font-bold">
-                                                        {selectedClient.name}
-                                                    </h2>
-                                                    <div className="flex items-center gap-4 mt-1 text-slate-300 text-sm">
-                                                        <span>NIT: {selectedClient.nit}</span>
-                                                        {selectedClient.payment_condition && (
-                                                            <Badge variant="outline" className="border-white/30 text-white">
-                                                                {selectedClient.payment_condition === 'credito' ? 'Crédito' : 'Contado'}
-                                                            </Badge>
-                                                        )}
-                                                        {selectedClient.credit_days > 0 && (
-                                                            <span>{selectedClient.credit_days} días</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {selectedClient.phone && (
-                                                    <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10">
-                                                        <Phone className="w-4 h-4 mr-2" />
-                                                        {selectedClient.phone}
-                                                    </Button>
-                                                )}
-                                                {selectedClient.email && (
-                                                    <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10">
-                                                        <Mail className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
 
-                                {/* KPIs */}
-                                {clientKPIs && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                        <KPICard
-                                            label="Límite de Crédito"
-                                            value={formatCurrency(clientKPIs.creditLimit)}
-                                            icon={CreditCard}
-                                            variant="primary"
-                                        />
-                                        <KPICard
-                                            label="Crédito Utilizado"
-                                            value={formatCurrency(clientKPIs.creditUsed)}
-                                            icon={TrendingUp}
-                                            variant="warning"
-                                        />
-                                        <KPICard
-                                            label="Crédito Disponible"
-                                            value={formatCurrency(clientKPIs.creditAvailable)}
-                                            icon={TrendingDown}
-                                            variant={clientKPIs.creditAvailable > 0 ? "success" : "danger"}
-                                        />
-                                        <KPICard
-                                            label="OS Pendientes"
-                                            value={clientKPIs.pendingOrders}
-                                            subtext="En proceso"
-                                            icon={FileText}
-                                            variant="default"
-                                        />
-                                    </div>
-                                )}
+                            {/* KPIs */}
+                            {clientKPIs && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <KPICard
+                                        label="Límite de Crédito"
+                                        value={formatCurrency(clientKPIs.creditLimit)}
+                                        icon={CreditCard}
+                                        variant="primary"
+                                    />
+                                    <KPICard
+                                        label="Crédito Utilizado"
+                                        value={formatCurrency(clientKPIs.creditUsed)}
+                                        icon={TrendingUp}
+                                        variant="warning"
+                                    />
+                                    <KPICard
+                                        label="Crédito Disponible"
+                                        value={formatCurrency(clientKPIs.creditAvailable)}
+                                        icon={TrendingDown}
+                                        variant={clientKPIs.creditAvailable > 0 ? "success" : "danger"}
+                                    />
+                                    <KPICard
+                                        label="OS Pendientes"
+                                        value={clientKPIs.pendingOrders}
+                                        subtext="En proceso"
+                                        icon={FileText}
+                                        variant="default"
+                                    />
+                                </div>
+                            )}
 
-                                {/* Órdenes Pendientes */}
-                                {statement?.pending_invoices?.length > 0 && (
-                                    <Card>
-                                        <CardHeader>
-                                            <div className="flex items-center justify-between">
-                                                <CardTitle className="text-base flex items-center gap-2">
-                                                    <Clock className="w-5 h-5 text-amber-500" />
-                                                    Órdenes de Servicio Pendientes
-                                                </CardTitle>
-                                                <Badge variant="warning">
-                                                    {statement.pending_invoices.length} orden(es)
-                                                </Badge>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-0">
-                                            <DataTable
-                                                data={statement.pending_invoices}
-                                                columns={pendingOrdersColumns}
-                                                compact
-                                            />
-                                        </CardContent>
-                                    </Card>
-                                )}
-
-                                {/* Facturas / CXC */}
+                            {/* Órdenes Pendientes */}
+                            {statement?.pending_invoices?.length > 0 && (
                                 <Card>
                                     <CardHeader>
-                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                        <div className="flex items-center justify-between">
                                             <CardTitle className="text-base flex items-center gap-2">
-                                                <Receipt className="w-5 h-5 text-blue-500" />
-                                                Cuentas por Cobrar (Facturas)
+                                                <Clock className="w-5 h-5 text-amber-500" />
+                                                Órdenes de Servicio Pendientes
                                             </CardTitle>
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative flex-1 min-w-[200px]">
-                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                                    <Input
-                                                        placeholder="Buscar factura..."
-                                                        value={searchQuery}
-                                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                                        className="pl-9 text-sm"
-                                                    />
-                                                </div>
-                                                <Select
-                                                    value={statusFilter}
-                                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                                    className="w-40"
-                                                >
-                                                    <option value="">Todos los estados</option>
-                                                    <option value="pending">Pendientes</option>
-                                                    <option value="partial">Pago Parcial</option>
-                                                    <option value="paid">Pagadas</option>
-                                                    <option value="overdue">Vencidas</option>
-                                                </Select>
-                                            </div>
+                                            <Badge variant="warning">
+                                                {statement.pending_invoices.length} orden(es)
+                                            </Badge>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="p-0">
-                                        {filteredInvoices.length > 0 ? (
-                                            <DataTable
-                                                data={filteredInvoices}
-                                                columns={invoiceColumns}
-                                            />
-                                        ) : (
-                                            <div className="text-center py-12 text-gray-500">
-                                                <Receipt className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                                                <p>No hay facturas registradas para este cliente</p>
-                                            </div>
-                                        )}
+                                        <DataTable
+                                            data={statement.pending_invoices}
+                                            columns={pendingOrdersColumns}
+                                            compact
+                                        />
                                     </CardContent>
                                 </Card>
+                            )}
 
-                                {/* Resumen de Pagos */}
-                                {invoices.length > 0 && (
-                                    <Card>
-                                        <CardContent className="p-4">
-                                            <div className="grid grid-cols-3 gap-4 text-center">
-                                                <div className="p-3 bg-slate-50 rounded-lg">
-                                                    <div className="text-xs text-slate-500 mb-1">Total Facturado</div>
-                                                    <div className="text-lg font-bold text-slate-900">
-                                                        {formatCurrency(clientKPIs?.totalInvoiced || 0)}
-                                                    </div>
-                                                </div>
-                                                <div className="p-3 bg-emerald-50 rounded-lg">
-                                                    <div className="text-xs text-emerald-600 mb-1">Total Cobrado</div>
-                                                    <div className="text-lg font-bold text-emerald-600">
-                                                        {formatCurrency(clientKPIs?.totalPaid || 0)}
-                                                    </div>
-                                                </div>
-                                                <div className="p-3 bg-amber-50 rounded-lg">
-                                                    <div className="text-xs text-amber-600 mb-1">Por Cobrar</div>
-                                                    <div className="text-lg font-bold text-amber-600">
-                                                        {formatCurrency(clientKPIs?.totalPending || 0)}
-                                                    </div>
+                            {/* Facturas / CXC */}
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Receipt className="w-5 h-5 text-blue-500" />
+                                        Cuentas por Cobrar (Facturas)
+                                    </CardTitle>
+                                    <div className="flex items-center gap-2">
+                                        <div className="relative w-48">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                            <Input
+                                                placeholder="Buscar factura..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="pl-9 text-sm"
+                                            />
+                                        </div>
+                                        <Select
+                                            value={statusFilter}
+                                            onChange={(val) => setStatusFilter(val)}
+                                            options={STATUS_OPTIONS}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                        />
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-0">
+                                    {filteredInvoices.length > 0 ? (
+                                        <DataTable
+                                            data={filteredInvoices}
+                                            columns={invoiceColumns}
+                                        />
+                                    ) : (
+                                        <div className="text-center py-12 text-gray-500">
+                                            <Receipt className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                                            <p>No hay facturas registradas para este cliente</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            {/* Resumen de Pagos */}
+                            {invoices.length > 0 && clientKPIs && (
+                                <Card>
+                                    <CardContent className="p-4">
+                                        <div className="grid grid-cols-3 gap-4 text-center">
+                                            <div className="p-3 bg-slate-50 rounded-lg">
+                                                <div className="text-xs text-slate-500 mb-1">Total Facturado</div>
+                                                <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                                    {formatCurrency(clientKPIs.totalInvoiced)}
                                                 </div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </>
-                        )}
-                    </div>
+                                            <div className="p-3 bg-emerald-50 rounded-lg">
+                                                <div className="text-xs text-emerald-600 mb-1">Total Cobrado</div>
+                                                <div className="text-lg font-bold text-emerald-600 tabular-nums">
+                                                    {formatCurrency(clientKPIs.totalPaid)}
+                                                </div>
+                                            </div>
+                                            <div className="p-3 bg-amber-50 rounded-lg">
+                                                <div className="text-xs text-amber-600 mb-1">Por Cobrar</div>
+                                                <div className="text-lg font-bold text-amber-600 tabular-nums">
+                                                    {formatCurrency(clientKPIs.totalPending)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -950,7 +928,7 @@ function AccountStatements() {
                                 </div>
                                 <div className="text-right">
                                     <div className="text-sm text-slate-500">Saldo Pendiente</div>
-                                    <div className="font-bold text-lg text-amber-600">
+                                    <div className="font-bold text-lg text-amber-600 tabular-nums">
                                         {formatCurrency(selectedInvoice.balance)}
                                     </div>
                                 </div>
@@ -988,13 +966,16 @@ function AccountStatements() {
                             <Label>Método de Pago</Label>
                             <Select
                                 value={paymentForm.payment_method}
-                                onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
-                            >
-                                <option value="transferencia">Transferencia</option>
-                                <option value="efectivo">Efectivo</option>
-                                <option value="cheque">Cheque</option>
-                                <option value="tarjeta">Tarjeta</option>
-                            </Select>
+                                onChange={(val) => setPaymentForm({ ...paymentForm, payment_method: val })}
+                                options={[
+                                    { id: "transferencia", name: "Transferencia" },
+                                    { id: "efectivo", name: "Efectivo" },
+                                    { id: "cheque", name: "Cheque" },
+                                    { id: "tarjeta", name: "Tarjeta" },
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
                         </div>
                         <div>
                             <Label>Referencia / No. Documento</Label>
@@ -1047,7 +1028,7 @@ function AccountStatements() {
                 {selectedInvoice && (
                     <div className="space-y-6">
                         {/* Header */}
-                        <div className="flex items-start justify-between p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border">
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                             <div>
                                 <div className="text-sm text-slate-500">Factura</div>
                                 <div className="text-2xl font-bold font-mono text-slate-900">
@@ -1060,7 +1041,7 @@ function AccountStatements() {
                             </div>
                             <div className="text-right">
                                 <div className="text-sm text-slate-500">Total</div>
-                                <div className="text-2xl font-bold text-slate-900">
+                                <div className="text-2xl font-bold text-slate-900 tabular-nums">
                                     {formatCurrency(selectedInvoice.total_amount)}
                                 </div>
                             </div>
@@ -1101,7 +1082,7 @@ function AccountStatements() {
                                     <div className="text-xs font-semibold text-emerald-600 uppercase mb-1">
                                         Monto Pagado
                                     </div>
-                                    <div className="text-xl font-bold text-emerald-600">
+                                    <div className="text-xl font-bold text-emerald-600 tabular-nums">
                                         {formatCurrency(selectedInvoice.paid_amount || 0)}
                                     </div>
                                 </div>
@@ -1109,7 +1090,7 @@ function AccountStatements() {
                                     <div className="text-xs font-semibold text-amber-600 uppercase mb-1">
                                         Saldo Pendiente
                                     </div>
-                                    <div className="text-xl font-bold text-amber-600">
+                                    <div className="text-xl font-bold text-amber-600 tabular-nums">
                                         {formatCurrency(selectedInvoice.balance || 0)}
                                     </div>
                                 </div>
@@ -1131,7 +1112,7 @@ function AccountStatements() {
                                             <div className="flex items-center gap-3">
                                                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                                                 <div>
-                                                    <div className="text-sm font-medium">
+                                                    <div className="text-sm font-medium tabular-nums">
                                                         {formatCurrency(payment.amount)}
                                                     </div>
                                                     <div className="text-xs text-slate-500">

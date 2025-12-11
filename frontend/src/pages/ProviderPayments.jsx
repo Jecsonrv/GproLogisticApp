@@ -128,6 +128,60 @@ const PAYMENT_METHODS = {
 };
 
 // ============================================
+// SELECT OPTIONS
+// ============================================
+const TRANSFER_TYPE_OPTIONS = [
+    { id: "", name: "Todos" },
+    { id: "costos", name: "Costos Directos" },
+    { id: "cargos", name: "Cargos a Cliente" },
+    { id: "admin", name: "Gastos Operación" },
+    { id: "terceros", name: "Terceros" },
+    { id: "propios", name: "Propios" },
+];
+
+const STATUS_OPTIONS = [
+    { id: "", name: "Todos" },
+    { id: "pendiente", name: "Pendiente" },
+    { id: "aprobado", name: "Aprobado" },
+    { id: "pagado", name: "Pagado" },
+    { id: "provisionada", name: "Provisionada" },
+];
+
+const PAYMENT_METHOD_OPTIONS = [
+    { id: "transferencia", name: "Transferencia" },
+    { id: "efectivo", name: "Efectivo" },
+    { id: "cheque", name: "Cheque" },
+    { id: "tarjeta", name: "Tarjeta" },
+];
+
+const CREATE_TYPE_OPTIONS = [
+    { id: "costos", name: "Costos Directos" },
+    { id: "cargos", name: "Cargos a Cliente" },
+    { id: "admin", name: "Gastos de Operación" },
+];
+
+const EDIT_TYPE_OPTIONS = [
+    { id: "costos", name: "Costos Directos" },
+    { id: "cargos", name: "Cargos a Cliente" },
+    { id: "admin", name: "Gastos de Operación" },
+    { id: "terceros", name: "Terceros (Legacy)" },
+    { id: "propios", name: "Propios (Legacy)" },
+];
+
+const CREATE_STATUS_OPTIONS = [
+    { id: "pendiente", name: "Pendiente" },
+    { id: "aprobado", name: "Aprobado" },
+    { id: "pagado", name: "Pagado" },
+];
+
+const EDIT_STATUS_OPTIONS = [
+    { id: "pendiente", name: "Pendiente" },
+    { id: "aprobado", name: "Aprobado" },
+    { id: "pagado", name: "Pagado" },
+    { id: "provisionada", name: "Provisionada (Legacy)" },
+];
+
+// ============================================
 // STATUS & TYPE BADGES
 // ============================================
 const StatusBadge = ({ status }) => {
@@ -135,7 +189,7 @@ const StatusBadge = ({ status }) => {
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border",
+                "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full border",
                 config.bgColor,
                 config.textColor,
                 config.borderColor
@@ -166,7 +220,7 @@ const TypeBadge = ({ type }) => {
 // ============================================
 // KPI CARD
 // ============================================
-const KPICard = ({ label, value, subtext, icon: Icon, variant = "default", trend }) => {
+const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => {
     const variants = {
         default: "text-slate-900",
         primary: "text-blue-600",
@@ -176,31 +230,22 @@ const KPICard = ({ label, value, subtext, icon: Icon, variant = "default", trend
         purple: "text-purple-600",
     };
 
-    const iconBg = {
-        default: "bg-slate-100",
-        primary: "bg-blue-100",
-        success: "bg-emerald-100",
-        warning: "bg-amber-100",
-        danger: "bg-red-100",
-        purple: "bg-purple-100",
-    };
-
     return (
-        <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="p-5">
+        <Card>
+            <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                    <div className="space-y-1">
+                    <div>
                         <p className="text-sm font-medium text-gray-500">{label}</p>
-                        <p className={cn("text-2xl font-bold tabular-nums", variants[variant])}>
+                        <p className={cn("text-2xl font-bold mt-1 tabular-nums", variants[variant])}>
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400">{subtext}</p>
+                            <p className="text-xs text-gray-400 mt-1">{subtext}</p>
                         )}
                     </div>
                     {Icon && (
-                        <div className={cn("p-3 rounded-xl", iconBg[variant])}>
-                            <Icon className={cn("w-5 h-5", variants[variant])} />
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <Icon className="w-5 h-5 text-gray-400" />
                         </div>
                     )}
                 </div>
@@ -260,6 +305,30 @@ function ProviderPayments() {
         invoice_file: null,
     };
     const [formData, setFormData] = useState(initialFormData);
+
+    // Derived options for Select components
+    const serviceOrderOptions = useMemo(() => [
+        { id: "", name: "Sin OS (Gasto Administrativo)" },
+        ...serviceOrders.map(os => ({
+            id: String(os.id),
+            name: `${os.order_number} - ${os.client_name}`
+        }))
+    ], [serviceOrders]);
+
+    const providerOptions = useMemo(() => [
+        { id: "", name: "Seleccionar proveedor" },
+        ...providers.map(p => ({ id: String(p.id), name: p.name }))
+    ], [providers]);
+
+    const bankOptions = useMemo(() => [
+        { id: "", name: "Seleccionar banco" },
+        ...banks.map(b => ({ id: String(b.id), name: b.name }))
+    ], [banks]);
+
+    const filterProviderOptions = useMemo(() => [
+        { id: "", name: "Todos" },
+        ...providers.map(p => ({ id: String(p.id), name: p.name }))
+    ], [providers]);
 
     useEffect(() => {
         fetchPayments();
@@ -647,7 +716,7 @@ function ProviderPayments() {
     // Loading state
     if (loading && payments.length === 0) {
         return (
-            <div className="space-y-6 p-6">
+            <div className="space-y-6">
                 <Skeleton className="h-10 w-64" />
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -660,7 +729,7 @@ function ProviderPayments() {
     }
 
     return (
-        <div className="space-y-6 p-6">
+        <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -784,40 +853,32 @@ function ProviderPayments() {
                                 <Label className="text-xs">Tipo de Gasto</Label>
                                 <Select
                                     value={filters.transfer_type}
-                                    onChange={(e) => setFilters({ ...filters, transfer_type: e.target.value })}
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="costos">Costos Directos</option>
-                                    <option value="cargos">Cargos a Cliente</option>
-                                    <option value="admin">Gastos Operación</option>
-                                    <option value="terceros">Terceros</option>
-                                    <option value="propios">Propios</option>
-                                </Select>
+                                    onChange={(val) => setFilters({ ...filters, transfer_type: val })}
+                                    options={TRANSFER_TYPE_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label className="text-xs">Estado</Label>
                                 <Select
                                     value={filters.status}
-                                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="aprobado">Aprobado</option>
-                                    <option value="pagado">Pagado</option>
-                                    <option value="provisionada">Provisionada</option>
-                                </Select>
+                                    onChange={(val) => setFilters({ ...filters, status: val })}
+                                    options={STATUS_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label className="text-xs">Proveedor</Label>
                                 <Select
                                     value={filters.provider}
-                                    onChange={(e) => setFilters({ ...filters, provider: e.target.value })}
-                                >
-                                    <option value="">Todos</option>
-                                    {providers.map((p) => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFilters({ ...filters, provider: val })}
+                                    options={filterProviderOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label className="text-xs">Desde</Label>
@@ -884,15 +945,12 @@ function ProviderPayments() {
                                 <Label>Orden de Servicio</Label>
                                 <Select
                                     value={formData.service_order}
-                                    onChange={(e) => setFormData({ ...formData, service_order: e.target.value })}
-                                >
-                                    <option value="">Sin OS (Gasto Administrativo)</option>
-                                    {serviceOrders.map((os) => (
-                                        <option key={os.id} value={os.id}>
-                                            {os.order_number} - {os.client_name}
-                                        </option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                    options={serviceOrderOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                                 <p className="text-xs text-gray-500 mt-1">
                                     Deja vacío para gastos de operación
                                 </p>
@@ -901,13 +959,11 @@ function ProviderPayments() {
                                 <Label>Tipo de Gasto *</Label>
                                 <Select
                                     value={formData.transfer_type}
-                                    onChange={(e) => setFormData({ ...formData, transfer_type: e.target.value })}
-                                    required
-                                >
-                                    <option value="costos">Costos Directos</option>
-                                    <option value="cargos">Cargos a Cliente</option>
-                                    <option value="admin">Gastos de Operación</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                    options={CREATE_TYPE_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                         </div>
                     </div>
@@ -925,13 +981,12 @@ function ProviderPayments() {
                                 <Label>Proveedor</Label>
                                 <Select
                                     value={formData.provider}
-                                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                                >
-                                    <option value="">Seleccionar proveedor</option>
-                                    {providers.map((p) => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, provider: val })}
+                                    options={providerOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label>Beneficiario (si es diferente)</Label>
@@ -986,36 +1041,32 @@ function ProviderPayments() {
                                 <Label>Método de Pago</Label>
                                 <Select
                                     value={formData.payment_method}
-                                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                                >
-                                    <option value="transferencia">Transferencia</option>
-                                    <option value="efectivo">Efectivo</option>
-                                    <option value="cheque">Cheque</option>
-                                    <option value="tarjeta">Tarjeta</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, payment_method: val })}
+                                    options={PAYMENT_METHOD_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label>Banco</Label>
                                 <Select
                                     value={formData.bank}
-                                    onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
-                                >
-                                    <option value="">Seleccionar banco</option>
-                                    {banks.map((b) => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, bank: val })}
+                                    options={bankOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label>Estado</Label>
                                 <Select
                                     value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                >
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="aprobado">Aprobado</option>
-                                    <option value="pagado">Pagado</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, status: val })}
+                                    options={CREATE_STATUS_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label>No. Factura</Label>
@@ -1096,29 +1147,22 @@ function ProviderPayments() {
                                 <Label>Orden de Servicio</Label>
                                 <Select
                                     value={formData.service_order}
-                                    onChange={(e) => setFormData({ ...formData, service_order: e.target.value })}
-                                >
-                                    <option value="">Sin OS (Gasto Administrativo)</option>
-                                    {serviceOrders.map((os) => (
-                                        <option key={os.id} value={os.id}>
-                                            {os.order_number} - {os.client_name}
-                                        </option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                    options={serviceOrderOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label>Tipo de Gasto *</Label>
                                 <Select
                                     value={formData.transfer_type}
-                                    onChange={(e) => setFormData({ ...formData, transfer_type: e.target.value })}
-                                    required
-                                >
-                                    <option value="costos">Costos Directos</option>
-                                    <option value="cargos">Cargos a Cliente</option>
-                                    <option value="admin">Gastos de Operación</option>
-                                    <option value="terceros">Terceros (Legacy)</option>
-                                    <option value="propios">Propios (Legacy)</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                    options={EDIT_TYPE_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                         </div>
                     </div>
@@ -1136,13 +1180,12 @@ function ProviderPayments() {
                                 <Label>Proveedor</Label>
                                 <Select
                                     value={formData.provider}
-                                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                                >
-                                    <option value="">Seleccionar proveedor</option>
-                                    {providers.map((p) => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, provider: val })}
+                                    options={providerOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label>Beneficiario</Label>
@@ -1197,37 +1240,32 @@ function ProviderPayments() {
                                 <Label>Método de Pago</Label>
                                 <Select
                                     value={formData.payment_method}
-                                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                                >
-                                    <option value="transferencia">Transferencia</option>
-                                    <option value="efectivo">Efectivo</option>
-                                    <option value="cheque">Cheque</option>
-                                    <option value="tarjeta">Tarjeta</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, payment_method: val })}
+                                    options={PAYMENT_METHOD_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label>Banco</Label>
                                 <Select
                                     value={formData.bank}
-                                    onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
-                                >
-                                    <option value="">Seleccionar banco</option>
-                                    {banks.map((b) => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                    ))}
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, bank: val })}
+                                    options={bankOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                />
                             </div>
                             <div>
                                 <Label>Estado</Label>
                                 <Select
                                     value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                >
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="aprobado">Aprobado</option>
-                                    <option value="pagado">Pagado</option>
-                                    <option value="provisionada">Provisionada (Legacy)</option>
-                                </Select>
+                                    onChange={(val) => setFormData({ ...formData, status: val })}
+                                    options={EDIT_STATUS_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                             </div>
                             <div>
                                 <Label>No. Factura</Label>
@@ -1299,7 +1337,7 @@ function ProviderPayments() {
                 {selectedPayment && (
                     <div className="space-y-6">
                         {/* Header con monto y estado */}
-                        <div className="flex items-start justify-between p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                             <div>
                                 <div className="text-sm text-slate-500 mb-1">
                                     Monto Total
