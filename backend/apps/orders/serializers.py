@@ -81,21 +81,36 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     """Serializer for invoices"""
-    client_name = serializers.CharField(source='client.name', read_only=True)
-    sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
+    client_name = serializers.SerializerMethodField()
+    client_id = serializers.SerializerMethodField()
+    service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
-    service_order_numbers = serializers.SerializerMethodField()
     days_overdue = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
-        fields = '__all__'
-        read_only_fields = ('invoice_number', 'mes', 'paid_amount', 'balance', 'created_at', 'updated_at')
+        fields = [
+            'id', 'invoice_number', 'invoice_type', 'service_order', 'service_order_number',
+            'client_id', 'client_name', 'issue_date', 'due_date',
+            'subtotal_services', 'iva_services', 'total_services',
+            'subtotal_third_party', 'total_amount', 'paid_amount', 'balance',
+            'status', 'status_display', 'payment_condition',
+            'notes', 'payments', 'days_overdue',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ('invoice_number', 'paid_amount', 'balance', 'created_at', 'updated_at')
 
-    def get_service_order_numbers(self, obj):
-        return [order.order_number for order in obj.service_orders.all()]
+    def get_client_name(self, obj):
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.name
+        return None
+
+    def get_client_id(self, obj):
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.id
+        return None
 
     def get_days_overdue(self, obj):
         from django.utils import timezone
@@ -107,17 +122,31 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 class InvoiceListSerializer(serializers.ModelSerializer):
     """Simplified serializer for invoice lists"""
-    client_name = serializers.CharField(source='client.name', read_only=True)
+    client_name = serializers.SerializerMethodField()
+    client_id = serializers.SerializerMethodField()
+    service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
+    payments = InvoicePaymentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'client_name', 'invoice_date', 'due_date',
-            'ccf', 'total_amount', 'paid_amount', 'balance', 'status',
-            'status_display', 'days_overdue', 'mes'
+            'id', 'invoice_number', 'invoice_type', 'service_order_number',
+            'client_id', 'client_name', 'issue_date', 'due_date',
+            'total_amount', 'paid_amount', 'balance', 'status',
+            'status_display', 'days_overdue', 'payments'
         ]
+
+    def get_client_name(self, obj):
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.name
+        return None
+
+    def get_client_id(self, obj):
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.id
+        return None
 
     def get_days_overdue(self, obj):
         from django.utils import timezone

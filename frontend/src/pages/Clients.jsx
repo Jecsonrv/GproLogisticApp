@@ -325,7 +325,7 @@ function Clients() {
                         setSelectedClient(null);
                     }}
                     title={selectedClient.name}
-                    size="xl"
+                    size="2xl"
                 >
                     <div className="space-y-5">
                         {/* Client Header */}
@@ -470,6 +470,14 @@ function Clients() {
                             onClick={() => setShowDetailsModal(false)}
                         >
                             Cerrar
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate(`/account-statements`)}
+                            className="gap-1.5"
+                        >
+                            <FileText className="h-4 w-4" />
+                            Estado de Cuenta
                         </Button>
                         <Button
                             onClick={() =>

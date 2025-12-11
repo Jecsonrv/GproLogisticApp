@@ -35,10 +35,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 balance__gt=0
             )
 
-        # Filter by client
+        # Filter by client (through service_order)
         client_id = self.request.query_params.get('client')
         if client_id:
-            queryset = queryset.filter(client_id=client_id)
+            queryset = queryset.filter(service_order__client_id=client_id)
 
         # Filter by month
         mes = self.request.query_params.get('mes')
