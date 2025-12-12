@@ -1,8 +1,12 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
+from django.http import HttpResponse
 from decimal import Decimal
+import openpyxl
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from .models import Invoice, InvoicePayment, ServiceOrder
 from .serializers import InvoiceSerializer, InvoiceListSerializer, InvoicePaymentSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
@@ -96,9 +100,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        """Get invoicing summary statistics"""
+        """Get invoicing summary statistics with enhanced KPIs"""
         queryset = self.get_queryset()
+        from django.utils import timezone
+        today = timezone.now().date()
 
+        # Basic totals
         total_invoiced = queryset.aggregate(
             total=Sum('total_amount')
         )['total'] or Decimal('0')
@@ -111,20 +118,159 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             total=Sum('paid_amount')
         )['total'] or Decimal('0')
 
-        from django.utils import timezone
-        overdue = queryset.filter(
-            due_date__lt=timezone.now().date(),
+        # Overdue invoices
+        overdue_queryset = queryset.filter(
+            due_date__lt=today,
             balance__gt=0
-        ).aggregate(total=Sum('balance'))['total'] or Decimal('0')
+        )
+        total_overdue = overdue_queryset.aggregate(
+            total=Sum('balance')
+        )['total'] or Decimal('0')
+        overdue_count = overdue_queryset.count()
+
+        # Status counts
+        pending_count = queryset.filter(status='pending', balance__gt=0).count()
+        paid_count = queryset.filter(status='paid').count()
+        partial_count = queryset.filter(status='partial').count()
+        cancelled_count = queryset.filter(status='cancelled').count()
+
+        # Additional KPIs
+        # Invoices due this week
+        from datetime import timedelta
+        week_end = today + timedelta(days=7)
+        due_this_week = queryset.filter(
+            due_date__gte=today,
+            due_date__lte=week_end,
+            balance__gt=0
+        ).count()
+
+        # Average collection time (for paid invoices)
+        paid_invoices = queryset.filter(status='paid', due_date__isnull=False)
 
         return Response({
             'total_invoiced': str(total_invoiced),
             'total_pending': str(total_pending),
             'total_collected': str(total_collected),
-            'total_overdue': str(overdue),
-            'pending_count': queryset.filter(balance__gt=0).count(),
-            'paid_count': queryset.filter(balance=0).count(),
+            'total_overdue': str(total_overdue),
+            'pending_count': pending_count,
+            'paid_count': paid_count,
+            'partial_count': partial_count,
+            'overdue_count': overdue_count,
+            'cancelled_count': cancelled_count,
+            'due_this_week': due_this_week,
+            'total_invoices': queryset.count(),
         })
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo2])
+    def export_excel(self, request):
+        """Export invoices to Excel with professional formatting"""
+        queryset = self.get_queryset()
+
+        # Apply filters from request
+        client_id = request.query_params.get('client')
+        if client_id:
+            queryset = queryset.filter(service_order__client_id=client_id)
+
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+
+        date_from = request.query_params.get('dateFrom')
+        if date_from:
+            queryset = queryset.filter(issue_date__gte=date_from)
+
+        date_to = request.query_params.get('dateTo')
+        if date_to:
+            queryset = queryset.filter(issue_date__lte=date_to)
+
+        # Create workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Cuentas por Cobrar"
+
+        # Styles
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="0066CC", end_color="0066CC", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        currency_format = '#,##0.00'
+
+        # Headers
+        headers = [
+            'No. Factura', 'Cliente', 'Orden de Servicio', 'CCF',
+            'Fecha Emisión', 'Fecha Vencimiento', 'Total', 'Pagado',
+            'Saldo', 'Estado', 'Días Vencida'
+        ]
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        # Data rows
+        status_display = {
+            'pending': 'Pendiente',
+            'partial': 'Pago Parcial',
+            'paid': 'Pagada',
+            'overdue': 'Vencida',
+            'cancelled': 'Anulada',
+        }
+
+        from django.utils import timezone
+        today = timezone.now().date()
+
+        for row_num, invoice in enumerate(queryset, 2):
+            # Calculate days overdue
+            days_overdue = 0
+            if invoice.due_date and invoice.balance > 0 and today > invoice.due_date:
+                days_overdue = (today - invoice.due_date).days
+
+            data = [
+                invoice.invoice_number,
+                invoice.service_order.client.name if invoice.service_order else '',
+                invoice.service_order.order_number if invoice.service_order else '',
+                invoice.ccf or '',
+                invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '',
+                invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '',
+                float(invoice.total_amount),
+                float(invoice.paid_amount),
+                float(invoice.balance),
+                status_display.get(invoice.status, invoice.status),
+                days_overdue if days_overdue > 0 else '',
+            ]
+
+            for col_num, value in enumerate(data, 1):
+                cell = ws.cell(row=row_num, column=col_num, value=value)
+                cell.border = thin_border
+
+                # Apply currency format to monetary columns
+                if col_num in [7, 8, 9]:
+                    cell.number_format = currency_format
+                    cell.alignment = Alignment(horizontal="right")
+
+        # Auto-adjust column widths
+        for col_num, _ in enumerate(headers, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = 15
+
+        # Wider columns for specific fields
+        ws.column_dimensions['A'].width = 18  # Invoice number
+        ws.column_dimensions['B'].width = 30  # Client name
+        ws.column_dimensions['C'].width = 15  # Order number
+
+        # Create response
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=cuentas_por_cobrar.xlsx'
+        wb.save(response)
+        return response
 
     @action(detail=True, methods=['post'])
     def add_payment(self, request, pk=None):

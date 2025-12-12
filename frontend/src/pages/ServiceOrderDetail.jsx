@@ -895,59 +895,304 @@ function ServiceOrderDetail() {
                     </div>
                 )}
 
-                {/* Tab: Invoice */}
+                {/* Tab: Invoice - Trazabilidad Financiera */}
                 {activeTab === "invoice" && (
                     <div className="space-y-5 animate-fade-in">
-                        <div className="card-corporate p-5">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Receipt className="w-4 h-4 text-slate-400" />
-                                <h3 className="text-sm font-semibold text-slate-900">
-                                    Información de Facturación
-                                </h3>
+                        {/* Resumen de documentos financieros */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-blue-600 uppercase tracking-wide">
+                                        CXC (Ingresos)
+                                    </span>
+                                    <Receipt className="w-4 h-4 text-blue-500" />
+                                </div>
+                                <p className="text-2xl font-bold text-blue-900 tabular-nums">
+                                    {formatCurrency(totals.invoiced || totals.charges)}
+                                </p>
+                                <p className="text-xs text-blue-600 mt-1">
+                                    {invoice ? "1 factura emitida" : "Pendiente de facturar"}
+                                </p>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-amber-600 uppercase tracking-wide">
+                                        CXP (Gastos)
+                                    </span>
+                                    <ArrowRightLeft className="w-4 h-4 text-amber-500" />
+                                </div>
+                                <p className="text-2xl font-bold text-amber-900 tabular-nums">
+                                    {formatCurrency(totals.transfers)}
+                                </p>
+                                <p className="text-xs text-amber-600 mt-1">
+                                    {transfers.length} registro(s) de gastos
+                                </p>
+                            </div>
+
+                            <div className={cn(
+                                "border rounded-lg p-4",
+                                margin.value >= 0
+                                    ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
+                                    : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200"
+                            )}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className={cn(
+                                        "text-xs font-medium uppercase tracking-wide",
+                                        margin.value >= 0 ? "text-emerald-600" : "text-red-600"
+                                    )}>
+                                        Margen
+                                    </span>
+                                    {margin.value >= 0
+                                        ? <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                        : <TrendingDown className="w-4 h-4 text-red-500" />
+                                    }
+                                </div>
+                                <p className={cn(
+                                    "text-2xl font-bold tabular-nums",
+                                    margin.value >= 0 ? "text-emerald-900" : "text-red-900"
+                                )}>
+                                    {formatCurrency(margin.value)}
+                                </p>
+                                <p className={cn(
+                                    "text-xs mt-1",
+                                    margin.value >= 0 ? "text-emerald-600" : "text-red-600"
+                                )}>
+                                    {margin.percentage.toFixed(1)}% de rentabilidad
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Factura CXC */}
+                        <div className="card-corporate overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                                <div className="flex items-center gap-2">
+                                    <Receipt className="w-4 h-4 text-blue-600" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Factura de Venta (CXC)
+                                    </h3>
+                                </div>
+                                {invoice && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => navigate(`/invoicing?invoice=${invoice.id}`)}
+                                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                    >
+                                        Ver en CXC
+                                        <ArrowRightLeft className="w-3.5 h-3.5 ml-1.5" />
+                                    </Button>
+                                )}
                             </div>
 
                             {invoice ? (
-                                <div className="space-y-5">
-                                    <div className="grid grid-cols-4 gap-4">
+                                <div className="p-5">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                                         <DataField
                                             label="Número de Factura"
-                                            value={invoice.invoice_number}
-                                            mono
-                                        />
-                                        <div>
-                                            <dt className="data-label">
-                                                Estado
-                                            </dt>
-                                            <dd className="mt-1">
-                                                <StatusBadge
-                                                    status={invoice.status}
-                                                />
-                                            </dd>
-                                        </div>
-                                        <DataField
-                                            label="Total Facturado"
-                                            value={formatCurrency(
-                                                invoice.total_amount
-                                            )}
-                                        />
-                                        <DataField
-                                            label="Saldo Pendiente"
                                             value={
-                                                <span className="text-danger-600 font-semibold">
-                                                    {formatCurrency(
-                                                        invoice.balance
-                                                    )}
+                                                <span className="font-mono font-semibold text-blue-600">
+                                                    {invoice.invoice_number}
                                                 </span>
                                             }
                                         />
+                                        <div>
+                                            <dt className="data-label">Estado</dt>
+                                            <dd className="mt-1">
+                                                <StatusBadge status={invoice.status} />
+                                            </dd>
+                                        </div>
+                                        <DataField
+                                            label="Fecha de Emisión"
+                                            value={formatDate(invoice.issue_date, { format: "medium" })}
+                                        />
+                                        <DataField
+                                            label="Fecha de Vencimiento"
+                                            value={invoice.due_date
+                                                ? formatDate(invoice.due_date, { format: "medium" })
+                                                : "Sin vencimiento"
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* Resumen financiero */}
+                                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                        <div className="grid grid-cols-3 gap-4 text-center">
+                                            <div>
+                                                <p className="text-xs text-slate-500 mb-1">Total Facturado</p>
+                                                <p className="text-lg font-bold text-slate-900 tabular-nums">
+                                                    {formatCurrency(invoice.total_amount)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 mb-1">Pagado</p>
+                                                <p className="text-lg font-bold text-emerald-600 tabular-nums">
+                                                    {formatCurrency(invoice.paid_amount || 0)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 mb-1">Saldo Pendiente</p>
+                                                <p className={cn(
+                                                    "text-lg font-bold tabular-nums",
+                                                    parseFloat(invoice.balance) > 0 ? "text-red-600" : "text-emerald-600"
+                                                )}>
+                                                    {formatCurrency(invoice.balance)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Historial de pagos si existe */}
+                                    {invoice.payments && invoice.payments.length > 0 && (
+                                        <div className="mt-4">
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                                Historial de Pagos
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {invoice.payments.map((payment, idx) => (
+                                                    <div key={idx} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                                                        <div className="flex items-center gap-3">
+                                                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                                            <div>
+                                                                <p className="text-sm font-medium text-slate-900 tabular-nums">
+                                                                    {formatCurrency(payment.amount)}
+                                                                </p>
+                                                                <p className="text-xs text-slate-500">
+                                                                    {payment.payment_method} • {payment.reference || "Sin ref."}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-xs text-slate-500">
+                                                            {formatDate(payment.payment_date, { format: "short" })}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="py-12">
+                                    <EmptyState
+                                        icon={Receipt}
+                                        title="Sin factura generada"
+                                        description="Esta orden aún no tiene una factura de venta asociada"
+                                        action={
+                                            totals.charges > 0 && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => navigate(`/invoicing?create=true&order=${id}`)}
+                                                    className="bg-brand-600 hover:bg-brand-700"
+                                                >
+                                                    <Plus className="w-4 h-4 mr-1.5" />
+                                                    Crear Factura
+                                                </Button>
+                                            )
+                                        }
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Gastos CXP */}
+                        <div className="card-corporate overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                                <div className="flex items-center gap-2">
+                                    <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+                                    <h3 className="text-sm font-semibold text-slate-900">
+                                        Gastos y Proveedores (CXP)
+                                    </h3>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => navigate(`/provider-payments?order=${id}`)}
+                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                                >
+                                    Ver en CXP
+                                    <ArrowRightLeft className="w-3.5 h-3.5 ml-1.5" />
+                                </Button>
+                            </div>
+
+                            {transfers.length > 0 ? (
+                                <div className="p-5">
+                                    <div className="space-y-2">
+                                        {transfers.slice(0, 5).map((transfer, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        "w-8 h-8 rounded-lg flex items-center justify-center",
+                                                        transfer.transfer_type === "terceros" ? "bg-amber-100" :
+                                                        transfer.transfer_type === "costos" ? "bg-blue-100" : "bg-slate-100"
+                                                    )}>
+                                                        <DollarSign className={cn(
+                                                            "w-4 h-4",
+                                                            transfer.transfer_type === "terceros" ? "text-amber-600" :
+                                                            transfer.transfer_type === "costos" ? "text-blue-600" : "text-slate-600"
+                                                        )} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-900">
+                                                            {transfer.provider?.name || transfer.beneficiary_name || "Gasto"}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {transfer.transfer_type === "terceros" ? "Gasto a Terceros" :
+                                                             transfer.transfer_type === "costos" ? "Costo Directo" :
+                                                             transfer.transfer_type === "admin" ? "Administrativo" : transfer.transfer_type}
+                                                            {transfer.ccf && ` • CCF: ${transfer.ccf}`}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold text-amber-600 tabular-nums">
+                                                        {formatCurrency(transfer.amount)}
+                                                    </p>
+                                                    <StatusBadge status={transfer.status} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {transfers.length > 5 && (
+                                        <div className="mt-3 text-center">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setActiveTab("transfers")}
+                                                className="text-slate-600"
+                                            >
+                                                Ver todos ({transfers.length} registros)
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* Total de gastos */}
+                                    <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                                        <div className="text-right">
+                                            <p className="text-xs text-slate-500 mb-1">Total Gastos CXP</p>
+                                            <p className="text-xl font-bold text-amber-600 tabular-nums">
+                                                {formatCurrency(totals.transfers)}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
-                                <EmptyState
-                                    icon={Receipt}
-                                    title="Sin factura generada"
-                                    description="Esta orden aún no tiene una factura asociada"
-                                />
+                                <div className="py-12">
+                                    <EmptyState
+                                        icon={ArrowRightLeft}
+                                        title="Sin gastos registrados"
+                                        description="No hay gastos a proveedores para esta orden"
+                                        action={
+                                            <Button
+                                                size="sm"
+                                                onClick={() => setIsAddTransferModalOpen(true)}
+                                                className="bg-brand-600 hover:bg-brand-700"
+                                            >
+                                                <Plus className="w-4 h-4 mr-1.5" />
+                                                Agregar Gasto
+                                            </Button>
+                                        }
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>

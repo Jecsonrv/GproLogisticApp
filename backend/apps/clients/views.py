@@ -10,8 +10,8 @@ from apps.orders.models import ServiceOrder
 from apps.transfers.models import Transfer
 import openpyxl
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, PatternFill, Alignment
-from datetime import datetime
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from datetime import datetime, timedelta
 
 class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all()
@@ -132,86 +132,199 @@ class ClientViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo2])
     def export_statement_excel(self, request, pk=None):
-        """Exportar estado de cuenta a Excel"""
+        """Exportar estado de cuenta completo a Excel con facturas y pagos"""
+        from apps.orders.models import Invoice, InvoicePayment
+
         client = self.get_object()
-        
-        # Obtener datos del estado de cuenta
-        pending_orders = ServiceOrder.objects.filter(client=client, status='abierta')
-        
-        credit_used = Transfer.objects.filter(
-            service_order__in=pending_orders,
-            transfer_type='terceros',
-            status='provisionada'
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
-        available_credit = client.credit_limit - credit_used
-        
+        year = request.query_params.get('year', datetime.now().year)
+
+        # Obtener facturas del cliente
+        invoices = Invoice.objects.filter(
+            service_order__client=client
+        ).select_related('service_order').prefetch_related('payments').order_by('-issue_date')
+
+        if year:
+            invoices = invoices.filter(issue_date__year=year)
+
+        # Calcular crédito usado
+        credit_used = invoices.filter(
+            status__in=['pending', 'partial', 'overdue'],
+            balance__gt=0
+        ).aggregate(Sum('balance'))['balance__sum'] or 0
+
+        available_credit = max(0, float(client.credit_limit) - float(credit_used))
+
         # Crear workbook
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Estado de Cuenta"
-        
+
         # Estilos
-        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        
-        # Encabezado del documento
-        ws['A1'] = "ESTADO DE CUENTA - GPRO LOGISTIC"
-        ws['A1'].font = Font(size=16, bold=True)
-        ws.merge_cells('A1:F1')
-        
-        ws['A3'] = "Cliente:"
-        ws['B3'] = client.name
-        ws['A4'] = "NIT:"
-        ws['B4'] = client.nit
-        ws['A5'] = "Condición de Pago:"
-        ws['B5'] = client.get_payment_condition_display()
-        
-        ws['D3'] = "Límite de Crédito:"
-        ws['E3'] = float(client.credit_limit)
-        ws['D4'] = "Crédito Usado:"
-        ws['E4'] = float(credit_used)
-        ws['D5'] = "Crédito Disponible:"
-        ws['E5'] = float(available_credit)
-        
-        # Tabla de órdenes pendientes
-        ws['A7'] = "ÓRDENES PENDIENTES"
-        ws['A7'].font = Font(bold=True, size=12)
-        
-        headers = ['No. Orden', 'Fecha', 'ETA', 'DUCA', 'PO', 'Monto']
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="1F4E79")
+        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        label_font = Font(bold=True, color="404040", size=10)
+        currency_format = '#,##0.00'
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # === ENCABEZADO ===
+        ws['A1'] = "ESTADO DE CUENTA"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:H1')
+
+        ws['A2'] = "GPRO LOGISTIC - FREIGHT FORWARDER"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:H2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === INFORMACIÓN DEL CLIENTE ===
+        ws['A5'] = "INFORMACIÓN DEL CLIENTE"
+        ws['A5'].font = subtitle_font
+        ws.merge_cells('A5:D5')
+
+        # Datos del cliente
+        client_data = [
+            ('Cliente:', client.name),
+            ('NIT:', client.nit),
+            ('Dirección:', client.address or 'No especificada'),
+            ('Teléfono:', client.phone or 'No especificado'),
+            ('Email:', client.email or 'No especificado'),
+            ('Contacto:', client.contact_person or 'No especificado'),
+            ('Condición de Pago:', client.get_payment_condition_display()),
+            ('Días de Crédito:', f'{client.credit_days} días' if client.credit_days else 'N/A'),
+        ]
+
+        row = 6
+        for label, value in client_data:
+            ws.cell(row=row, column=1, value=label).font = label_font
+            ws.cell(row=row, column=2, value=value)
+            row += 1
+
+        # === RESUMEN DE CRÉDITO ===
+        ws['E5'] = "RESUMEN DE CRÉDITO"
+        ws['E5'].font = subtitle_font
+        ws.merge_cells('E5:H5')
+
+        credit_data = [
+            ('Límite de Crédito:', float(client.credit_limit)),
+            ('Crédito Utilizado:', float(credit_used)),
+            ('Crédito Disponible:', float(available_credit)),
+            ('% Utilización:', f'{(float(credit_used) / float(client.credit_limit) * 100):.1f}%' if client.credit_limit > 0 else '0%'),
+        ]
+
+        row = 6
+        for label, value in credit_data:
+            ws.cell(row=row, column=5, value=label).font = label_font
+            cell = ws.cell(row=row, column=6, value=value)
+            if isinstance(value, (int, float)):
+                cell.number_format = currency_format
+            row += 1
+
+        # === TABLA DE FACTURAS ===
+        start_row = 15
+        ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:H{start_row}')
+
+        # Headers de la tabla
+        headers = ['No. Factura', 'Orden de Servicio', 'Fecha Emisión', 'Vencimiento',
+                   'Total', 'Pagado', 'Saldo', 'Estado']
+        header_row = start_row + 1
+
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=8, column=col_num)
-            cell.value = header
+            cell = ws.cell(row=header_row, column=col_num, value=header)
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
-        
-        # Datos de órdenes
-        row = 9
-        for order in pending_orders:
-            order_total = order.transfers.filter(
-                transfer_type='terceros',
-                status='provisionada'
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
-            if order_total > 0:
-                ws.cell(row=row, column=1, value=order.order_number)
-                ws.cell(row=row, column=2, value=order.created_at.strftime('%Y-%m-%d'))
-                ws.cell(row=row, column=3, value=order.eta.strftime('%Y-%m-%d') if order.eta else '')
-                ws.cell(row=row, column=4, value=order.duca)
-                ws.cell(row=row, column=5, value=order.purchase_order)
-                ws.cell(row=row, column=6, value=float(order_total))
-                row += 1
-        
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
+        # Status display
+        status_display = {
+            'pending': 'Pendiente',
+            'partial': 'Pago Parcial',
+            'paid': 'Pagada',
+            'overdue': 'Vencida',
+            'cancelled': 'Anulada',
+        }
+
+        # Datos de facturas
+        data_row = header_row + 1
+        totals = {'total': 0, 'paid': 0, 'balance': 0}
+        today = datetime.now().date()
+
+        for invoice in invoices:
+            days_overdue = ''
+            if invoice.due_date and invoice.balance > 0 and today > invoice.due_date:
+                days_overdue = f' ({(today - invoice.due_date).days}d)'
+
+            ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
+            ws.cell(row=data_row, column=2, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
+            ws.cell(row=data_row, column=3, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            ws.cell(row=data_row, column=4, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
+
+            total_cell = ws.cell(row=data_row, column=5, value=float(invoice.total_amount))
+            total_cell.number_format = currency_format
+            total_cell.border = thin_border
+
+            paid_cell = ws.cell(row=data_row, column=6, value=float(invoice.paid_amount))
+            paid_cell.number_format = currency_format
+            paid_cell.border = thin_border
+
+            balance_cell = ws.cell(row=data_row, column=7, value=float(invoice.balance))
+            balance_cell.number_format = currency_format
+            balance_cell.border = thin_border
+
+            status_text = status_display.get(invoice.status, invoice.status) + days_overdue
+            ws.cell(row=data_row, column=8, value=status_text).border = thin_border
+
+            # Sumar totales
+            totals['total'] += float(invoice.total_amount)
+            totals['paid'] += float(invoice.paid_amount)
+            totals['balance'] += float(invoice.balance)
+
+            data_row += 1
+
+        # Fila de totales
+        ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
+        ws.cell(row=data_row, column=1).border = thin_border
+        for col in range(2, 5):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        total_total = ws.cell(row=data_row, column=5, value=totals['total'])
+        total_total.number_format = currency_format
+        total_total.font = Font(bold=True)
+        total_total.border = thin_border
+
+        total_paid = ws.cell(row=data_row, column=6, value=totals['paid'])
+        total_paid.number_format = currency_format
+        total_paid.font = Font(bold=True)
+        total_paid.border = thin_border
+
+        total_balance = ws.cell(row=data_row, column=7, value=totals['balance'])
+        total_balance.number_format = currency_format
+        total_balance.font = Font(bold=True)
+        total_balance.border = thin_border
+
+        ws.cell(row=data_row, column=8).border = thin_border
+
         # Ajustar anchos de columna
-        for col in range(1, 7):
-            ws.column_dimensions[get_column_letter(col)].width = 18
-        
+        column_widths = [18, 18, 14, 14, 14, 14, 14, 16]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
         # Generar respuesta
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename=estado_cuenta_{client.nit}_{datetime.now().strftime("%Y%m%d")}.xlsx'
-        
+        filename = f'estado_cuenta_{client.name.replace(" ", "_")}_{year}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
         wb.save(response)
         return response
