@@ -610,7 +610,7 @@ function Catalogs() {
                                 Nuevo Proveedor
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("providers")}
                                 data={getData("providers")}
@@ -631,7 +631,7 @@ function Catalogs() {
                                 Nuevo Aforador
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("customsAgents")}
                                 data={getData("customsAgents")}
@@ -652,7 +652,7 @@ function Catalogs() {
                                 Nuevo Banco
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("banks")}
                                 data={getData("banks")}
@@ -673,7 +673,7 @@ function Catalogs() {
                                 Nuevo Tipo
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("shipmentTypes")}
                                 data={getData("shipmentTypes")}
@@ -694,7 +694,7 @@ function Catalogs() {
                                 Nuevo Subcliente
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("subClientes")}
                                 data={getData("subClientes")}

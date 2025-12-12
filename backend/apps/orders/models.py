@@ -83,9 +83,27 @@ class ServiceOrder(models.Model):
         return sum(charge.total for charge in self.charges.all())
 
     def get_total_third_party(self):
-        """Calcula el total de gastos a terceros"""
+        """Calcula el total de gastos facturables al cliente (cargos + terceros legacy)"""
         return sum(
-            transfer.amount for transfer in self.transfers.filter(transfer_type='terceros')
+            transfer.amount for transfer in self.transfers.filter(
+                transfer_type__in=['cargos', 'terceros']
+            )
+        )
+    
+    def get_total_direct_costs(self):
+        """Calcula el total de costos directos (costos + propios legacy)"""
+        return sum(
+            transfer.amount for transfer in self.transfers.filter(
+                transfer_type__in=['costos', 'propios']
+            )
+        )
+    
+    def get_total_admin_costs(self):
+        """Calcula el total de gastos administrativos/operación"""
+        return sum(
+            transfer.amount for transfer in self.transfers.filter(
+                transfer_type='admin'
+            )
         )
 
     def get_total_amount(self):
@@ -208,8 +226,9 @@ class Invoice(models.Model):
 
     service_order = models.ForeignKey(ServiceOrder, on_delete=models.PROTECT, related_name='invoices', verbose_name="Orden de Servicio")
     invoice_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name="Número de Factura")
+    ccf = models.CharField(max_length=100, blank=True, verbose_name="CCF (Comprobante de Crédito Fiscal)")
     invoice_type = models.CharField(max_length=10, choices=INVOICE_TYPE_CHOICES, default='DTE', verbose_name="Tipo de Factura")
-    issue_date = models.DateField(default=timezone.now, verbose_name="Fecha de Emisión")
+    issue_date = models.DateField(default=timezone.localdate, verbose_name="Fecha de Emisión")
     due_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Vencimiento")
 
     # Montos

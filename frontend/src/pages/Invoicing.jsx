@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
     Plus,
     Banknote,
@@ -10,6 +10,9 @@ import {
     Search,
     Filter,
     Download,
+    Upload,
+    Edit,
+    Building2,
 } from "lucide-react";
 import {
     Card,
@@ -26,8 +29,9 @@ import Modal, { ModalFooter } from "../components/ui/Modal";
 import Select from "../components/ui/Select";
 import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
+import { FileUpload } from "../components/ui";
 import api from "../lib/axios";
-import { cn, formatCurrency, formatDate } from "../lib/utils";
+import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 import toast from "react-hot-toast";
 
 /**
@@ -63,20 +67,24 @@ const Invoicing = () => {
 
     // Generate invoice form
     const [generateForm, setGenerateForm] = useState({
+        service_order: "",
         client: "",
-        invoice_date: new Date().toLocaleDateString("en-CA"),
+        client_name: "",
+        invoice_date: getTodayDate(),
         due_date: "",
-        ccf: "",
-        selectedOrders: [],
+        invoice_number: "",
+        total_amount: "",
+        invoice_file: null,
     });
 
     const [clients, setClients] = useState([]);
-    const [availableOrders, setAvailableOrders] = useState([]);
+    const [allServiceOrders, setAllServiceOrders] = useState([]);
 
     useEffect(() => {
         fetchInvoices();
         fetchSummary();
         fetchClients();
+        fetchAllServiceOrders();
     }, []);
 
     const fetchInvoices = async () => {
@@ -109,15 +117,57 @@ const Invoicing = () => {
         }
     };
 
-    const fetchAvailableOrders = async (clientId) => {
+    const fetchAllServiceOrders = async () => {
         try {
             const response = await api.get("/orders/service-orders/", {
-                params: { client: clientId, status: "cerrada", facturado: false },
+                params: {
+                    facturado: false,
+                },
             });
-            setAvailableOrders(response.data);
+            // Filtrar solo las que tienen monto calculado
+            const ordersWithAmount = response.data.filter(order =>
+                order.total_amount && parseFloat(order.total_amount) > 0
+            );
+            setAllServiceOrders(ordersWithAmount);
         } catch (error) {
-            toast.error("Error al cargar órdenes disponibles");
+            toast.error("Error al cargar órdenes de servicio");
+            console.error(error);
         }
+    };
+
+    const handleServiceOrderSelect = (orderId) => {
+        const selectedOrder = allServiceOrders.find(o => o.id === orderId);
+        if (!selectedOrder) {
+            setGenerateForm({
+                ...generateForm,
+                service_order: "",
+                client: "",
+                client_name: "",
+                total_amount: "",
+                due_date: "",
+            });
+            return;
+        }
+
+        // Buscar el cliente para obtener días de crédito
+        const client = clients.find(c => c.id === selectedOrder.client);
+
+        // Calcular fecha de vencimiento
+        let dueDate = "";
+        if (client && client.credit_days > 0) {
+            const invoiceDate = new Date(generateForm.invoice_date);
+            invoiceDate.setDate(invoiceDate.getDate() + client.credit_days);
+            dueDate = invoiceDate.toISOString().split('T')[0];
+        }
+
+        setGenerateForm({
+            ...generateForm,
+            service_order: orderId,
+            client: selectedOrder.client,
+            client_name: selectedOrder.client_name || client?.name || "",
+            total_amount: selectedOrder.total_amount || "",
+            due_date: dueDate,
+        });
     };
 
     const handleOpenPaymentModal = (invoice) => {
@@ -139,44 +189,69 @@ const Invoicing = () => {
         }
 
         try {
-            await api.post(`/orders/invoices/${selectedInvoice.id}/add_payment/`, paymentForm);
+            await api.post(
+                `/orders/invoices/${selectedInvoice.id}/add_payment/`,
+                paymentForm
+            );
             toast.success("Pago registrado exitosamente");
             fetchInvoices();
             fetchSummary();
             setIsPaymentModalOpen(false);
         } catch (error) {
-            toast.error(error.response?.data?.error || "Error al registrar pago");
+            toast.error(
+                error.response?.data?.error || "Error al registrar pago"
+            );
         }
     };
 
     const handleGenerateInvoice = async () => {
-        if (!generateForm.client || generateForm.selectedOrders.length === 0) {
-            toast.error("Seleccione cliente y al menos una orden");
+        if (!generateForm.service_order || !generateForm.invoice_number || !generateForm.total_amount) {
+            toast.error("Complete todos los campos requeridos");
             return;
         }
 
         try {
-            const response = await api.post("/orders/invoices/generate_from_orders/", {
-                client: generateForm.client,
-                order_ids: generateForm.selectedOrders,
-                invoice_date: generateForm.invoice_date,
-                due_date: generateForm.due_date,
-                ccf: generateForm.ccf,
+            const formData = new FormData();
+            formData.append("service_order", generateForm.service_order);
+            formData.append("invoice_number", generateForm.invoice_number);
+            formData.append("issue_date", generateForm.invoice_date);
+            formData.append("total_amount", generateForm.total_amount);
+
+            if (generateForm.due_date) {
+                formData.append("due_date", generateForm.due_date);
+            }
+            if (generateForm.invoice_file) {
+                formData.append("invoice_file", generateForm.invoice_file);
+            }
+
+            const response = await api.post("/orders/invoices/", formData, {
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
             });
 
-            toast.success(`Factura ${response.data.invoice_number} generada exitosamente`);
+            toast.success(
+                `Factura ${response.data.invoice_number} registrada exitosamente`
+            );
             fetchInvoices();
             fetchSummary();
+            fetchAllServiceOrders();
             setIsGenerateModalOpen(false);
             setGenerateForm({
+                service_order: "",
                 client: "",
-                invoice_date: new Date().toLocaleDateString("en-CA"),
+                client_name: "",
+                invoice_date: getTodayDate(),
                 due_date: "",
-                ccf: "",
-                selectedOrders: [],
+                invoice_number: "",
+                total_amount: "",
+                invoice_file: null,
             });
         } catch (error) {
-            toast.error(error.response?.data?.error || "Error al generar factura");
+            toast.error(
+                error.response?.data?.error || "Error al registrar factura"
+            );
+            console.error(error);
         }
     };
 
@@ -202,8 +277,14 @@ const Invoicing = () => {
             accessor: "client_name",
             render: (row) => (
                 <div>
-                    <div className="font-medium text-slate-900 text-sm">{row.client_name}</div>
-                    {row.ccf && <div className="text-xs text-slate-500">CCF: {row.ccf}</div>}
+                    <div className="font-medium text-slate-900 text-sm">
+                        {row.client_name}
+                    </div>
+                    {row.ccf && (
+                        <div className="text-xs text-slate-500">
+                            CCF: {row.ccf}
+                        </div>
+                    )}
                 </div>
             ),
         },
@@ -213,11 +294,16 @@ const Invoicing = () => {
             render: (row) => (
                 <div>
                     <div className="text-sm text-slate-900">
-                        {new Date(row.invoice_date + "T00:00:00").toLocaleDateString("es-SV")}
+                        {new Date(
+                            row.invoice_date + "T00:00:00"
+                        ).toLocaleDateString("es-SV")}
                     </div>
                     {row.due_date && (
                         <div className="text-xs text-slate-500">
-                            Vence: {new Date(row.due_date + "T00:00:00").toLocaleDateString("es-SV")}
+                            Vence:{" "}
+                            {new Date(
+                                row.due_date + "T00:00:00"
+                            ).toLocaleDateString("es-SV")}
                         </div>
                     )}
                 </div>
@@ -248,7 +334,9 @@ const Invoicing = () => {
                 <div
                     className={cn(
                         "font-bold tabular-nums",
-                        parseFloat(row.balance) > 0 ? "text-danger-600" : "text-success-600"
+                        parseFloat(row.balance) > 0
+                            ? "text-danger-600"
+                            : "text-success-600"
                     )}
                 >
                     {formatCurrency(row.balance)}
@@ -261,7 +349,9 @@ const Invoicing = () => {
             sortable: false,
             render: (row) => (
                 <div className="space-y-1">
-                    <Badge variant={getStatusBadgeVariant(row)}>{row.status_display}</Badge>
+                    <Badge variant={getStatusBadgeVariant(row)}>
+                        {row.status_display}
+                    </Badge>
                     {row.days_overdue > 0 && (
                         <div className="text-xs text-danger-600 font-medium">
                             {row.days_overdue} días vencida
@@ -275,20 +365,21 @@ const Invoicing = () => {
             sortable: false,
             render: (row) => (
                 <div className="flex items-center gap-1">
-                    {parseFloat(row.balance) > 0 && row.status !== "cancelada" && (
-                        <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenPaymentModal(row);
-                            }}
-                            title="Registrar Pago"
-                            className="text-success-600 hover:text-success-700 hover:bg-success-50"
-                        >
-                            <Banknote className="h-4 w-4" />
-                        </Button>
-                    )}
+                    {parseFloat(row.balance) > 0 &&
+                        row.status !== "cancelada" && (
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenPaymentModal(row);
+                                }}
+                                title="Registrar Pago"
+                                className="text-success-600 hover:text-success-700 hover:bg-success-50"
+                            >
+                                <Banknote className="h-4 w-4" />
+                            </Button>
+                        )}
                     <Button
                         variant="ghost"
                         size="icon-xs"
@@ -312,12 +403,17 @@ const Invoicing = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Facturación y CXC</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                        Facturación y CXC
+                    </h1>
                     <p className="text-sm text-gray-500 mt-1">
                         Control de facturas y cuentas por cobrar
                     </p>
                 </div>
-                <Button onClick={() => setIsGenerateModalOpen(true)} className="gap-1.5">
+                <Button
+                    onClick={() => setIsGenerateModalOpen(true)}
+                    className="gap-1.5"
+                >
                     <Plus className="h-4 w-4" />
                     Registrar Factura
                 </Button>
@@ -351,7 +447,7 @@ const Invoicing = () => {
 
             {/* Invoices Table */}
             <Card>
-                <CardContent className="p-0">
+                <CardContent className="px-5 pb-5 pt-0">
                     <DataTable
                         data={invoices}
                         columns={columns}
@@ -375,18 +471,28 @@ const Invoicing = () => {
                         <div className="bg-slate-50 p-4 rounded-md space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Factura:</span>
-                                <span className="font-mono font-semibold">{selectedInvoice.invoice_number}</span>
+                                <span className="font-mono font-semibold">
+                                    {selectedInvoice.invoice_number}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Cliente:</span>
-                                <span className="font-medium">{selectedInvoice.client_name}</span>
+                                <span className="font-medium">
+                                    {selectedInvoice.client_name}
+                                </span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">Total:</span>
-                                <span className="font-semibold">{formatCurrency(selectedInvoice.total_amount)}</span>
+                                <span className="font-semibold">
+                                    {formatCurrency(
+                                        selectedInvoice.total_amount
+                                    )}
+                                </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-slate-600">Saldo Actual:</span>
+                                <span className="text-slate-600">
+                                    Saldo Actual:
+                                </span>
                                 <span className="text-lg font-bold text-danger-600">
                                     {formatCurrency(selectedInvoice.balance)}
                                 </span>
@@ -399,14 +505,24 @@ const Invoicing = () => {
                                 type="number"
                                 step="0.01"
                                 value={paymentForm.amount}
-                                onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        amount: e.target.value,
+                                    })
+                                }
                                 required
                             />
                             <Input
                                 label="Fecha de Pago"
                                 type="date"
                                 value={paymentForm.payment_date}
-                                onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_date: e.target.value,
+                                    })
+                                }
                                 required
                             />
                         </div>
@@ -415,10 +531,18 @@ const Invoicing = () => {
                             <Select
                                 label="Método de Pago"
                                 value={paymentForm.payment_method}
-                                onChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
+                                onChange={(value) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_method: value,
+                                    })
+                                }
                                 options={[
                                     { id: "efectivo", name: "Efectivo" },
-                                    { id: "transferencia", name: "Transferencia Bancaria" },
+                                    {
+                                        id: "transferencia",
+                                        name: "Transferencia Bancaria",
+                                    },
                                     { id: "cheque", name: "Cheque" },
                                     { id: "deposito", name: "Depósito" },
                                 ]}
@@ -429,7 +553,12 @@ const Invoicing = () => {
                             <Input
                                 label="Referencia/No. Comprobante"
                                 value={paymentForm.reference}
-                                onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        reference: e.target.value,
+                                    })
+                                }
                                 placeholder="Ej: TRF-12345"
                             />
                         </div>
@@ -437,7 +566,12 @@ const Invoicing = () => {
                         <Input
                             label="Notas"
                             value={paymentForm.notes}
-                            onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                            onChange={(e) =>
+                                setPaymentForm({
+                                    ...paymentForm,
+                                    notes: e.target.value,
+                                })
+                            }
                             placeholder="Notas adicionales..."
                         />
 
@@ -445,21 +579,39 @@ const Invoicing = () => {
                         {paymentForm.amount && (
                             <div className="bg-success-50 border border-success-200 p-4 rounded-md">
                                 <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-slate-600">Saldo Actual:</span>
-                                    <span className="font-medium">{formatCurrency(selectedInvoice.balance)}</span>
+                                    <span className="text-slate-600">
+                                        Saldo Actual:
+                                    </span>
+                                    <span className="font-medium">
+                                        {formatCurrency(
+                                            selectedInvoice.balance
+                                        )}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-slate-600">Monto del Pago:</span>
+                                    <span className="text-slate-600">
+                                        Monto del Pago:
+                                    </span>
                                     <span className="font-medium text-success-600">
-                                        -{formatCurrency(paymentForm.amount || 0)}
+                                        -
+                                        {formatCurrency(
+                                            paymentForm.amount || 0
+                                        )}
                                     </span>
                                 </div>
                                 <div className="pt-2 border-t border-success-200">
                                     <div className="flex justify-between">
-                                        <span className="font-semibold text-slate-900">Nuevo Saldo:</span>
+                                        <span className="font-semibold text-slate-900">
+                                            Nuevo Saldo:
+                                        </span>
                                         <span className="text-xl font-bold text-success-600">
                                             {formatCurrency(
-                                                parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0)
+                                                parseFloat(
+                                                    selectedInvoice.balance
+                                                ) -
+                                                    parseFloat(
+                                                        paymentForm.amount || 0
+                                                    )
                                             )}
                                         </span>
                                     </div>
@@ -470,7 +622,10 @@ const Invoicing = () => {
                 )}
 
                 <ModalFooter>
-                    <Button variant="ghost" onClick={() => setIsPaymentModalOpen(false)}>
+                    <Button
+                        variant="ghost"
+                        onClick={() => setIsPaymentModalOpen(false)}
+                    >
                         Cancelar
                     </Button>
                     <Button variant="success" onClick={handleAddPayment}>
@@ -479,126 +634,209 @@ const Invoicing = () => {
                 </ModalFooter>
             </Modal>
 
-            {/* Generate Invoice Modal */}
+            {/* Generate Invoice Modal - Diseño Profesional */}
             <Modal
                 isOpen={isGenerateModalOpen}
                 onClose={() => setIsGenerateModalOpen(false)}
-                title="Generar Factura desde Órdenes"
+                title="Registrar Factura de Venta"
                 size="2xl"
             >
                 <div className="space-y-4">
-                    <Select
-                        label="Cliente"
-                        value={generateForm.client}
-                        onChange={(value) => {
-                            setGenerateForm({ ...generateForm, client: value, selectedOrders: [] });
-                            fetchAvailableOrders(value);
-                        }}
-                        options={clients}
-                        getOptionLabel={(opt) => opt.name}
-                        getOptionValue={(opt) => opt.id}
-                        searchable
-                        required
-                    />
-
-                    {availableOrders.length > 0 && (
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Órdenes de Servicio a Facturar
-                            </label>
-                            <div className="border border-slate-200 rounded-md max-h-64 overflow-y-auto">
-                                {availableOrders.map((order) => (
-                                    <label
-                                        key={order.id}
-                                        className="flex items-center p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 cursor-pointer"
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={generateForm.selectedOrders.includes(order.id)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                    setGenerateForm({
-                                                        ...generateForm,
-                                                        selectedOrders: [...generateForm.selectedOrders, order.id],
-                                                    });
-                                                } else {
-                                                    setGenerateForm({
-                                                        ...generateForm,
-                                                        selectedOrders: generateForm.selectedOrders.filter(
-                                                            (id) => id !== order.id
-                                                        ),
-                                                    });
-                                                }
-                                            }}
-                                            className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-                                        />
-                                        <div className="ml-3 flex-1">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="font-mono font-medium text-slate-900 text-sm">
-                                                        {order.order_number}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500">DUCA: {order.duca}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-semibold text-slate-900">
-                                                        {formatCurrency(order.total_amount || 0)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </label>
-                                ))}
+                    {/* Sección 1: Orden de Servicio */}
+                    <div className="bg-slate-50 rounded-md p-3.5 border border-slate-200">
+                        <div className="flex items-center gap-2 mb-2.5">
+                            <div className="w-6 h-6 rounded bg-slate-600 text-white flex items-center justify-center text-xs font-semibold">
+                                1
                             </div>
-                            <div className="mt-2 text-sm text-slate-500">
-                                {generateForm.selectedOrders.length} orden(es) seleccionada(s)
+                            <h3 className="text-sm font-semibold text-slate-900">
+                                Orden de Servicio
+                            </h3>
+                        </div>
+
+                        <Select
+                            label="Seleccionar Orden de Servicio"
+                            value={generateForm.service_order}
+                            onChange={handleServiceOrderSelect}
+                            options={[
+                                { id: "", name: "Seleccionar orden..." },
+                                ...allServiceOrders.map(o => ({
+                                    id: o.id,
+                                    name: `${o.order_number} - ${o.client_name} - ${formatCurrency(o.total_amount || 0)}`
+                                }))
+                            ]}
+                            getOptionLabel={(opt) => opt.name}
+                            getOptionValue={(opt) => opt.id}
+                            searchable
+                            required
+                        />
+
+                        {generateForm.client_name && (
+                            <div className="mt-3 flex items-center gap-2 text-sm text-slate-700 bg-white rounded p-2.5 border border-slate-200">
+                                <Building2 className="w-4 h-4 text-slate-500" />
+                                <span className="font-medium text-slate-600">Cliente:</span>
+                                <span className="text-slate-900 font-medium">{generateForm.client_name}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sección 2: Datos de la Factura */}
+                    {generateForm.service_order && (
+                        <div className="bg-slate-50 rounded-md p-3.5 border border-slate-200">
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <div className="w-6 h-6 rounded bg-slate-600 text-white flex items-center justify-center text-xs font-semibold">
+                                    2
+                                </div>
+                                <h3 className="text-sm font-semibold text-slate-900">
+                                    Información de la Factura
+                                </h3>
+                            </div>
+
+                            <div className="space-y-2.5">
+                                <Input
+                                    label="Número de Factura/CCF *"
+                                    value={generateForm.invoice_number}
+                                    onChange={(e) =>
+                                        setGenerateForm({
+                                            ...generateForm,
+                                            invoice_number: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Ej: F001-00001234 o 001-001-0000001"
+                                    required
+                                />
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input
+                                        label="Fecha de Emisión *"
+                                        type="date"
+                                        value={generateForm.invoice_date}
+                                        onChange={(e) => {
+                                            const newDate = e.target.value;
+                                            setGenerateForm((prev) => {
+                                                // Recalcular fecha de vencimiento
+                                                let newDueDate = prev.due_date;
+                                                if (prev.service_order) {
+                                                    const selectedOrder = allServiceOrders.find(o => o.id === prev.service_order);
+                                                    if (selectedOrder) {
+                                                        const client = clients.find(c => c.id === selectedOrder.client);
+                                                        if (client && client.credit_days > 0) {
+                                                            const invoiceDate = new Date(newDate);
+                                                            invoiceDate.setDate(invoiceDate.getDate() + client.credit_days);
+                                                            newDueDate = invoiceDate.toISOString().split('T')[0];
+                                                        }
+                                                    }
+                                                }
+                                                return {
+                                                    ...prev,
+                                                    invoice_date: newDate,
+                                                    due_date: newDueDate,
+                                                };
+                                            });
+                                        }}
+                                        required
+                                    />
+
+                                    <div>
+                                        <Input
+                                            label="Fecha de Vencimiento"
+                                            type="date"
+                                            value={generateForm.due_date}
+                                            onChange={(e) =>
+                                                setGenerateForm({
+                                                    ...generateForm,
+                                                    due_date: e.target.value,
+                                                })
+                                            }
+                                        />
+                                        {generateForm.due_date && (
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Auto-calculada según días de crédito
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <Input
+                                    label="Monto Total *"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={generateForm.total_amount}
+                                    onChange={(e) =>
+                                        setGenerateForm({
+                                            ...generateForm,
+                                            total_amount: e.target.value,
+                                        })
+                                    }
+                                    placeholder="0.00"
+                                    required
+                                />
                             </div>
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Fecha de Factura"
-                            type="date"
-                            value={generateForm.invoice_date}
-                            onChange={(e) => setGenerateForm({ ...generateForm, invoice_date: e.target.value })}
-                            required
-                        />
-                        <Input
-                            label="Fecha de Vencimiento"
-                            type="date"
-                            value={generateForm.due_date}
-                            onChange={(e) => setGenerateForm({ ...generateForm, due_date: e.target.value })}
-                        />
-                    </div>
-
-                    <Input
-                        label="CCF (Comprobante de Crédito Fiscal)"
-                        value={generateForm.ccf}
-                        onChange={(e) => setGenerateForm({ ...generateForm, ccf: e.target.value })}
-                        placeholder="Ej: 001-001-0000001"
-                    />
-
-                    {/* Invoice Total Preview */}
-                    {generateForm.selectedOrders.length > 0 && (
-                        <div className="bg-brand-50 border border-brand-200 p-4 rounded-md">
-                            <div className="text-sm text-brand-600 font-medium mb-2">Total de la Factura:</div>
-                            <div className="text-3xl font-bold text-brand-900 tabular-nums">
-                                {formatCurrency(
-                                    availableOrders
-                                        .filter((o) => generateForm.selectedOrders.includes(o.id))
-                                        .reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0)
-                                )}
+                    {/* Sección 3: Adjuntar PDF */}
+                    {generateForm.service_order && (
+                        <div className="bg-slate-50 rounded-md p-3.5 border border-slate-200">
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <div className="w-6 h-6 rounded bg-slate-600 text-white flex items-center justify-center text-xs font-semibold">
+                                    3
+                                </div>
+                                <h3 className="text-sm font-semibold text-slate-900">
+                                    Adjuntar Documento (Opcional)
+                                </h3>
                             </div>
+
+                            <FileUpload
+                                label="PDF o Imagen de la Factura"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(file) =>
+                                    setGenerateForm({
+                                        ...generateForm,
+                                        invoice_file: file,
+                                    })
+                                }
+                                value={generateForm.invoice_file}
+                                helperText="Formatos: PDF, JPG, PNG (máx. 5MB)"
+                            />
+
+                            {generateForm.invoice_file && (
+                                <div className="mt-2 flex items-center gap-2 text-sm text-slate-700 bg-white rounded p-2.5 border border-slate-200">
+                                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                                    <span className="text-slate-600">Archivo:</span>
+                                    <span className="font-medium text-slate-900">{generateForm.invoice_file.name}</span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 <ModalFooter>
-                    <Button variant="ghost" onClick={() => setIsGenerateModalOpen(false)}>
+                    <Button
+                        variant="ghost"
+                        onClick={() => {
+                            setIsGenerateModalOpen(false);
+                            setGenerateForm({
+                                service_order: "",
+                                client: "",
+                                client_name: "",
+                                invoice_date: getTodayDate(),
+                                due_date: "",
+                                invoice_number: "",
+                                total_amount: "",
+                                invoice_file: null,
+                            });
+                        }}
+                    >
                         Cancelar
                     </Button>
-                    <Button onClick={handleGenerateInvoice}>Generar Factura</Button>
+                    <Button
+                        onClick={handleGenerateInvoice}
+                        disabled={!generateForm.service_order || !generateForm.invoice_number || !generateForm.total_amount}
+                    >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Registrar Factura
+                    </Button>
                 </ModalFooter>
             </Modal>
 
@@ -614,38 +852,63 @@ const Invoicing = () => {
                         {/* Invoice Header */}
                         <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 rounded-md">
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Cliente</p>
-                                <p className="text-base font-semibold text-slate-900">{selectedInvoice.client_name}</p>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    Cliente
+                                </p>
+                                <p className="text-base font-semibold text-slate-900">
+                                    {selectedInvoice.client_name}
+                                </p>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Estado</p>
-                                <Badge variant={getStatusBadgeVariant(selectedInvoice)}>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    Estado
+                                </p>
+                                <Badge
+                                    variant={getStatusBadgeVariant(
+                                        selectedInvoice
+                                    )}
+                                >
                                     {selectedInvoice.status_display}
                                 </Badge>
                                 {selectedInvoice.days_overdue > 0 && (
                                     <p className="text-xs text-danger-600 font-medium mt-1">
-                                        Vencida hace {selectedInvoice.days_overdue} días
+                                        Vencida hace{" "}
+                                        {selectedInvoice.days_overdue} días
                                     </p>
                                 )}
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha de Factura</p>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    Fecha de Factura
+                                </p>
                                 <p className="text-sm font-medium text-slate-900">
-                                    {new Date(selectedInvoice.invoice_date + "T00:00:00").toLocaleDateString("es-SV")}
+                                    {new Date(
+                                        selectedInvoice.invoice_date +
+                                            "T00:00:00"
+                                    ).toLocaleDateString("es-SV")}
                                 </p>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fecha de Vencimiento</p>
+                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    Fecha de Vencimiento
+                                </p>
                                 <p className="text-sm font-medium text-slate-900">
                                     {selectedInvoice.due_date
-                                        ? new Date(selectedInvoice.due_date + "T00:00:00").toLocaleDateString("es-SV")
+                                        ? new Date(
+                                              selectedInvoice.due_date +
+                                                  "T00:00:00"
+                                          ).toLocaleDateString("es-SV")
                                         : "Sin vencimiento"}
                                 </p>
                             </div>
                             {selectedInvoice.ccf && (
                                 <div className="col-span-2">
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">CCF</p>
-                                    <p className="font-mono font-medium text-slate-900">{selectedInvoice.ccf}</p>
+                                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                        CCF
+                                    </p>
+                                    <p className="font-mono font-medium text-slate-900">
+                                        {selectedInvoice.ccf}
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -653,19 +916,29 @@ const Invoicing = () => {
                         {/* Financial Summary */}
                         <div className="grid grid-cols-3 gap-4">
                             <div className="p-4 bg-brand-50 border border-brand-200 rounded-md">
-                                <p className="text-xs text-brand-600 mb-1">Total Facturado</p>
+                                <p className="text-xs text-brand-600 mb-1">
+                                    Total Facturado
+                                </p>
                                 <p className="text-xl font-bold text-brand-900 tabular-nums">
-                                    {formatCurrency(selectedInvoice.total_amount)}
+                                    {formatCurrency(
+                                        selectedInvoice.total_amount
+                                    )}
                                 </p>
                             </div>
                             <div className="p-4 bg-success-50 border border-success-200 rounded-md">
-                                <p className="text-xs text-success-600 mb-1">Total Pagado</p>
+                                <p className="text-xs text-success-600 mb-1">
+                                    Total Pagado
+                                </p>
                                 <p className="text-xl font-bold text-success-900 tabular-nums">
-                                    {formatCurrency(selectedInvoice.paid_amount || 0)}
+                                    {formatCurrency(
+                                        selectedInvoice.paid_amount || 0
+                                    )}
                                 </p>
                             </div>
                             <div className="p-4 bg-danger-50 border border-danger-200 rounded-md">
-                                <p className="text-xs text-danger-600 mb-1">Saldo Pendiente</p>
+                                <p className="text-xs text-danger-600 mb-1">
+                                    Saldo Pendiente
+                                </p>
                                 <p className="text-xl font-bold text-danger-900 tabular-nums">
                                     {formatCurrency(selectedInvoice.balance)}
                                 </p>
@@ -678,7 +951,8 @@ const Invoicing = () => {
                                 <Banknote className="h-4 w-4 text-brand-600" />
                                 Historial de Pagos
                             </h3>
-                            {selectedInvoice.payments && selectedInvoice.payments.length > 0 ? (
+                            {selectedInvoice.payments &&
+                            selectedInvoice.payments.length > 0 ? (
                                 <div className="border border-slate-200 rounded-md overflow-hidden">
                                     <table className="min-w-full divide-y divide-slate-200">
                                         <thead className="bg-slate-50">
@@ -701,65 +975,92 @@ const Invoicing = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-slate-100">
-                                            {selectedInvoice.payments.map((payment, idx) => (
-                                                <tr key={idx} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-2.5 text-sm text-slate-900">
-                                                        {new Date(payment.payment_date + "T00:00:00").toLocaleDateString("es-SV")}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-sm font-semibold text-success-600 tabular-nums">
-                                                        {formatCurrency(payment.amount)}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-sm text-slate-600 capitalize">
-                                                        {payment.payment_method}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-sm text-slate-600 font-mono">
-                                                        {payment.reference || "-"}
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-sm text-slate-600">
-                                                        {payment.notes || "-"}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {selectedInvoice.payments.map(
+                                                (payment, idx) => (
+                                                    <tr
+                                                        key={idx}
+                                                        className="hover:bg-slate-50"
+                                                    >
+                                                        <td className="px-4 py-2.5 text-sm text-slate-900">
+                                                            {new Date(
+                                                                payment.payment_date +
+                                                                    "T00:00:00"
+                                                            ).toLocaleDateString(
+                                                                "es-SV"
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-sm font-semibold text-success-600 tabular-nums">
+                                                            {formatCurrency(
+                                                                payment.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-sm text-slate-600 capitalize">
+                                                            {
+                                                                payment.payment_method
+                                                            }
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-sm text-slate-600 font-mono">
+                                                            {payment.reference ||
+                                                                "-"}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-sm text-slate-600">
+                                                            {payment.notes ||
+                                                                "-"}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
                             ) : (
                                 <div className="text-center py-8 bg-slate-50 rounded-md border border-slate-200">
                                     <Clock className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                                    <p className="text-sm text-slate-600">No hay pagos registrados</p>
+                                    <p className="text-sm text-slate-600">
+                                        No hay pagos registrados
+                                    </p>
                                 </div>
                             )}
                         </div>
 
                         {/* Service Orders */}
-                        {selectedInvoice.service_orders && selectedInvoice.service_orders.length > 0 && (
-                            <div>
-                                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                                    <FileText className="h-4 w-4 text-brand-600" />
-                                    Órdenes de Servicio Incluidas
-                                </h3>
-                                <div className="space-y-2">
-                                    {selectedInvoice.service_orders.map((order) => (
-                                        <div
-                                            key={order.id}
-                                            className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-200"
-                                        >
-                                            <div>
-                                                <p className="font-mono font-semibold text-slate-900 text-sm">
-                                                    {order.order_number}
-                                                </p>
-                                                {order.duca && (
-                                                    <p className="text-xs text-slate-500">DUCA: {order.duca}</p>
-                                                )}
-                                            </div>
-                                            <p className="font-semibold text-slate-900 tabular-nums">
-                                                {formatCurrency(order.total_amount || 0)}
-                                            </p>
-                                        </div>
-                                    ))}
+                        {selectedInvoice.service_orders &&
+                            selectedInvoice.service_orders.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                        <FileText className="h-4 w-4 text-brand-600" />
+                                        Órdenes de Servicio Incluidas
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {selectedInvoice.service_orders.map(
+                                            (order) => (
+                                                <div
+                                                    key={order.id}
+                                                    className="flex justify-between items-center p-3 bg-slate-50 rounded border border-slate-200"
+                                                >
+                                                    <div>
+                                                        <p className="font-mono font-semibold text-slate-900 text-sm">
+                                                            {order.order_number}
+                                                        </p>
+                                                        {order.duca && (
+                                                            <p className="text-xs text-slate-500">
+                                                                DUCA:{" "}
+                                                                {order.duca}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <p className="font-semibold text-slate-900 tabular-nums">
+                                                        {formatCurrency(
+                                                            order.total_amount ||
+                                                                0
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
                     </div>
                 )}
             </Modal>

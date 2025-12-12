@@ -9,8 +9,42 @@ const Input = React.forwardRef(({
   className,
   type,
   error,
+  label,
   ...props
 }, ref) => {
+  if (label) {
+    return (
+      <div className="w-full">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          {label}
+        </label>
+        <input
+          type={type}
+          className={cn(
+            // Base styles
+            "flex h-9 w-full rounded-sm border bg-white px-3 py-2 text-sm transition-colors duration-150",
+            // Placeholder
+            "placeholder:text-slate-400",
+            // Focus state
+            "focus:outline-none focus:ring-1",
+            // File input
+            "file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-slate-700",
+            // Disabled
+            "disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500",
+            // Default border and focus
+            error
+              ? "border-danger-300 focus:border-danger-500 focus:ring-danger-500"
+              : "border-slate-300 focus:border-brand-500 focus:ring-brand-500",
+            className
+          )}
+          ref={ref}
+          {...props}
+        />
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <input
       type={type}

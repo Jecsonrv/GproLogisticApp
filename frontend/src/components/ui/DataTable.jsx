@@ -108,9 +108,9 @@ const DataTable = ({
             )}
 
             {/* Tabla */}
-            <div className="overflow-x-auto bg-white rounded-lg shadow">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+            <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+                <table className="min-w-full">
+                    <thead className="bg-white border-b border-gray-200">
                         <tr>
                             {columns.map((column) => (
                                 <th
@@ -120,23 +120,23 @@ const DataTable = ({
                                         column.accessor &&
                                         handleSort(column.accessor)
                                     }
-                                    className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                                    className={`px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${
                                         column.sortable !== false &&
                                         column.accessor
-                                            ? "cursor-pointer hover:bg-gray-100"
+                                            ? "cursor-pointer hover:bg-gray-50 transition-colors"
                                             : ""
                                     }`}
                                 >
-                                    <div className="flex items-center space-x-1">
+                                    <div className="flex items-center space-x-1.5">
                                         <span>{column.header}</span>
                                         {column.sortable !== false &&
                                             column.accessor &&
                                             sortColumn === column.accessor && (
-                                                <span>
+                                                <span className="text-gray-700">
                                                     {sortDirection === "asc" ? (
-                                                        <ChevronUpIcon className="h-4 w-4" />
+                                                        <ChevronUpIcon className="h-3.5 w-3.5" />
                                                     ) : (
-                                                        <ChevronDownIcon className="h-4 w-4" />
+                                                        <ChevronDownIcon className="h-3.5 w-3.5" />
                                                     )}
                                                 </span>
                                             )}
@@ -150,7 +150,7 @@ const DataTable = ({
                             <tr>
                                 <td
                                     colSpan={columns.length}
-                                    className="px-6 py-12 text-center text-gray-500"
+                                    className="px-5 py-16 text-center text-gray-500 text-sm"
                                 >
                                     {emptyMessage}
                                 </td>
@@ -173,7 +173,7 @@ const DataTable = ({
                                             key={
                                                 column.accessor || column.header
                                             }
-                                            className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                                            className="px-5 py-5 whitespace-nowrap text-sm text-gray-900"
                                         >
                                             {column.cell
                                                 ? column.cell(row, rowIndex)

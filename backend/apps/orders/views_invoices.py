@@ -13,9 +13,56 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
     serializer_class = InvoiceSerializer
     filterset_fields = ['status']
-    search_fields = ['invoice_number', 'client__name', 'ccf']
-    ordering_fields = ['invoice_date', 'due_date', 'total_amount', 'balance']
-    ordering = ['-invoice_date']
+    search_fields = ['invoice_number', 'service_order__client__name', 'ccf']
+    ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance']
+    ordering = ['-issue_date']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InvoiceListSerializer
+        return InvoiceSerializer
+
+    def perform_create(self, serializer):
+        """Create invoice from service order"""
+        # Get the service order
+        service_order_id = self.request.data.get('service_order')
+        total_amount = Decimal(str(self.request.data.get('total_amount', 0)))
+        invoice_number = self.request.data.get('invoice_number', '')
+
+        # Get dates
+        from datetime import datetime
+        issue_date = self.request.data.get('issue_date')
+        if isinstance(issue_date, str):
+            issue_date = datetime.strptime(issue_date, '%Y-%m-%d').date()
+
+        due_date = self.request.data.get('due_date')
+        if due_date and isinstance(due_date, str):
+            due_date = datetime.strptime(due_date, '%Y-%m-%d').date()
+
+        if not service_order_id:
+            raise ValueError("Se requiere una orden de servicio")
+
+        try:
+            service_order = ServiceOrder.objects.get(id=service_order_id)
+        except ServiceOrder.DoesNotExist:
+            raise ValueError("Orden de servicio no encontrada")
+
+        # Create invoice with values
+        invoice = serializer.save(
+            created_by=self.request.user,
+            invoice_number=invoice_number,
+            issue_date=issue_date,
+            due_date=due_date,
+            total_amount=total_amount,
+            balance=total_amount,
+            paid_amount=Decimal('0.00')
+        )
+
+        # Mark service order as invoiced
+        service_order.facturado = True
+        service_order.save()
+
+        return invoice
 
     def get_queryset(self):
         queryset = Invoice.objects.all().select_related(

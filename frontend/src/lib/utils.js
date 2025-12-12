@@ -39,7 +39,7 @@ export function formatCurrency(value, options = {}) {
 }
 
 /**
- * Formatea una fecha en formato salvadoreño
+ * Formatea una fecha en formato salvadoreño (dd/mm/yyyy)
  * @param {string|Date} date - La fecha a formatear
  * @param {object} options - Opciones de formateo
  * @returns {string} - Fecha formateada
@@ -52,9 +52,18 @@ export function formatDate(date, options = {}) {
         format = "short", // 'short', 'medium', 'long'
     } = options;
 
+    const dateObj = new Date(date);
+
+    // Para formato short y medium, usamos dd/mm/yyyy
+    if (format === "short" || format === "medium") {
+        const day = String(dateObj.getDate()).padStart(2, "0");
+        const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const year = dateObj.getFullYear();
+        return `${day}/${month}/${year}`;
+    }
+
+    // Para formato long, usamos el formato completo con nombre del día y mes
     const formats = {
-        short: { day: "2-digit", month: "short" },
-        medium: { day: "2-digit", month: "short", year: "numeric" },
         long: {
             weekday: "long",
             day: "2-digit",
@@ -63,10 +72,7 @@ export function formatDate(date, options = {}) {
         },
     };
 
-    return new Date(date).toLocaleDateString(
-        locale,
-        formats[format] || formats.short
-    );
+    return dateObj.toLocaleDateString(locale, formats[format] || formats.long);
 }
 
 /**
@@ -152,4 +158,17 @@ export function getInitials(name) {
         .join("")
         .toUpperCase()
         .slice(0, 2);
+}
+
+/**
+ * Obtiene la fecha actual en formato YYYY-MM-DD usando la zona horaria local
+ * Evita problemas con toISOString() que usa UTC
+ * @returns {string} - Fecha en formato YYYY-MM-DD
+ */
+export function getTodayDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
 }

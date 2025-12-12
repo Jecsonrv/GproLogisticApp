@@ -18,6 +18,13 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     
     # Información de costos
     total_transfers = serializers.SerializerMethodField()
+    total_direct_costs = serializers.SerializerMethodField()
+    total_admin_costs = serializers.SerializerMethodField()
+    # Campos principales para el listado
+    total_amount = serializers.SerializerMethodField()
+    total_services = serializers.SerializerMethodField()
+    total_third_party = serializers.SerializerMethodField()
+    # Compatibilidad con legacy
     total_terceros = serializers.SerializerMethodField()
     total_propios = serializers.SerializerMethodField()
     
@@ -30,13 +37,34 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         """Total de todas las transferencias de esta OS"""
         return obj.transfers.aggregate(Sum('amount'))['amount__sum'] or 0
     
+    def get_total_direct_costs(self, obj):
+        """Total de costos directos (costos + propios legacy)"""
+        return obj.get_total_direct_costs()
+    
+    def get_total_admin_costs(self, obj):
+        """Total de gastos administrativos/operación"""
+        return obj.get_total_admin_costs()
+    
+    def get_total_amount(self, obj):
+        """Total general de la OS (servicios + terceros)"""
+        return obj.get_total_amount()
+    
+    def get_total_services(self, obj):
+        """Total de servicios cobrados"""
+        return obj.get_total_services()
+    
+    def get_total_third_party(self, obj):
+        """Total de gastos facturables al cliente"""
+        return obj.get_total_third_party()
+    
+    # Legacy compatibility
     def get_total_terceros(self, obj):
-        """Total de cargos a terceros"""
-        return obj.transfers.filter(transfer_type='terceros').aggregate(Sum('amount'))['amount__sum'] or 0
+        """Total de cargos a terceros (legacy + cargos)"""
+        return obj.transfers.filter(transfer_type__in=['terceros', 'cargos']).aggregate(Sum('amount'))['amount__sum'] or 0
     
     def get_total_propios(self, obj):
-        """Total de costos propios"""
-        return obj.transfers.filter(transfer_type='propios').aggregate(Sum('amount'))['amount__sum'] or 0
+        """Total de costos propios (legacy + costos)"""
+        return obj.transfers.filter(transfer_type__in=['propios', 'costos']).aggregate(Sum('amount'))['amount__sum'] or 0
 
     def validate_client(self, value):
         # Check credit limit
@@ -88,6 +116,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
     days_overdue = serializers.SerializerMethodField()
+    # Campos de fecha explícitos para evitar problemas con datetime
+    issue_date = serializers.DateField()
+    due_date = serializers.DateField(required=False, allow_null=True)
 
     class Meta:
         model = Invoice
@@ -97,10 +128,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'subtotal_services', 'iva_services', 'total_services',
             'subtotal_third_party', 'total_amount', 'paid_amount', 'balance',
             'status', 'status_display', 'payment_condition',
-            'notes', 'payments', 'days_overdue',
+            'notes', 'payments', 'days_overdue', 'ccf', 'invoice_file',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ('invoice_number', 'paid_amount', 'balance', 'created_at', 'updated_at')
+        read_only_fields = ('paid_amount', 'balance', 'created_at', 'updated_at')
 
     def get_client_name(self, obj):
         if obj.service_order and obj.service_order.client:

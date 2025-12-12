@@ -79,7 +79,13 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => {
+const KPICard = ({
+    label,
+    value,
+    subtext,
+    icon: Icon,
+    variant = "default",
+}) => {
     const variants = {
         default: "text-slate-900",
         primary: "text-blue-600",
@@ -93,12 +99,21 @@ const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => 
             <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-sm font-medium text-gray-500">{label}</p>
-                        <p className={cn("text-2xl font-bold mt-1", variants[variant])}>
+                        <p className="text-sm font-medium text-gray-500">
+                            {label}
+                        </p>
+                        <p
+                            className={cn(
+                                "text-2xl font-bold mt-1",
+                                variants[variant]
+                            )}
+                        >
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400 mt-1">{subtext}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {subtext}
+                            </p>
                         )}
                     </div>
                     {Icon && (
@@ -291,7 +306,8 @@ const ServiceOrders = () => {
             }
 
             if (filters.status && order.status !== filters.status) return false;
-            if (filters.client && order.client !== parseInt(filters.client)) return false;
+            if (filters.client && order.client !== parseInt(filters.client))
+                return false;
 
             if (filters.dateFrom) {
                 const orderDate = new Date(order.created_at);
@@ -333,15 +349,15 @@ const ServiceOrders = () => {
 
     const columns = [
         {
-            header: "Orden",
+            header: "N° Orden",
             accessor: "order_number",
             cell: (row) => (
                 <div>
-                    <div className="font-mono text-sm font-semibold text-gray-900">
+                    <div className="text-sm font-medium text-blue-600 hover:text-blue-700">
                         {row.order_number}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                        {formatDate(row.created_at, { format: "medium" })}
+                        {formatDate(row.created_at, { format: "short" })}
                     </div>
                 </div>
             ),
@@ -351,40 +367,28 @@ const ServiceOrders = () => {
             accessor: "client_name",
             cell: (row) => (
                 <div>
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm text-gray-900 font-medium">
                         {row.client_name}
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
-                        {row.shipment_type_name && (
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                                {row.shipment_type_name}
-                            </span>
-                        )}
-                    </div>
+                    {row.shipment_type_name && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                            {row.shipment_type_name}
+                        </div>
+                    )}
                 </div>
             ),
         },
         {
-            header: "Referencias",
+            header: "DUCA",
             accessor: "duca",
             cell: (row) => (
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase w-8 tracking-wider">
-                            DUCA
-                        </span>
-                        <span className="font-mono text-sm text-gray-700 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
-                            {row.duca}
-                        </span>
+                <div>
+                    <div className="text-sm text-gray-900 font-medium">
+                        {row.duca}
                     </div>
                     {row.bl_reference && (
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase w-8 tracking-wider">
-                                BL
-                            </span>
-                            <span className="font-mono text-xs text-gray-500">
-                                {row.bl_reference}
-                            </span>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                            {row.bl_reference}
                         </div>
                     )}
                 </div>
@@ -400,34 +404,44 @@ const ServiceOrders = () => {
             ),
         },
         {
-            header: "Monto Total",
+            header: "Ingresos / Costos",
             accessor: "total_amount",
-            cell: (row) => (
-                <div className="text-right">
-                    <div className="text-sm font-bold text-gray-900">
-                        {formatCurrency(row.total_amount)}
+            cell: (row) => {
+                const totalCosts =
+                    (row.total_direct_costs || 0) +
+                    (row.total_admin_costs || 0);
+                return (
+                    <div className="text-right">
+                        <div className="flex items-center justify-end gap-1.5 mb-1">
+                            <span className="text-xs text-gray-500">
+                                Ingresos:
+                            </span>
+                            <span className="text-sm font-semibold text-emerald-600">
+                                {formatCurrency(row.total_amount)}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-end gap-1.5">
+                            <span className="text-xs text-gray-500">
+                                Costos:
+                            </span>
+                            <span className="text-sm font-semibold text-red-600">
+                                {formatCurrency(totalCosts)}
+                            </span>
+                        </div>
                     </div>
-                    <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px]">
-                        <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                            S: {formatCurrency(row.total_services || 0)}
-                        </span>
-                        <span className="text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
-                            T: {formatCurrency(row.total_third_party || 0)}
-                        </span>
-                    </div>
-                </div>
-            ),
+                );
+            },
         },
         {
             header: "Estado",
             accessor: "status",
             cell: (row) => (
-                <div className="space-y-1.5">
+                <div>
                     <StatusBadge status={row.status} />
                     {row.facturado && (
-                        <div className="flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                        <div className="flex items-center gap-1 text-xs text-emerald-600 mt-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            Facturado
+                            <span>Facturado</span>
                         </div>
                     )}
                 </div>
@@ -438,30 +452,27 @@ const ServiceOrders = () => {
             accessor: "actions",
             cell: (row) => (
                 <div className="flex items-center justify-end gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
+                    <button
                         onClick={(e) => {
                             e.stopPropagation();
                             handleViewDetail(row);
                         }}
-                        className="text-gray-500 hover:text-blue-600"
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Ver detalles"
                     >
                         <Eye className="w-4 h-4" />
-                    </Button>
+                    </button>
                     {row.status === "abierta" && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleCloseOrder(row.id);
                             }}
-                            className="text-gray-400 hover:text-emerald-600"
+                            className="text-gray-400 hover:text-emerald-600 transition-colors"
                             title="Cerrar Orden"
                         >
                             <Check className="w-4 h-4" />
-                        </Button>
+                        </button>
                     )}
                 </div>
             ),
@@ -477,7 +488,8 @@ const ServiceOrders = () => {
                         Órdenes de Servicio
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Gestión centralizada de tramitaciones y servicios aduanales
+                        Gestión centralizada de tramitaciones y servicios
+                        aduanales
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -516,7 +528,11 @@ const ServiceOrders = () => {
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <KPICard label="Total Órdenes" value={kpis.total} icon={FileText} />
+                <KPICard
+                    label="Total Órdenes"
+                    value={kpis.total}
+                    icon={FileText}
+                />
                 <KPICard
                     label="En Proceso"
                     value={kpis.active}
@@ -564,7 +580,10 @@ const ServiceOrders = () => {
                             <Filter className="w-4 h-4 mr-2" />
                             Filtros
                             {activeFiltersCount > 0 && (
-                                <Badge variant="primary" className="ml-2 px-1.5 py-0.5 h-5">
+                                <Badge
+                                    variant="primary"
+                                    className="ml-2 px-1.5 py-0.5 h-5"
+                                >
                                     {activeFiltersCount}
                                 </Badge>
                             )}
@@ -579,7 +598,9 @@ const ServiceOrders = () => {
                                 <Label>Estado</Label>
                                 <Select
                                     value={filters.status}
-                                    onChange={(val) => setFilters({ ...filters, status: val })}
+                                    onChange={(val) =>
+                                        setFilters({ ...filters, status: val })
+                                    }
                                     options={[
                                         { id: "abierta", name: "En Proceso" },
                                         { id: "cerrada", name: "Cerrada" },
@@ -592,7 +613,9 @@ const ServiceOrders = () => {
                                 <Label>Cliente</Label>
                                 <Select
                                     value={filters.client}
-                                    onChange={(val) => setFilters({ ...filters, client: val })}
+                                    onChange={(val) =>
+                                        setFilters({ ...filters, client: val })
+                                    }
                                     options={clients}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -604,7 +627,12 @@ const ServiceOrders = () => {
                                 <Input
                                     type="date"
                                     value={filters.dateFrom}
-                                    onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                    onChange={(e) =>
+                                        setFilters({
+                                            ...filters,
+                                            dateFrom: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
@@ -612,12 +640,22 @@ const ServiceOrders = () => {
                                 <Input
                                     type="date"
                                     value={filters.dateTo}
-                                    onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                    onChange={(e) =>
+                                        setFilters({
+                                            ...filters,
+                                            dateTo: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
                         <div className="flex justify-end pt-2">
-                            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-red-600 hover:text-red-700">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={clearFilters}
+                                className="text-red-600 hover:text-red-700"
+                            >
                                 <XCircle className="w-4 h-4 mr-1.5" />
                                 Limpiar Filtros
                             </Button>
@@ -625,7 +663,7 @@ const ServiceOrders = () => {
                     </CardContent>
                 )}
 
-                <CardContent className="p-0">
+                <CardContent className="px-5 pb-5 pt-0">
                     <DataTable
                         data={filteredOrders}
                         columns={columns}
@@ -645,7 +683,10 @@ const ServiceOrders = () => {
                 size="2xl"
                 footer={
                     <>
-                        <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsCreateModalOpen(false)}
+                        >
                             Cancelar
                         </Button>
                         <Button onClick={handleCreate}>Crear Orden</Button>
@@ -657,14 +698,18 @@ const ServiceOrders = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
                             <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">1</span>
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                    1
+                                </span>
                                 Información del Cliente
                             </h4>
                         </div>
                         <Select
                             label="Cliente *"
                             value={formData.client}
-                            onChange={(val) => setFormData({ ...formData, client: val })}
+                            onChange={(val) =>
+                                setFormData({ ...formData, client: val })
+                            }
                             options={clients}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -674,7 +719,9 @@ const ServiceOrders = () => {
                         <Select
                             label="Aforador"
                             value={formData.customs_agent}
-                            onChange={(val) => setFormData({ ...formData, customs_agent: val })}
+                            onChange={(val) =>
+                                setFormData({ ...formData, customs_agent: val })
+                            }
                             options={customsAgents}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -688,14 +735,18 @@ const ServiceOrders = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
                             <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">2</span>
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                    2
+                                </span>
                                 Datos del Embarque
                             </h4>
                         </div>
                         <Select
                             label="Tipo de Embarque *"
                             value={formData.shipment_type}
-                            onChange={(val) => setFormData({ ...formData, shipment_type: val })}
+                            onChange={(val) =>
+                                setFormData({ ...formData, shipment_type: val })
+                            }
                             options={shipmentTypes}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -704,7 +755,9 @@ const ServiceOrders = () => {
                         <Select
                             label="Proveedor Logístico"
                             value={formData.provider}
-                            onChange={(val) => setFormData({ ...formData, provider: val })}
+                            onChange={(val) =>
+                                setFormData({ ...formData, provider: val })
+                            }
                             options={providers}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -717,7 +770,12 @@ const ServiceOrders = () => {
                             <Input
                                 label="DUCA *"
                                 value={formData.duca}
-                                onChange={(e) => setFormData({ ...formData, duca: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        duca: e.target.value,
+                                    })
+                                }
                                 placeholder="Ej: 4-12345"
                                 required
                                 className="font-mono uppercase"
@@ -725,7 +783,12 @@ const ServiceOrders = () => {
                             <Input
                                 label="BL / Guía"
                                 value={formData.bl_reference}
-                                onChange={(e) => setFormData({ ...formData, bl_reference: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        bl_reference: e.target.value,
+                                    })
+                                }
                                 placeholder="Ej: MAEU123456789"
                                 className="font-mono uppercase"
                             />
@@ -733,13 +796,23 @@ const ServiceOrders = () => {
                                 label="Fecha ETA *"
                                 type="date"
                                 value={formData.eta}
-                                onChange={(e) => setFormData({ ...formData, eta: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        eta: e.target.value,
+                                    })
+                                }
                                 required
                             />
                             <Input
                                 label="Orden de Compra (PO)"
                                 value={formData.purchase_order}
-                                onChange={(e) => setFormData({ ...formData, purchase_order: e.target.value })}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        purchase_order: e.target.value,
+                                    })
+                                }
                                 placeholder="Ej: PO-998877"
                             />
                         </div>

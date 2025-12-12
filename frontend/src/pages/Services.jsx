@@ -345,9 +345,9 @@ const Services = () => {
             cell: (row) => (
                 <div className="text-sm text-gray-600">
                     {row.effective_date
-                        ? new Date(row.effective_date + "T00:00:00").toLocaleDateString(
-                              "es-GT"
-                          )
+                        ? new Date(
+                              row.effective_date + "T00:00:00"
+                          ).toLocaleDateString("es-GT")
                         : "-"}
                 </div>
             ),
@@ -505,7 +505,7 @@ const Services = () => {
                                 Nuevo Servicio
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 data={services}
                                 columns={columns}
@@ -537,7 +537,7 @@ const Services = () => {
                                 Nuevo Precio
                             </Button>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 data={customPrices}
                                 columns={customPriceColumns}

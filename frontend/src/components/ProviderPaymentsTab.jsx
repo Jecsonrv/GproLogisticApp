@@ -9,6 +9,8 @@ import {
     Upload,
     AlertCircle,
     DollarSign,
+    Edit,
+    FileText,
 } from "lucide-react";
 import {
     Button,
@@ -21,7 +23,7 @@ import {
 } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDate } from "../lib/utils";
+import { formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 
 /**
  * ProviderPaymentsTab - Gestión completa de Pagos a Proveedores
@@ -31,7 +33,11 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
     const [payments, setPayments] = useState([]);
     const [providers, setProviders] = useState([]);
     const [banks, setBanks] = useState([]);
+    const [loading, setLoading] = useState(false);
     const [isAddingPayment, setIsAddingPayment] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingPaymentId, setEditingPaymentId] = useState(null);
+    const [existingInvoiceFile, setExistingInvoiceFile] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState({
         open: false,
         id: null,
@@ -49,9 +55,40 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         ccf: "",
         invoice_number: "",
         invoice_file: null,
-        transaction_date: new Date().toISOString().split("T")[0],
+        transaction_date: getTodayDate(),
         notes: "",
     });
+
+    // Opciones formateadas para los selects
+    const transferTypeOptions = [
+        { id: "costos", name: "Costo Directo" },
+        { id: "cargos", name: "Cargo a Cliente" },
+        { id: "admin", name: "Gasto de Operación" },
+    ];
+
+    const paymentMethodOptions = [
+        { id: "", name: "Seleccionar..." },
+        { id: "transferencia", name: "Transferencia Bancaria" },
+        { id: "efectivo", name: "Efectivo" },
+        { id: "cheque", name: "Cheque" },
+        { id: "tarjeta", name: "Tarjeta" },
+    ];
+
+    const providerOptions = [
+        { id: "", name: "Seleccionar proveedor..." },
+        ...providers
+            .filter(
+                (p) =>
+                    !p.name.toLowerCase().includes("legacy") &&
+                    !p.name.toLowerCase().includes("terceros")
+            )
+            .map((p) => ({ id: String(p.id), name: p.name })),
+    ];
+
+    const bankOptions = [
+        { id: "", name: "Seleccionar banco..." },
+        ...banks.map((b) => ({ id: String(b.id), name: b.name })),
+    ];
 
     useEffect(() => {
         fetchPayments();
@@ -92,6 +129,34 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         }
     };
 
+    const handleEditPayment = (payment) => {
+        console.log("=== DATOS DEL PAGO PARA EDITAR ===", payment);
+        console.log("provider:", payment.provider);
+        console.log("bank:", payment.bank);
+        console.log("service_order:", payment.service_order);
+
+        setPaymentForm({
+            transfer_type: payment.transfer_type || "costos",
+            amount: payment.amount || "",
+            description: payment.description || "",
+            provider: payment.provider ? String(payment.provider) : "",
+            payment_method: payment.payment_method || "",
+            beneficiary_name: payment.beneficiary_name || "",
+            bank: payment.bank ? String(payment.bank) : "",
+            ccf: payment.ccf || "",
+            invoice_number: payment.invoice_number || "",
+            invoice_file: null, // No cargamos el archivo existente
+            transaction_date: payment.transaction_date
+                ? payment.transaction_date.split("T")[0]
+                : getTodayDate(),
+            notes: payment.notes || "",
+        });
+        setExistingInvoiceFile(payment.invoice_file || null);
+        setEditingPaymentId(payment.id);
+        setIsEditing(true);
+        setIsAddingPayment(true);
+    };
+
     const handleAddPayment = async (e) => {
         e.preventDefault();
 
@@ -120,12 +185,23 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             if (paymentForm.invoice_file)
                 formData.append("invoice_file", paymentForm.invoice_file);
 
-            await axios.post("/transfers/", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
+            if (isEditing) {
+                // Actualizar pago existente
+                await axios.patch(`/transfers/${editingPaymentId}/`, formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                });
+                toast.success("Pago actualizado exitosamente");
+            } else {
+                // Crear nuevo pago
+                await axios.post("/transfers/", formData, {
+                    headers: { "Content-Type": "multipart/form-data" },
+                });
+                toast.success("Pago a proveedor registrado exitosamente");
+            }
 
-            toast.success("Pago a proveedor registrado exitosamente");
             setIsAddingPayment(false);
+            setIsEditing(false);
+            setEditingPaymentId(null);
             resetForm();
             fetchPayments();
             if (onUpdate) onUpdate();
@@ -133,7 +209,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             const errorMessage =
                 error.response?.data?.error ||
                 error.response?.data?.detail ||
-                "Error al registrar pago";
+                (isEditing
+                    ? "Error al actualizar pago"
+                    : "Error al registrar pago");
             toast.error(errorMessage);
         }
     };
@@ -167,7 +245,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         try {
             await axios.patch(`/transfers/${id}/`, {
                 status: "pagado",
-                payment_date: new Date().toISOString().split("T")[0],
+                payment_date: getTodayDate(),
             });
             toast.success("Pago marcado como pagado exitosamente");
             fetchPayments();
@@ -230,9 +308,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             ccf: "",
             invoice_number: "",
             invoice_file: null,
-            transaction_date: new Date().toISOString().split("T")[0],
+            transaction_date: getTodayDate(),
             notes: "",
         });
+        setIsEditing(false);
+        setEditingPaymentId(null);
+        setExistingInvoiceFile(null);
     };
 
     const getStatusBadge = (status) => {
@@ -287,12 +368,33 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             ),
         },
         {
-            header: "Monto",
+            header: "Monto/Tipo",
             accessor: "amount",
             className: "w-32 text-right",
             cell: (row) => (
-                <span className="font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(row.amount)}
+                <div className="text-right">
+                    <div className="font-semibold tabular-nums text-slate-900">
+                        {formatCurrency(row.amount)}
+                    </div>
+                    {row.payment_method && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                            {row.payment_method === "efectivo" && "Efectivo"}
+                            {row.payment_method === "transferencia" &&
+                                "Transferencia"}
+                            {row.payment_method === "cheque" && "Cheque"}
+                            {row.payment_method === "tarjeta" && "Tarjeta"}
+                        </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            header: "Banco",
+            accessor: "bank_name",
+            className: "w-32",
+            cell: (row) => (
+                <span className="text-sm text-slate-700">
+                    {row.bank_name || <span className="text-slate-400">—</span>}
                 </span>
             ),
         },
@@ -306,37 +408,80 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             header: "Fecha",
             accessor: "transaction_date",
             className: "w-28",
-            cell: (row) => (
-                <span className="text-sm text-slate-600">
-                    {formatDate(row.transaction_date, { format: "short" })}
-                </span>
-            ),
+            cell: (row) => {
+                const [year, month, day] = row.transaction_date.split("-");
+                return (
+                    <span className="text-sm text-slate-600">
+                        {`${day}/${month}/${year}`}
+                    </span>
+                );
+            },
         },
         {
-            header: "Comprobante",
+            header: "Comp.",
             accessor: "invoice_file",
-            className: "w-24 text-center",
+            className: "w-20 text-center",
             cell: (row) =>
                 row.invoice_file ? (
-                    <a
-                        href={row.invoice_file}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center p-1.5 text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors"
-                        title="Ver comprobante"
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(row.invoice_file, "_blank");
+                        }}
+                        onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Descargar usando axios
+                            axios
+                                .get(`/transfers/${row.id}/download_invoice/`, {
+                                    responseType: "blob",
+                                })
+                                .then((response) => {
+                                    const url = window.URL.createObjectURL(
+                                        new Blob([response.data])
+                                    );
+                                    const link = document.createElement("a");
+                                    link.href = url;
+                                    link.setAttribute(
+                                        "download",
+                                        `comprobante_${
+                                            row.invoice_number || row.id
+                                        }.pdf`
+                                    );
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    link.remove();
+                                    window.URL.revokeObjectURL(url);
+                                    toast.success("Descargando comprobante...");
+                                })
+                                .catch((error) => {
+                                    toast.error(
+                                        "Error al descargar comprobante"
+                                    );
+                                });
+                        }}
+                        className="inline-flex items-center justify-center p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                        title="Click: Ver | Click derecho: Descargar"
                     >
-                        <Eye className="w-4 h-4" />
-                    </a>
+                        <FileText className="w-4 h-4" />
+                    </button>
                 ) : (
-                    <span className="text-slate-400 text-xs">Sin archivo</span>
+                    <span className="text-slate-400 text-xs">—</span>
                 ),
         },
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-32",
+            className: "w-44",
             cell: (row) => (
                 <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => handleEditPayment(row)}
+                        className="p-1.5 text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
+                        title="Editar"
+                    >
+                        <Edit className="w-4 h-4" />
+                    </button>
                     {row.status === "pendiente" && (
                         <button
                             onClick={() => handleApprove(row.id)}
@@ -454,7 +599,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             {isAddingPayment && (
                 <div className="bg-white border border-slate-200 rounded-lg p-5">
                     <h4 className="text-sm font-semibold text-slate-900 mb-4">
-                        Nuevo Pago a Proveedor
+                        {isEditing
+                            ? "Editar Pago a Proveedor"
+                            : "Nuevo Pago a Proveedor"}
                     </h4>
                     <form onSubmit={handleAddPayment} className="space-y-4">
                         <div className="grid grid-cols-3 gap-4">
@@ -463,27 +610,18 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 <Label className="label-corporate label-required">
                                     Tipo de Gasto
                                 </Label>
-                                <select
+                                <Select
                                     value={paymentForm.transfer_type}
-                                    onChange={(e) =>
+                                    onChange={(val) =>
                                         setPaymentForm({
                                             ...paymentForm,
-                                            transfer_type: e.target.value,
+                                            transfer_type: val,
                                         })
                                     }
-                                    required
-                                    className="input-corporate"
-                                >
-                                    <option value="costos">
-                                        Costo Directo
-                                    </option>
-                                    <option value="cargos">
-                                        Cargo a Cliente
-                                    </option>
-                                    <option value="admin">
-                                        Gasto de Operación
-                                    </option>
-                                </select>
+                                    options={transferTypeOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
                                 <p className="text-xs text-slate-500 mt-1">
                                     {paymentForm.transfer_type === "costos" &&
                                         "Gastos para ejecutar servicio de cliente"}
@@ -541,25 +679,20 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 <Label className="label-corporate">
                                     Proveedor
                                 </Label>
-                                <select
+                                <Select
                                     value={paymentForm.provider}
-                                    onChange={(e) =>
+                                    onChange={(val) =>
                                         setPaymentForm({
                                             ...paymentForm,
-                                            provider: e.target.value,
+                                            provider: val,
                                         })
                                     }
-                                    className="input-corporate"
-                                >
-                                    <option value="">
-                                        Seleccionar proveedor...
-                                    </option>
-                                    {providers.map((p) => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={providerOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    placeholder="Seleccionar proveedor..."
+                                />
                             </div>
 
                             {/* Beneficiario */}
@@ -607,51 +740,41 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 <Label className="label-corporate">
                                     Método de Pago
                                 </Label>
-                                <select
+                                <Select
                                     value={paymentForm.payment_method}
-                                    onChange={(e) =>
+                                    onChange={(val) =>
                                         setPaymentForm({
                                             ...paymentForm,
-                                            payment_method: e.target.value,
+                                            payment_method: val,
                                         })
                                     }
-                                    className="input-corporate"
-                                >
-                                    <option value="">Seleccionar...</option>
-                                    <option value="transferencia">
-                                        Transferencia Bancaria
-                                    </option>
-                                    <option value="efectivo">Efectivo</option>
-                                    <option value="cheque">Cheque</option>
-                                    <option value="tarjeta">Tarjeta</option>
-                                </select>
+                                    options={paymentMethodOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    placeholder="Seleccionar..."
+                                />
                             </div>
 
                             {/* Banco */}
                             <div>
                                 <Label className="label-corporate">Banco</Label>
-                                <select
+                                <Select
                                     value={paymentForm.bank}
-                                    onChange={(e) =>
+                                    onChange={(val) =>
                                         setPaymentForm({
                                             ...paymentForm,
-                                            bank: e.target.value,
+                                            bank: val,
                                         })
                                     }
-                                    className="input-corporate"
-                                >
-                                    <option value="">
-                                        Seleccionar banco...
-                                    </option>
-                                    {banks.map((b) => (
-                                        <option key={b.id} value={b.id}>
-                                            {b.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={bankOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    placeholder="Seleccionar banco..."
+                                />
                             </div>
 
-                            {/* Número de Factura */}
+                            {/* Número de Factura/CCF */}
                             <div>
                                 <Label className="label-corporate">
                                     Número de Factura/CCF
@@ -666,8 +789,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                         })
                                     }
                                     className="input-corporate"
-                                    placeholder="Ej: F-2025-001"
+                                    placeholder="Ej: F-2025-001 o CCF-123456"
                                 />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Comprobante de Crédito Fiscal o número de
+                                    factura
+                                </p>
                             </div>
                         </div>
 
@@ -676,12 +803,30 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             <Label className="label-corporate">
                                 Comprobante de Pago
                             </Label>
+                            {isEditing && existingInvoiceFile && (
+                                <div className="mt-1 mb-2 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                                    <span className="text-sm text-slate-700">
+                                        Archivo actual
+                                    </span>
+                                    <a
+                                        href={existingInvoiceFile}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                                    >
+                                        <Eye className="w-4 h-4" />
+                                        Ver archivo
+                                    </a>
+                                </div>
+                            )}
                             <div className="mt-1">
                                 <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition-colors">
                                     <Upload className="w-5 h-5 text-slate-400 mr-2" />
                                     <span className="text-sm text-slate-600">
                                         {paymentForm.invoice_file
                                             ? paymentForm.invoice_file.name
+                                            : isEditing && existingInvoiceFile
+                                            ? "Click para reemplazar archivo (PDF, JPG, PNG - Max 5MB)"
                                             : "Click para subir archivo (PDF, JPG, PNG - Max 5MB)"}
                                     </span>
                                     <input
@@ -693,8 +838,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 </label>
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                                Opcional. Puedes subirlo después si aún no
-                                tienes el comprobante.
+                                {isEditing && existingInvoiceFile
+                                    ? "Opcional. Solo sube un archivo si deseas reemplazar el existente."
+                                    : "Opcional. Puedes subirlo después si aún no tienes el comprobante."}
                             </p>
                         </div>
 
@@ -731,77 +877,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 type="submit"
                                 className="bg-brand-600 hover:bg-brand-700"
                             >
-                                Registrar Pago
+                                {isEditing
+                                    ? "Actualizar Pago"
+                                    : "Registrar Pago"}
                             </Button>
                         </div>
                     </form>
-                </div>
-            )}
-
-            {/* Resumen Financiero */}
-            {payments.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                            Costos Directos
-                        </div>
-                        <div className="text-2xl font-bold text-danger-600 mt-1.5 tabular-nums">
-                            {formatCurrency(
-                                payments
-                                    .filter((p) => p.transfer_type === "costos")
-                                    .reduce(
-                                        (sum, p) =>
-                                            sum + parseFloat(p.amount || 0),
-                                        0
-                                    )
-                            )}
-                        </div>
-                    </div>
-                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                            Cargos a Cliente
-                        </div>
-                        <div className="text-2xl font-bold text-success-600 mt-1.5 tabular-nums">
-                            {formatCurrency(
-                                payments
-                                    .filter((p) => p.transfer_type === "cargos")
-                                    .reduce(
-                                        (sum, p) =>
-                                            sum + parseFloat(p.amount || 0),
-                                        0
-                                    )
-                            )}
-                        </div>
-                    </div>
-                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                            Gastos de Operación
-                        </div>
-                        <div className="text-2xl font-bold text-slate-600 mt-1.5 tabular-nums">
-                            {formatCurrency(
-                                payments
-                                    .filter((p) => p.transfer_type === "admin")
-                                    .reduce(
-                                        (sum, p) =>
-                                            sum + parseFloat(p.amount || 0),
-                                        0
-                                    )
-                            )}
-                        </div>
-                    </div>
-                    <div className="bg-white p-4 rounded-lg border-2 border-brand-200 hover:shadow-sm transition-shadow">
-                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                            Total General
-                        </div>
-                        <div className="text-2xl font-bold text-brand-600 mt-1.5 tabular-nums">
-                            {formatCurrency(
-                                payments.reduce(
-                                    (sum, p) => sum + parseFloat(p.amount || 0),
-                                    0
-                                )
-                            )}
-                        </div>
-                    </div>
                 </div>
             )}
 

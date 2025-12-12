@@ -21,6 +21,7 @@ import {
     Receipt,
     Banknote,
     AlertCircle,
+    MoreVertical,
 } from "lucide-react";
 import {
     Button,
@@ -42,7 +43,7 @@ import {
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDate, cn } from "../lib/utils";
+import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
 
 // ============================================
 // STATUS CONFIGURATION
@@ -164,8 +165,6 @@ const EDIT_TYPE_OPTIONS = [
     { id: "costos", name: "Costos Directos" },
     { id: "cargos", name: "Cargos a Cliente" },
     { id: "admin", name: "Gastos de Operación" },
-    { id: "terceros", name: "Terceros (Legacy)" },
-    { id: "propios", name: "Propios (Legacy)" },
 ];
 
 const CREATE_STATUS_OPTIONS = [
@@ -178,7 +177,6 @@ const EDIT_STATUS_OPTIONS = [
     { id: "pendiente", name: "Pendiente" },
     { id: "aprobado", name: "Aprobado" },
     { id: "pagado", name: "Pagado" },
-    { id: "provisionada", name: "Provisionada (Legacy)" },
 ];
 
 // ============================================
@@ -220,14 +218,19 @@ const TypeBadge = ({ type }) => {
 // ============================================
 // KPI CARD
 // ============================================
-const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => {
+const KPICard = ({
+    label,
+    value,
+    subtext,
+    icon: Icon,
+    variant = "default",
+}) => {
     const variants = {
         default: "text-slate-900",
         primary: "text-blue-600",
         success: "text-emerald-600",
         warning: "text-amber-600",
         danger: "text-red-600",
-        purple: "text-purple-600",
     };
 
     return (
@@ -235,12 +238,21 @@ const KPICard = ({ label, value, subtext, icon: Icon, variant = "default" }) => 
             <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <p className="text-sm font-medium text-gray-500">{label}</p>
-                        <p className={cn("text-2xl font-bold mt-1 tabular-nums", variants[variant])}>
+                        <p className="text-sm font-medium text-gray-500">
+                            {label}
+                        </p>
+                        <p
+                            className={cn(
+                                "text-2xl font-bold mt-1",
+                                variants[variant]
+                            )}
+                        >
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400 mt-1">{subtext}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {subtext}
+                            </p>
                         )}
                     </div>
                     {Icon && (
@@ -273,7 +285,10 @@ function ProviderPayments() {
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
+    const [deleteConfirm, setDeleteConfirm] = useState({
+        open: false,
+        id: null,
+    });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Search and filters
@@ -300,35 +315,47 @@ function ProviderPayments() {
         ccf: "",
         beneficiary_name: "",
         status: "pendiente",
-        transaction_date: new Date().toISOString().split('T')[0],
+        transaction_date: getTodayDate(),
         notes: "",
         invoice_file: null,
     };
     const [formData, setFormData] = useState(initialFormData);
 
     // Derived options for Select components
-    const serviceOrderOptions = useMemo(() => [
-        { id: "", name: "Sin OS (Gasto Administrativo)" },
-        ...serviceOrders.map(os => ({
-            id: String(os.id),
-            name: `${os.order_number} - ${os.client_name}`
-        }))
-    ], [serviceOrders]);
+    const serviceOrderOptions = useMemo(
+        () => [
+            { id: "", name: "Sin OS (Gasto Administrativo)" },
+            ...serviceOrders.map((os) => ({
+                id: String(os.id),
+                name: `${os.order_number} - ${os.client_name}`,
+            })),
+        ],
+        [serviceOrders]
+    );
 
-    const providerOptions = useMemo(() => [
-        { id: "", name: "Seleccionar proveedor" },
-        ...providers.map(p => ({ id: String(p.id), name: p.name }))
-    ], [providers]);
+    const providerOptions = useMemo(
+        () => [
+            { id: "", name: "Seleccionar proveedor" },
+            ...providers.map((p) => ({ id: String(p.id), name: p.name })),
+        ],
+        [providers]
+    );
 
-    const bankOptions = useMemo(() => [
-        { id: "", name: "Seleccionar banco" },
-        ...banks.map(b => ({ id: String(b.id), name: b.name }))
-    ], [banks]);
+    const bankOptions = useMemo(
+        () => [
+            { id: "", name: "Seleccionar banco" },
+            ...banks.map((b) => ({ id: String(b.id), name: b.name })),
+        ],
+        [banks]
+    );
 
-    const filterProviderOptions = useMemo(() => [
-        { id: "", name: "Todos" },
-        ...providers.map(p => ({ id: String(p.id), name: p.name }))
-    ], [providers]);
+    const filterProviderOptions = useMemo(
+        () => [
+            { id: "", name: "Todos" },
+            ...providers.map((p) => ({ id: String(p.id), name: p.name })),
+        ],
+        [providers]
+    );
 
     useEffect(() => {
         fetchPayments();
@@ -350,12 +377,13 @@ function ProviderPayments() {
 
     const fetchCatalogs = async () => {
         try {
-            const [ordersRes, providersRes, banksRes, clientsRes] = await Promise.all([
-                axios.get("/orders/service-orders/"),
-                axios.get("/catalogs/providers/"),
-                axios.get("/catalogs/banks/"),
-                axios.get("/clients/"),
-            ]);
+            const [ordersRes, providersRes, banksRes, clientsRes] =
+                await Promise.all([
+                    axios.get("/orders/service-orders/"),
+                    axios.get("/catalogs/providers/"),
+                    axios.get("/catalogs/banks/"),
+                    axios.get("/clients/"),
+                ]);
             setServiceOrders(ordersRes.data);
             setProviders(providersRes.data);
             setBanks(banksRes.data);
@@ -388,7 +416,8 @@ function ProviderPayments() {
             resetForm();
             fetchPayments();
         } catch (error) {
-            const errorMsg = error.response?.data?.message ||
+            const errorMsg =
+                error.response?.data?.message ||
                 Object.values(error.response?.data || {})[0]?.[0] ||
                 "Error al registrar pago";
             toast.error(errorMsg);
@@ -411,9 +440,13 @@ function ProviderPayments() {
                 }
             });
 
-            await axios.patch(`/transfers/${selectedPayment.id}/`, formDataToSend, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
+            await axios.patch(
+                `/transfers/${selectedPayment.id}/`,
+                formDataToSend,
+                {
+                    headers: { "Content-Type": "multipart/form-data" },
+                }
+            );
 
             toast.success("Pago actualizado exitosamente");
             setIsEditModalOpen(false);
@@ -440,26 +473,45 @@ function ProviderPayments() {
     };
 
     const openEditModal = (payment) => {
+        console.log("=== DATOS DEL PAGO PARA EDITAR (Página General) ===");
+        console.log("payment completo:", payment);
+        console.log("service_order:", payment.service_order);
+        console.log("provider:", payment.provider);
+        console.log("bank:", payment.bank);
+
         setSelectedPayment(payment);
-        setFormData({
-            service_order: payment.service_order?.id ? String(payment.service_order.id) :
-                          (payment.service_order ? String(payment.service_order) : ""),
+
+        const formDataToSet = {
+            service_order: payment.service_order?.id
+                ? String(payment.service_order.id)
+                : payment.service_order
+                ? String(payment.service_order)
+                : "",
             transfer_type: payment.transfer_type || "costos",
-            provider: payment.provider?.id ? String(payment.provider.id) :
-                     (payment.provider ? String(payment.provider) : ""),
+            provider: payment.provider?.id
+                ? String(payment.provider.id)
+                : payment.provider
+                ? String(payment.provider)
+                : "",
             description: payment.description || "",
             amount: payment.amount ? String(payment.amount) : "",
-            bank: payment.bank?.id ? String(payment.bank.id) :
-                 (payment.bank ? String(payment.bank) : ""),
+            bank: payment.bank?.id
+                ? String(payment.bank.id)
+                : payment.bank
+                ? String(payment.bank)
+                : "",
             payment_method: payment.payment_method || "transferencia",
             invoice_number: payment.invoice_number || "",
             ccf: payment.ccf || "",
             beneficiary_name: payment.beneficiary_name || "",
             status: payment.status || "pendiente",
-            transaction_date: payment.transaction_date || new Date().toISOString().split('T')[0],
+            transaction_date: payment.transaction_date || getTodayDate(),
             notes: payment.notes || "",
             invoice_file: null,
-        });
+        };
+
+        console.log("FormData a establecer:", formDataToSet);
+        setFormData(formDataToSet);
         setIsEditModalOpen(true);
     };
 
@@ -490,7 +542,10 @@ function ProviderPayments() {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toISOString().split("T")[0];
-            link.setAttribute("download", `pagos_proveedores_${timestamp}.xlsx`);
+            link.setAttribute(
+                "download",
+                `pagos_proveedores_${timestamp}.xlsx`
+            );
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -522,7 +577,9 @@ function ProviderPayments() {
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
                 const matchesSearch =
-                    payment.service_order_number?.toLowerCase().includes(query) ||
+                    payment.service_order_number
+                        ?.toLowerCase()
+                        .includes(query) ||
                     payment.provider_name?.toLowerCase().includes(query) ||
                     payment.description?.toLowerCase().includes(query) ||
                     payment.invoice_number?.toLowerCase().includes(query) ||
@@ -530,9 +587,18 @@ function ProviderPayments() {
                 if (!matchesSearch) return false;
             }
 
-            if (filters.transfer_type && payment.transfer_type !== filters.transfer_type) return false;
-            if (filters.status && payment.status !== filters.status) return false;
-            if (filters.provider && payment.provider !== parseInt(filters.provider)) return false;
+            if (
+                filters.transfer_type &&
+                payment.transfer_type !== filters.transfer_type
+            )
+                return false;
+            if (filters.status && payment.status !== filters.status)
+                return false;
+            if (
+                filters.provider &&
+                payment.provider !== parseInt(filters.provider)
+            )
+                return false;
 
             if (filters.dateFrom) {
                 const paymentDate = new Date(payment.transaction_date);
@@ -553,7 +619,10 @@ function ProviderPayments() {
 
     // KPIs
     const kpis = useMemo(() => {
-        const total = payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        const total = payments.reduce(
+            (sum, p) => sum + parseFloat(p.amount || 0),
+            0
+        );
         const pendiente = payments
             .filter((p) => p.status === "pendiente")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
@@ -567,7 +636,11 @@ function ProviderPayments() {
             .filter((p) => p.transfer_type === "costos")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
         const cargos = payments
-            .filter((p) => p.transfer_type === "cargos" || p.transfer_type === "terceros")
+            .filter(
+                (p) =>
+                    p.transfer_type === "cargos" ||
+                    p.transfer_type === "terceros"
+            )
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
         return { total, pendiente, aprobado, pagado, costos, cargos };
@@ -590,8 +663,20 @@ function ProviderPayments() {
             accessor: "service_order_number",
             cell: (row) => (
                 <div>
-                    <div className="font-mono text-sm font-semibold text-gray-900">
-                        {row.service_order_number || (
+                    <div className="font-mono text-sm font-semibold">
+                        {row.service_order_number ? (
+                            <a
+                                href={`/orders/${row.service_order}`}
+                                className="text-brand-600 hover:text-brand-700 hover:underline"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    window.location.href = `/orders/${row.service_order}`;
+                                }}
+                            >
+                                {row.service_order_number}
+                            </a>
+                        ) : (
                             <span className="text-gray-400 italic">Sin OS</span>
                         )}
                     </div>
@@ -626,7 +711,7 @@ function ProviderPayments() {
             ),
         },
         {
-            header: "Monto",
+            header: "Monto/Tipo",
             accessor: "amount",
             cell: (row) => (
                 <div className="text-right">
@@ -642,21 +727,24 @@ function ProviderPayments() {
             ),
         },
         {
-            header: "Factura",
+            header: "Banco",
+            accessor: "bank_name",
+            cell: (row) => (
+                <div className="text-sm text-gray-700">
+                    {row.bank_name || <span className="text-gray-400">—</span>}
+                </div>
+            ),
+        },
+        {
+            header: "CCF",
             accessor: "invoice_number",
             cell: (row) => (
-                <div className="space-y-1">
-                    {row.invoice_number && (
+                <div>
+                    {row.invoice_number ? (
                         <div className="font-mono text-xs text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
                             {row.invoice_number}
                         </div>
-                    )}
-                    {row.ccf && (
-                        <div className="text-xs text-gray-500">
-                            CCF: {row.ccf}
-                        </div>
-                    )}
-                    {!row.invoice_number && !row.ccf && (
+                    ) : (
                         <span className="text-gray-400 text-xs">—</span>
                     )}
                 </div>
@@ -666,6 +754,68 @@ function ProviderPayments() {
             header: "Estado",
             accessor: "status",
             cell: (row) => <StatusBadge status={row.status} />,
+        },
+        {
+            header: "Comp.",
+            accessor: "invoice_file",
+            className: "w-16 text-center",
+            cell: (row) =>
+                row.invoice_file ? (
+                    <div className="relative group">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(row.invoice_file, "_blank");
+                            }}
+                            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                            title="Ver comprobante (click para ver, click derecho para descargar)"
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // Descargar usando axios
+                                axios
+                                    .get(
+                                        `/transfers/${row.id}/download_invoice/`,
+                                        {
+                                            responseType: "blob",
+                                        }
+                                    )
+                                    .then((response) => {
+                                        const url = window.URL.createObjectURL(
+                                            new Blob([response.data])
+                                        );
+                                        const link =
+                                            document.createElement("a");
+                                        link.href = url;
+                                        link.setAttribute(
+                                            "download",
+                                            `comprobante_${
+                                                row.invoice_number || row.id
+                                            }.pdf`
+                                        );
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        link.remove();
+                                        window.URL.revokeObjectURL(url);
+                                        toast.success(
+                                            "Descargando comprobante..."
+                                        );
+                                    })
+                                    .catch((error) => {
+                                        toast.error(
+                                            "Error al descargar comprobante"
+                                        );
+                                    });
+                            }}
+                        >
+                            <FileText className="w-4 h-4" />
+                        </Button>
+                    </div>
+                ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                ),
         },
         {
             header: "Acciones",
@@ -737,7 +887,8 @@ function ProviderPayments() {
                         Pagos a Proveedores
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Gestión de gastos, costos y pagos asociados a órdenes de servicio
+                        Gestión de gastos, costos y pagos asociados a órdenes de
+                        servicio
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -775,13 +926,7 @@ function ProviderPayments() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                <KPICard
-                    label="Total Gastos"
-                    value={formatCurrency(kpis.total)}
-                    icon={DollarSign}
-                    variant="default"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <KPICard
                     label="Pendientes"
                     value={formatCurrency(kpis.pendiente)}
@@ -807,10 +952,11 @@ function ProviderPayments() {
                     variant="danger"
                 />
                 <KPICard
-                    label="Cargos Cliente"
-                    value={formatCurrency(kpis.cargos)}
-                    icon={TrendingUp}
-                    variant="success"
+                    label="Total General"
+                    value={formatCurrency(kpis.total)}
+                    icon={DollarSign}
+                    variant="default"
+                    subtext="Todos los gastos"
                 />
             </div>
 
@@ -835,7 +981,10 @@ function ProviderPayments() {
                             <Filter className="w-4 h-4 mr-2" />
                             Filtros
                             {activeFiltersCount > 0 && (
-                                <Badge variant="primary" className="ml-2 px-1.5 py-0.5 h-5">
+                                <Badge
+                                    variant="primary"
+                                    className="ml-2 px-1.5 py-0.5 h-5"
+                                >
                                     {activeFiltersCount}
                                 </Badge>
                             )}
@@ -849,53 +998,62 @@ function ProviderPayments() {
                 {isFiltersOpen && (
                     <CardContent className="pt-0 pb-4 border-b border-gray-100">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-gray-50 rounded-lg">
-                            <div>
-                                <Label className="text-xs">Tipo de Gasto</Label>
-                                <Select
-                                    value={filters.transfer_type}
-                                    onChange={(val) => setFilters({ ...filters, transfer_type: val })}
-                                    options={TRANSFER_TYPE_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs">Estado</Label>
-                                <Select
-                                    value={filters.status}
-                                    onChange={(val) => setFilters({ ...filters, status: val })}
-                                    options={STATUS_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs">Proveedor</Label>
-                                <Select
-                                    value={filters.provider}
-                                    onChange={(val) => setFilters({ ...filters, provider: val })}
-                                    options={filterProviderOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs">Desde</Label>
-                                <Input
-                                    type="date"
-                                    value={filters.dateFrom}
-                                    onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs">Hasta</Label>
-                                <Input
-                                    type="date"
-                                    value={filters.dateTo}
-                                    onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                                />
-                            </div>
+                            <Select
+                                label="Tipo de Gasto"
+                                value={filters.transfer_type}
+                                onChange={(val) =>
+                                    setFilters({
+                                        ...filters,
+                                        transfer_type: val,
+                                    })
+                                }
+                                options={TRANSFER_TYPE_OPTIONS}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
+                            <Select
+                                label="Estado"
+                                value={filters.status}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, status: val })
+                                }
+                                options={STATUS_OPTIONS}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
+                            <Select
+                                label="Proveedor"
+                                value={filters.provider}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, provider: val })
+                                }
+                                options={filterProviderOptions}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                            />
+                            <Input
+                                label="Desde"
+                                type="date"
+                                value={filters.dateFrom}
+                                onChange={(e) =>
+                                    setFilters({
+                                        ...filters,
+                                        dateFrom: e.target.value,
+                                    })
+                                }
+                            />
+                            <Input
+                                label="Hasta"
+                                type="date"
+                                value={filters.dateTo}
+                                onChange={(e) =>
+                                    setFilters({
+                                        ...filters,
+                                        dateTo: e.target.value,
+                                    })
+                                }
+                            />
                         </div>
                         <div className="flex justify-end pt-3">
                             <Button
@@ -911,7 +1069,7 @@ function ProviderPayments() {
                     </CardContent>
                 )}
 
-                <CardContent className="p-0">
+                <CardContent className="px-5 pb-5 pt-0">
                     <DataTable
                         data={filteredPayments}
                         columns={columns}
@@ -937,7 +1095,9 @@ function ProviderPayments() {
                     {/* Section 1: Asociación */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">1</span>
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                1
+                            </span>
                             Asociación del Pago
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -945,7 +1105,12 @@ function ProviderPayments() {
                                 <Label>Orden de Servicio</Label>
                                 <Select
                                     value={formData.service_order}
-                                    onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            service_order: val,
+                                        })
+                                    }
                                     options={serviceOrderOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -959,7 +1124,12 @@ function ProviderPayments() {
                                 <Label>Tipo de Gasto *</Label>
                                 <Select
                                     value={formData.transfer_type}
-                                    onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            transfer_type: val,
+                                        })
+                                    }
                                     options={CREATE_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -973,7 +1143,9 @@ function ProviderPayments() {
                     {/* Section 2: Proveedor y Monto */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                2
+                            </span>
                             Datos del Proveedor y Monto
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -981,7 +1153,12 @@ function ProviderPayments() {
                                 <Label>Proveedor</Label>
                                 <Select
                                     value={formData.provider}
-                                    onChange={(val) => setFormData({ ...formData, provider: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            provider: val,
+                                        })
+                                    }
                                     options={providerOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -992,7 +1169,12 @@ function ProviderPayments() {
                                 <Label>Beneficiario (si es diferente)</Label>
                                 <Input
                                     value={formData.beneficiary_name}
-                                    onChange={(e) => setFormData({ ...formData, beneficiary_name: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            beneficiary_name: e.target.value,
+                                        })
+                                    }
                                     placeholder="Nombre del beneficiario"
                                 />
                             </div>
@@ -1000,7 +1182,12 @@ function ProviderPayments() {
                                 <Label>Descripción *</Label>
                                 <Input
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            description: e.target.value,
+                                        })
+                                    }
                                     placeholder="Concepto del pago..."
                                     required
                                 />
@@ -1012,7 +1199,12 @@ function ProviderPayments() {
                                     step="0.01"
                                     min="0"
                                     value={formData.amount}
-                                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            amount: e.target.value,
+                                        })
+                                    }
                                     placeholder="0.00"
                                     required
                                 />
@@ -1022,7 +1214,12 @@ function ProviderPayments() {
                                 <Input
                                     type="date"
                                     value={formData.transaction_date}
-                                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            transaction_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -1033,7 +1230,9 @@ function ProviderPayments() {
                     {/* Section 3: Pago y Facturación */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                3
+                            </span>
                             Información de Pago y Facturación
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -1041,7 +1240,12 @@ function ProviderPayments() {
                                 <Label>Método de Pago</Label>
                                 <Select
                                     value={formData.payment_method}
-                                    onChange={(val) => setFormData({ ...formData, payment_method: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            payment_method: val,
+                                        })
+                                    }
                                     options={PAYMENT_METHOD_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1051,7 +1255,9 @@ function ProviderPayments() {
                                 <Label>Banco</Label>
                                 <Select
                                     value={formData.bank}
-                                    onChange={(val) => setFormData({ ...formData, bank: val })}
+                                    onChange={(val) =>
+                                        setFormData({ ...formData, bank: val })
+                                    }
                                     options={bankOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1062,35 +1268,45 @@ function ProviderPayments() {
                                 <Label>Estado</Label>
                                 <Select
                                     value={formData.status}
-                                    onChange={(val) => setFormData({ ...formData, status: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            status: val,
+                                        })
+                                    }
                                     options={CREATE_STATUS_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                 />
                             </div>
-                            <div>
-                                <Label>No. Factura</Label>
+                            <div className="sm:col-span-2">
+                                <Label>Número de Factura/CCF</Label>
                                 <Input
                                     value={formData.invoice_number}
-                                    onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-                                    placeholder="F-2025-001"
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            invoice_number: e.target.value,
+                                        })
+                                    }
+                                    placeholder="F-2025-001 o CCF-123456"
                                     className="font-mono"
                                 />
-                            </div>
-                            <div>
-                                <Label>CCF</Label>
-                                <Input
-                                    value={formData.ccf}
-                                    onChange={(e) => setFormData({ ...formData, ccf: e.target.value })}
-                                    placeholder="Crédito Fiscal"
-                                    className="font-mono"
-                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Comprobante de Crédito Fiscal o número de
+                                    factura
+                                </p>
                             </div>
                             <div>
                                 <Label>Archivo Factura</Label>
                                 <FileUpload
                                     accept=".pdf,.jpg,.jpeg,.png"
-                                    onFileChange={(file) => setFormData({ ...formData, invoice_file: file })}
+                                    onFileChange={(file) =>
+                                        setFormData({
+                                            ...formData,
+                                            invoice_file: file,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -1102,7 +1318,12 @@ function ProviderPayments() {
                         <textarea
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                            onChange={(e) =>
+                                setFormData({
+                                    ...formData,
+                                    notes: e.target.value,
+                                })
+                            }
                             placeholder="Observaciones adicionales..."
                         />
                     </div>
@@ -1139,7 +1360,9 @@ function ProviderPayments() {
                     {/* Section 1: Asociación */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">1</span>
+                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
+                                1
+                            </span>
                             Asociación del Pago
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1147,7 +1370,12 @@ function ProviderPayments() {
                                 <Label>Orden de Servicio</Label>
                                 <Select
                                     value={formData.service_order}
-                                    onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            service_order: val,
+                                        })
+                                    }
                                     options={serviceOrderOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1158,7 +1386,12 @@ function ProviderPayments() {
                                 <Label>Tipo de Gasto *</Label>
                                 <Select
                                     value={formData.transfer_type}
-                                    onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            transfer_type: val,
+                                        })
+                                    }
                                     options={EDIT_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1172,7 +1405,9 @@ function ProviderPayments() {
                     {/* Section 2: Proveedor y Monto */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">2</span>
+                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
+                                2
+                            </span>
                             Datos del Proveedor y Monto
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1180,7 +1415,12 @@ function ProviderPayments() {
                                 <Label>Proveedor</Label>
                                 <Select
                                     value={formData.provider}
-                                    onChange={(val) => setFormData({ ...formData, provider: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            provider: val,
+                                        })
+                                    }
                                     options={providerOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1191,7 +1431,12 @@ function ProviderPayments() {
                                 <Label>Beneficiario</Label>
                                 <Input
                                     value={formData.beneficiary_name}
-                                    onChange={(e) => setFormData({ ...formData, beneficiary_name: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            beneficiary_name: e.target.value,
+                                        })
+                                    }
                                     placeholder="Nombre del beneficiario"
                                 />
                             </div>
@@ -1199,7 +1444,12 @@ function ProviderPayments() {
                                 <Label>Descripción *</Label>
                                 <Input
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            description: e.target.value,
+                                        })
+                                    }
                                     placeholder="Concepto del pago..."
                                     required
                                 />
@@ -1211,7 +1461,12 @@ function ProviderPayments() {
                                     step="0.01"
                                     min="0"
                                     value={formData.amount}
-                                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            amount: e.target.value,
+                                        })
+                                    }
                                     placeholder="0.00"
                                     required
                                 />
@@ -1221,7 +1476,12 @@ function ProviderPayments() {
                                 <Input
                                     type="date"
                                     value={formData.transaction_date}
-                                    onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            transaction_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -1232,7 +1492,9 @@ function ProviderPayments() {
                     {/* Section 3: Pago y Facturación */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
+                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
+                                3
+                            </span>
                             Información de Pago y Facturación
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -1240,7 +1502,12 @@ function ProviderPayments() {
                                 <Label>Método de Pago</Label>
                                 <Select
                                     value={formData.payment_method}
-                                    onChange={(val) => setFormData({ ...formData, payment_method: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            payment_method: val,
+                                        })
+                                    }
                                     options={PAYMENT_METHOD_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1250,7 +1517,9 @@ function ProviderPayments() {
                                 <Label>Banco</Label>
                                 <Select
                                     value={formData.bank}
-                                    onChange={(val) => setFormData({ ...formData, bank: val })}
+                                    onChange={(val) =>
+                                        setFormData({ ...formData, bank: val })
+                                    }
                                     options={bankOptions}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1261,35 +1530,45 @@ function ProviderPayments() {
                                 <Label>Estado</Label>
                                 <Select
                                     value={formData.status}
-                                    onChange={(val) => setFormData({ ...formData, status: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            status: val,
+                                        })
+                                    }
                                     options={EDIT_STATUS_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                 />
                             </div>
-                            <div>
-                                <Label>No. Factura</Label>
+                            <div className="sm:col-span-2">
+                                <Label>Número de Factura/CCF</Label>
                                 <Input
                                     value={formData.invoice_number}
-                                    onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-                                    placeholder="F-2025-001"
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            invoice_number: e.target.value,
+                                        })
+                                    }
+                                    placeholder="F-2025-001 o CCF-123456"
                                     className="font-mono"
                                 />
-                            </div>
-                            <div>
-                                <Label>CCF</Label>
-                                <Input
-                                    value={formData.ccf}
-                                    onChange={(e) => setFormData({ ...formData, ccf: e.target.value })}
-                                    placeholder="Crédito Fiscal"
-                                    className="font-mono"
-                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Comprobante de Crédito Fiscal o número de
+                                    factura
+                                </p>
                             </div>
                             <div>
                                 <Label>Nueva Factura (opcional)</Label>
                                 <FileUpload
                                     accept=".pdf,.jpg,.jpeg,.png"
-                                    onFileChange={(file) => setFormData({ ...formData, invoice_file: file })}
+                                    onFileChange={(file) =>
+                                        setFormData({
+                                            ...formData,
+                                            invoice_file: file,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -1301,7 +1580,12 @@ function ProviderPayments() {
                         <textarea
                             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                            onChange={(e) =>
+                                setFormData({
+                                    ...formData,
+                                    notes: e.target.value,
+                                })
+                            }
                             placeholder="Observaciones adicionales..."
                         />
                     </div>
@@ -1348,14 +1632,21 @@ function ProviderPayments() {
                                 {selectedPayment.payment_method && (
                                     <div className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
                                         <CreditCard className="w-4 h-4" />
-                                        {PAYMENT_METHODS[selectedPayment.payment_method]}
+                                        {
+                                            PAYMENT_METHODS[
+                                                selectedPayment.payment_method
+                                            ]
+                                        }
                                     </div>
                                 )}
                             </div>
                             <div className="text-right space-y-2">
                                 <StatusBadge status={selectedPayment.status} />
                                 <div className="text-xs text-slate-500">
-                                    {formatDate(selectedPayment.transaction_date, { format: "long" })}
+                                    {formatDate(
+                                        selectedPayment.transaction_date,
+                                        { format: "long" }
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1367,15 +1658,33 @@ function ProviderPayments() {
                                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                         Tipo de Pago
                                     </div>
-                                    <TypeBadge type={selectedPayment.transfer_type} />
+                                    <TypeBadge
+                                        type={selectedPayment.transfer_type}
+                                    />
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                         Orden de Servicio
                                     </div>
                                     <div className="text-sm font-medium text-slate-900">
-                                        {selectedPayment.service_order_number || (
-                                            <span className="text-slate-400 italic">Sin OS vinculada</span>
+                                        {selectedPayment.service_order_number ? (
+                                            <a
+                                                href={`/orders/${selectedPayment.service_order}`}
+                                                className="text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 font-mono"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    window.location.href = `/orders/${selectedPayment.service_order}`;
+                                                }}
+                                            >
+                                                {
+                                                    selectedPayment.service_order_number
+                                                }
+                                                <Eye className="w-3.5 h-3.5" />
+                                            </a>
+                                        ) : (
+                                            <span className="text-slate-400 italic">
+                                                Sin OS vinculada
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -1387,7 +1696,9 @@ function ProviderPayments() {
                                     </div>
                                     <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
                                         <Building2 className="w-4 h-4 text-slate-400" />
-                                        {selectedPayment.provider_name || selectedPayment.beneficiary_name || "No especificado"}
+                                        {selectedPayment.provider_name ||
+                                            selectedPayment.beneficiary_name ||
+                                            "No especificado"}
                                     </div>
                                 </div>
                                 <div>
@@ -1395,36 +1706,98 @@ function ProviderPayments() {
                                         Banco
                                     </div>
                                     <div className="text-sm text-slate-700">
-                                        {selectedPayment.bank?.name || selectedPayment.bank_name || "No especificado"}
+                                        {selectedPayment.bank?.name ||
+                                            selectedPayment.bank_name ||
+                                            "No especificado"}
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Facturación */}
-                        {(selectedPayment.invoice_number || selectedPayment.ccf) && (
+                        {selectedPayment.invoice_number && (
                             <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                                 <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                     <Receipt className="w-4 h-4" />
                                     Información de Factura
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {selectedPayment.invoice_number && (
-                                        <div>
-                                            <div className="text-xs text-amber-600 mb-0.5">Número de Factura</div>
-                                            <div className="font-mono text-sm font-medium text-slate-900">
-                                                {selectedPayment.invoice_number}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {selectedPayment.ccf && (
-                                        <div>
-                                            <div className="text-xs text-amber-600 mb-0.5">CCF</div>
-                                            <div className="font-mono text-sm font-medium text-slate-900">
-                                                {selectedPayment.ccf}
-                                            </div>
-                                        </div>
-                                    )}
+                                <div>
+                                    <div className="text-xs text-amber-600 mb-0.5">
+                                        Número de Factura/CCF
+                                    </div>
+                                    <div className="font-mono text-sm font-medium text-slate-900">
+                                        {selectedPayment.invoice_number}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Comprobante */}
+                        {selectedPayment.invoice_file && (
+                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <div className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                    <FileText className="w-4 h-4" />
+                                    Comprobante Adjunto
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            window.open(
+                                                selectedPayment.invoice_file,
+                                                "_blank"
+                                            )
+                                        }
+                                        className="flex-1"
+                                    >
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Ver Comprobante
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={async () => {
+                                            try {
+                                                const response =
+                                                    await axios.get(
+                                                        `/transfers/${selectedPayment.id}/download_invoice/`,
+                                                        { responseType: "blob" }
+                                                    );
+                                                const url =
+                                                    window.URL.createObjectURL(
+                                                        new Blob([
+                                                            response.data,
+                                                        ])
+                                                    );
+                                                const link =
+                                                    document.createElement("a");
+                                                link.href = url;
+                                                link.setAttribute(
+                                                    "download",
+                                                    `comprobante_${
+                                                        selectedPayment.invoice_number ||
+                                                        selectedPayment.id
+                                                    }.pdf`
+                                                );
+                                                document.body.appendChild(link);
+                                                link.click();
+                                                link.remove();
+                                                window.URL.revokeObjectURL(url);
+                                                toast.success(
+                                                    "Comprobante descargado"
+                                                );
+                                            } catch (error) {
+                                                toast.error(
+                                                    "Error al descargar comprobante"
+                                                );
+                                            }
+                                        }}
+                                        className="flex-1"
+                                    >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Descargar
+                                    </Button>
                                 </div>
                             </div>
                         )}
@@ -1457,15 +1830,26 @@ function ProviderPayments() {
                         <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-500">
                             <div>
                                 <span className="font-medium">Registrado:</span>{" "}
-                                {formatDate(selectedPayment.created_at, { format: "long" })}
+                                {formatDate(selectedPayment.created_at, {
+                                    format: "long",
+                                })}
                                 {selectedPayment.created_by_username && (
-                                    <span className="ml-1">por <span className="font-medium text-slate-700">{selectedPayment.created_by_username}</span></span>
+                                    <span className="ml-1">
+                                        por{" "}
+                                        <span className="font-medium text-slate-700">
+                                            {
+                                                selectedPayment.created_by_username
+                                            }
+                                        </span>
+                                    </span>
                                 )}
                             </div>
                             {selectedPayment.payment_date && (
                                 <div>
                                     <span className="font-medium">Pagado:</span>{" "}
-                                    {formatDate(selectedPayment.payment_date, { format: "long" })}
+                                    {formatDate(selectedPayment.payment_date, {
+                                        format: "long",
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -1497,7 +1881,12 @@ function ProviderPayments() {
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onOpenChange={(open) => setDeleteConfirm({ open, id: deleteConfirm.id })}
+                onOpenChange={(open) =>
+                    setDeleteConfirm({
+                        open,
+                        id: open ? deleteConfirm.id : null,
+                    })
+                }
                 title="Eliminar Pago"
                 description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
                 confirmText="Eliminar"

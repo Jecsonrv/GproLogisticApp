@@ -350,7 +350,7 @@ function Users() {
 
             {/* Table */}
             <Card>
-                <CardContent className="p-0">
+                <CardContent className="px-5 pb-5 pt-0">
                     <DataTable
                         columns={columns}
                         data={users}
