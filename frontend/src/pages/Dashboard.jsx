@@ -259,12 +259,6 @@ function Dashboard() {
                 icon: AlertCircle,
                 variant: "warning",
             },
-            {
-                title: "Total Clientes",
-                value: stats.totalClients,
-                icon: Users,
-                variant: "default",
-            },
         ],
         [stats]
     );
@@ -279,8 +273,8 @@ function Dashboard() {
                 </div>
 
                 {/* KPI Grid Skeleton */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {[1, 2, 3, 4, 5].map((i) => (
                         <SkeletonCard key={i} />
                     ))}
                 </div>
@@ -314,11 +308,11 @@ function Dashboard() {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex flex-col gap-0.5">
-                    <h1 className="text-xl font-semibold text-slate-900">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">
                         Panel de Control
                     </h1>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-gray-500 mt-1">
                         Resumen ejecutivo de operaciones logísticas
                     </p>
                 </div>
@@ -364,7 +358,7 @@ function Dashboard() {
             )}
 
             {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {kpiCards.map((kpi, index) => (
                     <StatCard
                         key={index}

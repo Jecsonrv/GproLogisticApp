@@ -27,44 +27,78 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo2])
     def account_statement(self, request, pk=None):
-        """Estado de cuenta detallado de un cliente"""
+        """Estado de cuenta detallado de un cliente con facturas y pagos"""
+        from apps.orders.models import Invoice, InvoicePayment
+        from apps.orders.serializers import InvoiceListSerializer
+
         client = self.get_object()
 
         # Get year filter
         year = request.query_params.get('year', datetime.now().year)
 
-        # Calculate Credit Used: Sum of transfers for Open Service Orders
-        pending_orders = ServiceOrder.objects.filter(client=client, status='abierta')
+        # Calculate Credit Used: Sum of balances from unpaid invoices
+        unpaid_invoices = Invoice.objects.filter(
+            service_order__client=client,
+            balance__gt=0
+        ).exclude(status__in=['paid', 'cancelled'])
 
-        # Calcular crédito usado - incluir costos y cargos pendientes
-        credit_used = Transfer.objects.filter(
-            Q(service_order__in=pending_orders) |
-            Q(service_order__client=client, service_order__status='abierta'),
-            transfer_type__in=['terceros', 'cargos', 'costos'],
-            status__in=['pendiente', 'aprobado', 'provisionada']
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-
+        credit_used = unpaid_invoices.aggregate(Sum('balance'))['balance__sum'] or 0
         available_credit = max(0, float(client.credit_limit) - float(credit_used))
 
-        # List of pending orders with their total cost
-        pending_invoices_data = []
-        for order in pending_orders:
-            order_total = order.transfers.filter(
-                transfer_type__in=['terceros', 'cargos', 'costos'],
-                status__in=['pendiente', 'aprobado', 'provisionada']
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
+        # Get all invoices for the client (optionally filtered by year)
+        invoices_qs = Invoice.objects.filter(
+            service_order__client=client
+        ).select_related('service_order').prefetch_related('payments')
 
-            pending_invoices_data.append({
-                'order_number': order.order_number,
-                'date': order.created_at,
-                'eta': order.eta,
-                'amount': float(order_total) if order_total else 0,
-                'duca': order.duca or '',
-                'po': order.purchase_order or ''
-            })
+        if year:
+            invoices_qs = invoices_qs.filter(issue_date__year=year)
 
-        # Ordenar por fecha
-        pending_invoices_data.sort(key=lambda x: x['date'], reverse=True)
+        # Serializar facturas con información completa
+        invoices_data = InvoiceListSerializer(invoices_qs, many=True).data
+
+        # Calcular estadísticas de facturas
+        total_invoiced = invoices_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        total_paid = invoices_qs.aggregate(Sum('paid_amount'))['paid_amount__sum'] or 0
+        total_pending = invoices_qs.filter(
+            status__in=['pending', 'partial', 'overdue']
+        ).aggregate(Sum('balance'))['balance__sum'] or 0
+
+        # Facturas por estado
+        invoices_by_status = {
+            'pending': invoices_qs.filter(status='pending').count(),
+            'partial': invoices_qs.filter(status='partial').count(),
+            'paid': invoices_qs.filter(status='paid').count(),
+            'overdue': invoices_qs.filter(status='overdue').count(),
+            'cancelled': invoices_qs.filter(status='cancelled').count(),
+        }
+
+        # Facturas vencidas y próximas a vencer
+        today = datetime.now().date()
+        overdue_invoices = invoices_qs.filter(
+            due_date__lt=today,
+            balance__gt=0
+        ).exclude(status='paid').count()
+
+        upcoming_due = invoices_qs.filter(
+            due_date__gte=today,
+            due_date__lte=today + timedelta(days=7),
+            balance__gt=0
+        ).exclude(status='paid').count()
+
+        # Historial de pagos recientes (últimos 10)
+        recent_payments = InvoicePayment.objects.filter(
+            invoice__service_order__client=client
+        ).select_related('invoice').order_by('-payment_date')[:10]
+
+        payments_data = [{
+            'id': payment.id,
+            'invoice_number': payment.invoice.invoice_number,
+            'amount': float(payment.amount),
+            'payment_date': payment.payment_date,
+            'payment_method': payment.get_payment_method_display(),
+            'reference': payment.reference or '',
+            'notes': payment.notes or ''
+        } for payment in recent_payments]
 
         data = {
             'client_id': client.id,
@@ -75,8 +109,22 @@ class ClientViewSet(viewsets.ModelViewSet):
             'credit_limit': float(client.credit_limit),
             'credit_used': float(credit_used),
             'available_credit': float(available_credit),
-            'total_pending_orders': pending_orders.count(),
-            'pending_invoices': pending_invoices_data,
+            'credit_percentage': round((float(credit_used) / float(client.credit_limit) * 100), 2) if client.credit_limit > 0 else 0,
+
+            # Estadísticas de facturación
+            'total_invoiced': float(total_invoiced),
+            'total_paid': float(total_paid),
+            'total_pending': float(total_pending),
+
+            # Facturas por estado
+            'invoices_by_status': invoices_by_status,
+            'overdue_count': overdue_invoices,
+            'upcoming_due_count': upcoming_due,
+
+            # Listas detalladas
+            'invoices': invoices_data,
+            'recent_payments': payments_data,
+
             'year': year
         }
 

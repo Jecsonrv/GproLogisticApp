@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
-from apps.orders.models import ServiceOrder
+from apps.orders.models import ServiceOrder, Invoice
 from apps.transfers.models import Transfer
 from apps.clients.models import Client
 from datetime import datetime, timedelta
@@ -113,6 +113,82 @@ class DashboardView(APIView):
             status='provisionada'
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
+        # Facturas (CXC)
+        pending_invoices = Invoice.objects.filter(
+            Q(status='pending') | Q(status='partial')
+        ).count()
+
+        # Facturas vencidas
+        overdue_invoices = Invoice.objects.filter(
+            due_date__lt=today.date(),
+            balance__gt=0
+        ).exclude(status='paid')
+
+        # Facturas próximas a vencer (próximos 7 días)
+        upcoming_due = Invoice.objects.filter(
+            due_date__gte=today.date(),
+            due_date__lte=(today + timedelta(days=7)).date(),
+            balance__gt=0
+        ).exclude(status='paid')
+
+        # Generar alertas
+        alerts = []
+
+        # Alertas de facturas vencidas
+        for invoice in overdue_invoices[:5]:  # Máximo 5 alertas
+            days_overdue = (today.date() - invoice.due_date).days
+            alerts.append({
+                'id': f'invoice_overdue_{invoice.id}',
+                'type': 'invoice_overdue',
+                'severity': 'high' if days_overdue > 15 else 'medium',
+                'message': f'Factura {invoice.invoice_number} vencida hace {days_overdue} días',
+                'client': invoice.service_order.client.name if invoice.service_order and invoice.service_order.client else 'N/A',
+                'invoice_id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'amount': float(invoice.balance),
+                'days_overdue': days_overdue
+            })
+
+        # Alertas de facturas próximas a vencer
+        for invoice in upcoming_due[:3]:  # Máximo 3 alertas
+            days_until_due = (invoice.due_date - today.date()).days
+            alerts.append({
+                'id': f'invoice_due_soon_{invoice.id}',
+                'type': 'invoice_due_soon',
+                'severity': 'medium',
+                'message': f'Factura {invoice.invoice_number} vence en {days_until_due} días',
+                'client': invoice.service_order.client.name if invoice.service_order and invoice.service_order.client else 'N/A',
+                'invoice_id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'amount': float(invoice.balance),
+                'days_until_due': days_until_due
+            })
+
+        # Alertas de clientes próximos a exceder límite de crédito
+        clients_near_limit = []
+        for client in Client.objects.filter(payment_condition='credito', is_active=True):
+            if client.credit_limit > 0:
+                # Calcular crédito utilizado (facturas pendientes)
+                credit_used = Invoice.objects.filter(
+                    service_order__client=client,
+                    balance__gt=0
+                ).exclude(status='paid').aggregate(Sum('balance'))['balance__sum'] or 0
+
+                credit_percentage = (float(credit_used) / float(client.credit_limit)) * 100
+
+                if credit_percentage >= 80:  # Alerta si está al 80% o más
+                    alerts.append({
+                        'id': f'credit_limit_{client.id}',
+                        'type': 'credit_limit_warning',
+                        'severity': 'high' if credit_percentage >= 95 else 'medium',
+                        'message': f'Cliente {client.name} al {credit_percentage:.0f}% de su límite de crédito',
+                        'client': client.name,
+                        'client_id': client.id,
+                        'credit_used': float(credit_used),
+                        'credit_limit': float(client.credit_limit),
+                        'credit_percentage': round(credit_percentage, 1)
+                    })
+
         data = {
             'current_month': {
                 'total_os_month': total_os_month,
@@ -137,6 +213,8 @@ class DashboardView(APIView):
                 'os_cerradas': os_cerradas,
                 'pending_transfers': pending_transfers,
                 'pending_transfers_amount': float(pending_transfers_amount),
+                'total_clients': Client.objects.filter(is_active=True).count(),
+                'pending_invoices': pending_invoices,
             },
             'top_clients': [
                 {
@@ -146,6 +224,7 @@ class DashboardView(APIView):
                     'total_amount': float(client['total_amount'] or 0)
                 }
                 for client in top_clients
-            ]
+            ],
+            'alerts': alerts
         }
         return Response(data)
