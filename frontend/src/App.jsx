@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 // Lazy loading para todas las demás páginas (code splitting)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Clients = lazy(() => import("./pages/Clients"));
+const ClientForm = lazy(() => import("./pages/ClientForm"));
 const ServiceOrders = lazy(() => import("./pages/ServiceOrders"));
 const ServiceOrderDetail = lazy(() => import("./pages/ServiceOrderDetail"));
 const Services = lazy(() => import("./pages/Services"));
@@ -61,6 +62,8 @@ function App() {
                     >
                         <Route index element={<Dashboard />} />
                         <Route path="clients" element={<Clients />} />
+                        <Route path="clients/new" element={<ClientForm />} />
+                        <Route path="clients/:id/edit" element={<ClientForm />} />
                         <Route
                             path="service-orders"
                             element={<ServiceOrders />}

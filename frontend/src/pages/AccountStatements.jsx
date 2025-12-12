@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
     Search,
     Download,
@@ -261,6 +262,9 @@ const STATUS_OPTIONS = [
 // MAIN COMPONENT
 // ============================================
 function AccountStatements() {
+    const [searchParams] = useSearchParams();
+    const clientIdFromUrl = searchParams.get("client");
+
     // Data state
     const [clients, setClients] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
@@ -302,6 +306,16 @@ function AccountStatements() {
     useEffect(() => {
         fetchClients();
     }, []);
+
+    // Auto-select client from URL params
+    useEffect(() => {
+        if (clientIdFromUrl && clients.length > 0 && !selectedClient) {
+            const clientFromUrl = clients.find(c => c.id === parseInt(clientIdFromUrl));
+            if (clientFromUrl) {
+                setSelectedClient(clientFromUrl);
+            }
+        }
+    }, [clientIdFromUrl, clients]);
 
     useEffect(() => {
         if (selectedClient) {

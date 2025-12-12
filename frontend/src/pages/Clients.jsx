@@ -13,6 +13,9 @@ import {
     CreditCard,
     AlertCircle,
     FileText,
+    Edit,
+    Calendar,
+    ArrowRight,
 } from "lucide-react";
 import {
     Card,
@@ -473,7 +476,15 @@ function Clients() {
                         </Button>
                         <Button
                             variant="outline"
-                            onClick={() => navigate(`/account-statements`)}
+                            onClick={() => navigate(`/clients/${selectedClient.id}/edit`)}
+                            className="gap-1.5"
+                        >
+                            <Edit className="h-4 w-4" />
+                            Editar
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate(`/account-statements?client=${selectedClient.id}`)}
                             className="gap-1.5"
                         >
                             <FileText className="h-4 w-4" />
