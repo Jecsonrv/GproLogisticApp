@@ -31,9 +31,13 @@ const DataTable = ({
         return data.filter((row) =>
             columns.some((column) => {
                 const value = column.accessor ? row[column.accessor] : "";
-                return String(value)
-                    .toLowerCase()
-                    .includes(searchTerm.toLowerCase());
+                return (
+                    value !== null &&
+                    value !== undefined &&
+                    String(value)
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase())
+                );
             })
         );
     }, [data, searchTerm, columns]);
@@ -101,7 +105,7 @@ const DataTable = ({
                                 setSearchTerm(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg transition-all duration-200 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 placeholder:text-slate-400 text-sm"
                         />
                     </div>
                 </div>

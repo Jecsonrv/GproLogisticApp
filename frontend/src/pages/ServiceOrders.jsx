@@ -23,7 +23,7 @@ import {
     CardTitle,
     CardContent,
     Input,
-    Select,
+    SelectERP,
     Badge,
     Label,
 } from "../components/ui";
@@ -595,8 +595,8 @@ const ServiceOrders = () => {
                     <CardContent className="pt-0 pb-4 border-b border-gray-100">
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
                             <div>
-                                <Label>Estado</Label>
-                                <Select
+                                <SelectERP
+                                    label="Estado"
                                     value={filters.status}
                                     onChange={(val) =>
                                         setFilters({ ...filters, status: val })
@@ -607,11 +607,12 @@ const ServiceOrders = () => {
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Cliente</Label>
-                                <Select
+                                <SelectERP
+                                    label="Cliente"
                                     value={filters.client}
                                     onChange={(val) =>
                                         setFilters({ ...filters, client: val })
@@ -620,6 +621,7 @@ const ServiceOrders = () => {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
@@ -704,8 +706,8 @@ const ServiceOrders = () => {
                                 Información del Cliente
                             </h4>
                         </div>
-                        <Select
-                            label="Cliente *"
+                        <SelectERP
+                            label="Cliente"
                             value={formData.client}
                             onChange={(val) =>
                                 setFormData({ ...formData, client: val })
@@ -714,9 +716,10 @@ const ServiceOrders = () => {
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
+                            clearable
                             required
                         />
-                        <Select
+                        <SelectERP
                             label="Aforador"
                             value={formData.customs_agent}
                             onChange={(val) =>
@@ -726,6 +729,7 @@ const ServiceOrders = () => {
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
+                            clearable
                         />
                     </div>
 
@@ -741,8 +745,8 @@ const ServiceOrders = () => {
                                 Datos del Embarque
                             </h4>
                         </div>
-                        <Select
-                            label="Tipo de Embarque *"
+                        <SelectERP
+                            label="Tipo de Embarque"
                             value={formData.shipment_type}
                             onChange={(val) =>
                                 setFormData({ ...formData, shipment_type: val })
@@ -750,9 +754,10 @@ const ServiceOrders = () => {
                             options={shipmentTypes}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
+                            clearable
                             required
                         />
-                        <Select
+                        <SelectERP
                             label="Proveedor Logístico"
                             value={formData.provider}
                             onChange={(val) =>
@@ -762,6 +767,7 @@ const ServiceOrders = () => {
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
+                            clearable
                         />
                     </div>
 

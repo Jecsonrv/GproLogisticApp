@@ -15,15 +15,13 @@ import {
     Calendar,
     X,
     XCircle,
-    TrendingUp,
-    TrendingDown,
     FileSpreadsheet,
     RefreshCw,
-    ChevronDown,
     DollarSign,
     CalendarClock,
     Receipt,
-    ArrowUpRight,
+    Pencil,
+    Trash2,
 } from "lucide-react";
 import {
     Card,
@@ -39,10 +37,9 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
 import Modal, { ModalFooter } from "../components/ui/Modal";
-import Select from "../components/ui/Select";
 import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
-import { FileUpload } from "../components/ui";
+import { FileUpload, SelectERP, ConfirmDialog } from "../components/ui";
 import api from "../lib/axios";
 import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 import toast from "react-hot-toast";
@@ -99,7 +96,8 @@ const INVOICE_STATUS_CONFIG = {
 
 // Componente de Badge de Estado
 const InvoiceStatusBadge = ({ status }) => {
-    const config = INVOICE_STATUS_CONFIG[status] || INVOICE_STATUS_CONFIG.pending;
+    const config =
+        INVOICE_STATUS_CONFIG[status] || INVOICE_STATUS_CONFIG.pending;
     return (
         <span
             className={cn(
@@ -115,78 +113,47 @@ const InvoiceStatusBadge = ({ status }) => {
     );
 };
 
-// Componente KPI Card mejorado
-const KPICard = ({ title, value, subtitle, icon: Icon, variant = "default", trend, trendValue }) => {
+// Componente KPI Card - Estilo limpio similar a Service Orders
+const KPICard = ({
+    title,
+    value,
+    subtitle,
+    icon: Icon,
+    variant = "default",
+}) => {
     const variants = {
-        default: {
-            bg: "bg-white",
-            iconBg: "bg-slate-100",
-            iconColor: "text-slate-600",
-            valueColor: "text-slate-900",
-        },
-        primary: {
-            bg: "bg-brand-50",
-            iconBg: "bg-brand-100",
-            iconColor: "text-brand-600",
-            valueColor: "text-brand-900",
-        },
-        success: {
-            bg: "bg-emerald-50",
-            iconBg: "bg-emerald-100",
-            iconColor: "text-emerald-600",
-            valueColor: "text-emerald-900",
-        },
-        warning: {
-            bg: "bg-amber-50",
-            iconBg: "bg-amber-100",
-            iconColor: "text-amber-600",
-            valueColor: "text-amber-900",
-        },
-        danger: {
-            bg: "bg-red-50",
-            iconBg: "bg-red-100",
-            iconColor: "text-red-600",
-            valueColor: "text-red-900",
-        },
+        default: "text-slate-900",
+        primary: "text-brand-600",
+        success: "text-emerald-600",
+        warning: "text-amber-600",
+        danger: "text-red-600",
     };
 
-    const style = variants[variant] || variants.default;
-
     return (
-        <Card className={cn("border", style.bg)}>
-            <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+        <Card>
+            <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium text-gray-500">
                             {title}
                         </p>
-                        <p className={cn("text-2xl font-bold tabular-nums tracking-tight", style.valueColor)}>
+                        <p
+                            className={cn(
+                                "text-2xl font-bold mt-1",
+                                variants[variant]
+                            )}
+                        >
                             {value}
                         </p>
-                        {(subtitle || trend) && (
-                            <div className="flex items-center gap-2 mt-1.5">
-                                {trend && (
-                                    <span className={cn(
-                                        "inline-flex items-center text-xs font-medium",
-                                        trend === "up" ? "text-emerald-600" : "text-red-600"
-                                    )}>
-                                        {trend === "up" ? (
-                                            <TrendingUp className="w-3 h-3 mr-0.5" />
-                                        ) : (
-                                            <TrendingDown className="w-3 h-3 mr-0.5" />
-                                        )}
-                                        {trendValue}
-                                    </span>
-                                )}
-                                {subtitle && (
-                                    <span className="text-xs text-slate-500">{subtitle}</span>
-                                )}
-                            </div>
+                        {subtitle && (
+                            <p className="text-xs text-gray-400 mt-1">
+                                {subtitle}
+                            </p>
                         )}
                     </div>
                     {Icon && (
-                        <div className={cn("flex-shrink-0 p-2.5 rounded-lg", style.iconBg)}>
-                            <Icon className={cn("w-5 h-5", style.iconColor)} />
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                            <Icon className="w-5 h-5 text-gray-400" />
                         </div>
                     )}
                 </div>
@@ -219,8 +186,13 @@ const Invoicing = () => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState({
+        open: false,
+        id: null,
+    });
 
     // Search and Filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -252,6 +224,19 @@ const Invoicing = () => {
         invoice_number: "",
         total_amount: "",
         invoice_file: null,
+    });
+
+    // Edit invoice form
+    const [editForm, setEditForm] = useState({
+        id: null,
+        invoice_number: "",
+        issue_date: "",
+        due_date: "",
+        total_amount: "",
+        notes: "",
+        pdf_file: null,
+        client_name: "",
+        service_order_number: "",
     });
 
     // Data fetching
@@ -298,7 +283,8 @@ const Invoicing = () => {
                 params: { facturado: false },
             });
             const ordersWithAmount = response.data.filter(
-                (order) => order.total_amount && parseFloat(order.total_amount) > 0
+                (order) =>
+                    order.total_amount && parseFloat(order.total_amount) > 0
             );
             setAllServiceOrders(ordersWithAmount);
         } catch (error) {
@@ -322,7 +308,10 @@ const Invoicing = () => {
             }
 
             // Client filter
-            if (filters.client && invoice.client_id !== parseInt(filters.client)) {
+            if (
+                filters.client &&
+                invoice.client_id !== parseInt(filters.client)
+            ) {
                 return false;
             }
 
@@ -333,12 +322,12 @@ const Invoicing = () => {
 
             // Issue date range filter
             if (filters.dateFrom) {
-                const invoiceDate = new Date(invoice.invoice_date);
+                const invoiceDate = new Date(invoice.issue_date);
                 const fromDate = new Date(filters.dateFrom);
                 if (invoiceDate < fromDate) return false;
             }
             if (filters.dateTo) {
-                const invoiceDate = new Date(invoice.invoice_date);
+                const invoiceDate = new Date(invoice.issue_date);
                 const toDate = new Date(filters.dateTo);
                 toDate.setHours(23, 59, 59);
                 if (invoiceDate > toDate) return false;
@@ -418,6 +407,62 @@ const Invoicing = () => {
         setIsPaymentModalOpen(true);
     };
 
+    const handleOpenEditModal = (invoice) => {
+        setSelectedInvoice(invoice);
+        setEditForm({
+            id: invoice.id,
+            invoice_number: invoice.invoice_number || "",
+            issue_date: invoice.issue_date || "",
+            due_date: invoice.due_date || "",
+            total_amount: invoice.total_amount || "",
+            notes: invoice.notes || "",
+            pdf_file: null,
+            client_name: invoice.client_name,
+            service_order_number: invoice.service_order_number,
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleUpdateInvoice = async () => {
+        if (
+            !editForm.invoice_number ||
+            !editForm.total_amount ||
+            !editForm.issue_date
+        ) {
+            toast.error("Complete los campos requeridos");
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append("invoice_number", editForm.invoice_number);
+            formData.append("issue_date", editForm.issue_date);
+            formData.append("total_amount", editForm.total_amount);
+            formData.append("notes", editForm.notes);
+
+            if (editForm.due_date) {
+                formData.append("due_date", editForm.due_date);
+            }
+            if (editForm.pdf_file) {
+                formData.append("pdf_file", editForm.pdf_file);
+            }
+
+            await api.patch(`/orders/invoices/${editForm.id}/`, formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+
+            toast.success("Factura actualizada exitosamente");
+            fetchInvoices();
+            fetchSummary();
+            setIsEditModalOpen(false);
+        } catch (error) {
+            toast.error(
+                error.response?.data?.error || "Error al actualizar factura"
+            );
+            console.error(error);
+        }
+    };
+
     const handleAddPayment = async () => {
         if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
             toast.error("Ingrese un monto válido");
@@ -434,7 +479,9 @@ const Invoicing = () => {
             fetchSummary();
             setIsPaymentModalOpen(false);
         } catch (error) {
-            toast.error(error.response?.data?.error || "Error al registrar pago");
+            toast.error(
+                error.response?.data?.error || "Error al registrar pago"
+            );
         }
     };
 
@@ -459,21 +506,25 @@ const Invoicing = () => {
                 formData.append("due_date", generateForm.due_date);
             }
             if (generateForm.invoice_file) {
-                formData.append("invoice_file", generateForm.invoice_file);
+                formData.append("pdf_file", generateForm.invoice_file);
             }
 
             const response = await api.post("/orders/invoices/", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            toast.success(`Factura ${response.data.invoice_number} registrada exitosamente`);
+            toast.success(
+                `Factura ${response.data.invoice_number} registrada exitosamente`
+            );
             fetchInvoices();
             fetchSummary();
             fetchAllServiceOrders();
             setIsGenerateModalOpen(false);
             resetGenerateForm();
         } catch (error) {
-            toast.error(error.response?.data?.error || "Error al registrar factura");
+            toast.error(
+                error.response?.data?.error || "Error al registrar factura"
+            );
             console.error(error);
         }
     };
@@ -534,6 +585,20 @@ const Invoicing = () => {
         }
     };
 
+    const handleDeleteInvoice = async () => {
+        if (!deleteConfirm.id) return;
+
+        try {
+            await api.delete(`/orders/invoices/${deleteConfirm.id}/`);
+            toast.success("Factura eliminada correctamente");
+            setDeleteConfirm({ open: false, id: null });
+            fetchInvoices();
+            fetchSummary();
+        } catch (error) {
+            toast.error(error.response?.data?.error || "Error al eliminar factura");
+        }
+    };
+
     // Table columns
     const columns = [
         {
@@ -561,21 +626,27 @@ const Invoicing = () => {
                         {row.client_name}
                     </div>
                     {row.ccf && (
-                        <div className="text-xs text-slate-500">CCF: {row.ccf}</div>
+                        <div className="text-xs text-slate-500">
+                            CCF: {row.ccf}
+                        </div>
                     )}
                 </div>
             ),
         },
         {
             header: "Emisión",
-            accessor: "invoice_date",
+            accessor: "issue_date",
             render: (row) => (
                 <div className="text-sm text-slate-700">
-                    {new Date(row.invoice_date + "T00:00:00").toLocaleDateString("es-SV", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                    })}
+                    {row.issue_date
+                        ? new Date(
+                              row.issue_date + "T00:00:00"
+                          ).toLocaleDateString("es-SV", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                          })
+                        : "-"}
                 </div>
             ),
         },
@@ -586,11 +657,17 @@ const Invoicing = () => {
                 <div>
                     {row.due_date ? (
                         <>
-                            <div className={cn(
-                                "text-sm font-medium",
-                                row.days_overdue > 0 ? "text-red-600" : "text-slate-700"
-                            )}>
-                                {new Date(row.due_date + "T00:00:00").toLocaleDateString("es-SV", {
+                            <div
+                                className={cn(
+                                    "text-sm font-medium",
+                                    row.days_overdue > 0
+                                        ? "text-red-600"
+                                        : "text-slate-700"
+                                )}
+                            >
+                                {new Date(
+                                    row.due_date + "T00:00:00"
+                                ).toLocaleDateString("es-SV", {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
@@ -603,7 +680,9 @@ const Invoicing = () => {
                             )}
                         </>
                     ) : (
-                        <span className="text-xs text-slate-400">Sin vencimiento</span>
+                        <span className="text-xs text-slate-400">
+                            Sin vencimiento
+                        </span>
                     )}
                 </div>
             ),
@@ -638,7 +717,9 @@ const Invoicing = () => {
                     <div
                         className={cn(
                             "font-bold tabular-nums",
-                            parseFloat(row.balance) > 0 ? "text-red-600" : "text-emerald-600"
+                            parseFloat(row.balance) > 0
+                                ? "text-red-600"
+                                : "text-emerald-600"
                         )}
                     >
                         {formatCurrency(row.balance)}
@@ -653,41 +734,88 @@ const Invoicing = () => {
             render: (row) => <InvoiceStatusBadge status={row.status} />,
         },
         {
-            header: "",
-            sortable: false,
-            render: (row) => (
-                <div className="flex items-center justify-end gap-1">
-                    {parseFloat(row.balance) > 0 && row.status !== "cancelled" && (
-                        <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenPaymentModal(row);
-                            }}
-                            title="Registrar Pago"
-                            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                        >
-                            <Banknote className="h-4 w-4" />
-                        </Button>
-                    )}
+            header: "Factura", // New header for this column
+            accessor: "pdf_file",
+            className: "w-16 text-center", // Similar to ProviderPayments 'Comp.' column
+            headerClassName: "text-center", // Added this line
+            render: (row) =>
+                row.pdf_file ? (
                     <Button
                         variant="ghost"
                         size="icon-xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(row.pdf_file, "_blank");
+                        }}
+                        title="Ver Factura (PDF)"
+                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    >
+                        <FileText className="h-4 w-4" />
+                    </Button>
+                ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                ),
+        },
+        {
+            header: "Acciones",
+            sortable: false,
+            render: (row) => (
+                <div className="flex items-center justify-end gap-1">
+                    {parseFloat(row.balance) > 0 &&
+                        row.status !== "cancelled" && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenPaymentModal(row);
+                                }}
+                                title="Registrar Pago"
+                                className="text-gray-500 hover:text-emerald-600"
+                            >
+                                <Banknote className="w-4 h-4" />
+                            </Button>
+                        )}
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={(e) => {
                             e.stopPropagation();
                             setSelectedInvoice(row);
                             setIsDetailModalOpen(true);
                         }}
                         title="Ver Detalle"
-                        className="text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                        className="text-gray-500 hover:text-blue-600"
                     >
-                        <Eye className="h-4 w-4" />
+                        <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditModal(row);
+                        }}
+                        title="Editar Factura"
+                        className="text-gray-500 hover:text-amber-600"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm({ open: true, id: row.id });
+                        }}
+                        title="Eliminar"
+                        className="text-gray-400 hover:text-red-600"
+                    >
+                        <Trash2 className="w-4 h-4" />
                     </Button>
                 </div>
             ),
-        },
-    ];
+        },    ];
 
     return (
         <div className="space-y-6">
@@ -698,7 +826,8 @@ const Invoicing = () => {
                         Cuentas por Cobrar (CXC)
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Control administrativo de facturación, abonos y saldos pendientes
+                        Control administrativo de facturación, abonos y saldos
+                        pendientes
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -708,7 +837,12 @@ const Invoicing = () => {
                         disabled={loading}
                         size="sm"
                     >
-                        <RefreshCw className={cn("w-4 h-4 mr-1.5", loading && "animate-spin")} />
+                        <RefreshCw
+                            className={cn(
+                                "w-4 h-4 mr-1.5",
+                                loading && "animate-spin"
+                            )}
+                        />
                         Actualizar
                     </Button>
                     <Button
@@ -717,7 +851,12 @@ const Invoicing = () => {
                         disabled={isExporting || filteredInvoices.length === 0}
                         size="sm"
                     >
-                        <FileSpreadsheet className={cn("w-4 h-4 mr-1.5", isExporting && "animate-bounce")} />
+                        <FileSpreadsheet
+                            className={cn(
+                                "w-4 h-4 mr-1.5",
+                                isExporting && "animate-bounce"
+                            )}
+                        />
                         Exportar
                     </Button>
                     <Button onClick={() => setIsGenerateModalOpen(true)}>
@@ -728,7 +867,7 @@ const Invoicing = () => {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <KPICard
                     title="Total Facturado"
                     value={formatCurrency(summary.total_invoiced)}
@@ -776,7 +915,9 @@ const Invoicing = () => {
                                 <Input
                                     placeholder="Buscar por factura, cliente, CCF, orden de servicio..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                    }
                                     className="pl-10 pr-10"
                                 />
                                 {searchQuery && (
@@ -796,7 +937,10 @@ const Invoicing = () => {
                                 <Filter className="w-4 h-4 mr-1.5" />
                                 Filtros
                                 {activeFiltersCount > 0 && (
-                                    <Badge variant="primary" className="ml-2 px-1.5 py-0.5 h-5 text-xs">
+                                    <Badge
+                                        variant="primary"
+                                        className="ml-2 px-1.5 py-0.5 h-5 text-xs"
+                                    >
                                         {activeFiltersCount}
                                     </Badge>
                                 )}
@@ -826,28 +970,30 @@ const Invoicing = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg mt-4">
                             {/* Cliente */}
                             <div>
-                                <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
-                                    Cliente
-                                </Label>
-                                <Select
+                                <SelectERP
+                                    label="Cliente"
                                     value={filters.client}
-                                    onChange={(val) => setFilters({ ...filters, client: val })}
+                                    onChange={(val) =>
+                                        setFilters({ ...filters, client: val })
+                                    }
                                     options={clients}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                     placeholder="Todos los clientes"
+                                    size="sm"
                                 />
                             </div>
 
                             {/* Estado */}
                             <div>
-                                <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
-                                    Estado
-                                </Label>
-                                <Select
+                                <SelectERP
+                                    label="Estado"
                                     value={filters.status}
-                                    onChange={(val) => setFilters({ ...filters, status: val })}
+                                    onChange={(val) =>
+                                        setFilters({ ...filters, status: val })
+                                    }
                                     options={[
                                         { id: "pending", name: "Pendiente" },
                                         { id: "partial", name: "Pago Parcial" },
@@ -857,7 +1003,9 @@ const Invoicing = () => {
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    clearable
                                     placeholder="Todos los estados"
+                                    size="sm"
                                 />
                             </div>
 
@@ -871,7 +1019,10 @@ const Invoicing = () => {
                                         type="date"
                                         value={filters.dateFrom}
                                         onChange={(e) =>
-                                            setFilters({ ...filters, dateFrom: e.target.value })
+                                            setFilters({
+                                                ...filters,
+                                                dateFrom: e.target.value,
+                                            })
                                         }
                                         placeholder="Desde"
                                     />
@@ -879,7 +1030,10 @@ const Invoicing = () => {
                                         type="date"
                                         value={filters.dateTo}
                                         onChange={(e) =>
-                                            setFilters({ ...filters, dateTo: e.target.value })
+                                            setFilters({
+                                                ...filters,
+                                                dateTo: e.target.value,
+                                            })
                                         }
                                         placeholder="Hasta"
                                     />
@@ -896,7 +1050,10 @@ const Invoicing = () => {
                                         type="date"
                                         value={filters.dueDateFrom}
                                         onChange={(e) =>
-                                            setFilters({ ...filters, dueDateFrom: e.target.value })
+                                            setFilters({
+                                                ...filters,
+                                                dueDateFrom: e.target.value,
+                                            })
                                         }
                                         placeholder="Desde"
                                     />
@@ -904,7 +1061,10 @@ const Invoicing = () => {
                                         type="date"
                                         value={filters.dueDateTo}
                                         onChange={(e) =>
-                                            setFilters({ ...filters, dueDateTo: e.target.value })
+                                            setFilters({
+                                                ...filters,
+                                                dueDateTo: e.target.value,
+                                            })
                                         }
                                         placeholder="Hasta"
                                     />
@@ -958,27 +1118,39 @@ const Invoicing = () => {
                         <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide">Factura</p>
+                                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                                        Factura
+                                    </p>
                                     <p className="font-mono font-semibold text-slate-900">
                                         {selectedInvoice.invoice_number}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide">Cliente</p>
+                                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                                        Cliente
+                                    </p>
                                     <p className="font-medium text-slate-900">
                                         {selectedInvoice.client_name}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide">Total Facturado</p>
+                                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                                        Total Facturado
+                                    </p>
                                     <p className="font-semibold text-slate-900">
-                                        {formatCurrency(selectedInvoice.total_amount)}
+                                        {formatCurrency(
+                                            selectedInvoice.total_amount
+                                        )}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide">Saldo Actual</p>
+                                    <p className="text-xs text-slate-500 uppercase tracking-wide">
+                                        Saldo Actual
+                                    </p>
                                     <p className="text-xl font-bold text-red-600">
-                                        {formatCurrency(selectedInvoice.balance)}
+                                        {formatCurrency(
+                                            selectedInvoice.balance
+                                        )}
                                     </p>
                                 </div>
                             </div>
@@ -994,7 +1166,10 @@ const Invoicing = () => {
                                 max={selectedInvoice.balance}
                                 value={paymentForm.amount}
                                 onChange={(e) =>
-                                    setPaymentForm({ ...paymentForm, amount: e.target.value })
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        amount: e.target.value,
+                                    })
                                 }
                                 required
                             />
@@ -1003,24 +1178,36 @@ const Invoicing = () => {
                                 type="date"
                                 value={paymentForm.payment_date}
                                 onChange={(e) =>
-                                    setPaymentForm({ ...paymentForm, payment_date: e.target.value })
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_date: e.target.value,
+                                    })
                                 }
                                 required
                             />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
-                            <Select
-                                label="Método de Pago *"
+                            <SelectERP
+                                label="Método de Pago"
                                 value={paymentForm.payment_method}
                                 onChange={(value) =>
-                                    setPaymentForm({ ...paymentForm, payment_method: value })
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_method: value,
+                                    })
                                 }
                                 options={[
-                                    { id: "transferencia", name: "Transferencia Bancaria" },
+                                    {
+                                        id: "transferencia",
+                                        name: "Transferencia Bancaria",
+                                    },
                                     { id: "efectivo", name: "Efectivo" },
                                     { id: "cheque", name: "Cheque" },
-                                    { id: "deposito", name: "Depósito Bancario" },
+                                    {
+                                        id: "deposito",
+                                        name: "Depósito Bancario",
+                                    },
                                     { id: "tarjeta", name: "Tarjeta" },
                                 ]}
                                 getOptionLabel={(opt) => opt.name}
@@ -1031,7 +1218,10 @@ const Invoicing = () => {
                                 label="Referencia / No. Comprobante"
                                 value={paymentForm.reference}
                                 onChange={(e) =>
-                                    setPaymentForm({ ...paymentForm, reference: e.target.value })
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        reference: e.target.value,
+                                    })
                                 }
                                 placeholder="Ej: TRF-12345"
                             />
@@ -1041,57 +1231,84 @@ const Invoicing = () => {
                             label="Notas"
                             value={paymentForm.notes}
                             onChange={(e) =>
-                                setPaymentForm({ ...paymentForm, notes: e.target.value })
+                                setPaymentForm({
+                                    ...paymentForm,
+                                    notes: e.target.value,
+                                })
                             }
                             placeholder="Observaciones del pago..."
                         />
 
                         {/* Payment Preview */}
-                        {paymentForm.amount && parseFloat(paymentForm.amount) > 0 && (
-                            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-lg">
-                                <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-slate-600">Saldo Actual:</span>
-                                    <span className="font-medium tabular-nums">
-                                        {formatCurrency(selectedInvoice.balance)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between text-sm mb-2">
-                                    <span className="text-slate-600">Monto del Pago:</span>
-                                    <span className="font-medium text-emerald-600 tabular-nums">
-                                        - {formatCurrency(paymentForm.amount || 0)}
-                                    </span>
-                                </div>
-                                <div className="pt-2 border-t border-emerald-200">
-                                    <div className="flex justify-between items-center">
-                                        <span className="font-semibold text-slate-900">Nuevo Saldo:</span>
-                                        <span className={cn(
-                                            "text-xl font-bold tabular-nums",
-                                            parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0) <= 0
-                                                ? "text-emerald-600"
-                                                : "text-amber-600"
-                                        )}>
+                        {paymentForm.amount &&
+                            parseFloat(paymentForm.amount) > 0 && (
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-lg">
+                                    <div className="flex justify-between text-sm mb-2">
+                                        <span className="text-slate-600">
+                                            Saldo Actual:
+                                        </span>
+                                        <span className="font-semibold text-slate-900 tabular-nums">
                                             {formatCurrency(
-                                                Math.max(0, parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0))
+                                                selectedInvoice.balance
                                             )}
                                         </span>
                                     </div>
-                                    {parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0) <= 0 && (
-                                        <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-                                            <CheckCircle className="w-3.5 h-3.5" />
-                                            La factura quedará completamente pagada
-                                        </p>
-                                    )}
+                                    <div className="flex justify-between text-sm mb-2">
+                                        <span className="text-slate-600">
+                                            Monto del Pago:
+                                        </span>
+                                        <span className="font-semibold text-slate-900 tabular-nums">
+                                            -{" "}
+                                            {formatCurrency(
+                                                paymentForm.amount || 0
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="pt-2 border-t border-slate-300">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-semibold text-slate-700">
+                                                Nuevo Saldo:
+                                            </span>
+                                            <span className="text-xl font-bold text-slate-900 tabular-nums">
+                                                {formatCurrency(
+                                                    Math.max(
+                                                        0,
+                                                        parseFloat(
+                                                            selectedInvoice.balance
+                                                        ) -
+                                                            parseFloat(
+                                                                paymentForm.amount ||
+                                                                    0
+                                                            )
+                                                    )
+                                                )}
+                                            </span>
+                                        </div>
+                                        {parseFloat(selectedInvoice.balance) -
+                                            parseFloat(
+                                                paymentForm.amount || 0
+                                            ) <=
+                                            0 && (
+                                            <p className="text-xs text-slate-600 mt-1.5 flex items-center gap-1">
+                                                <CheckCircle className="w-3.5 h-3.5" />
+                                                La factura quedará completamente
+                                                pagada
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
                     </div>
                 )}
 
                 <ModalFooter>
-                    <Button variant="ghost" onClick={() => setIsPaymentModalOpen(false)}>
+                    <Button
+                        variant="outline"
+                        onClick={() => setIsPaymentModalOpen(false)}
+                    >
                         Cancelar
                     </Button>
-                    <Button variant="success" onClick={handleAddPayment}>
+                    <Button onClick={handleAddPayment}>
                         <Banknote className="w-4 h-4 mr-1.5" />
                         Registrar Pago
                     </Button>
@@ -1120,27 +1337,38 @@ const Invoicing = () => {
                             </h3>
                         </div>
 
-                        <Select
+                        <SelectERP
+                            label="Orden de Servicio"
                             value={generateForm.service_order}
                             onChange={handleServiceOrderSelect}
                             options={[
-                                { id: "", name: "Seleccionar orden de servicio..." },
+                                {
+                                    id: "",
+                                    name: "Seleccionar orden de servicio...",
+                                },
                                 ...allServiceOrders.map((o) => ({
                                     id: o.id,
-                                    name: `${o.order_number} - ${o.client_name} - ${formatCurrency(o.total_amount || 0)}`,
+                                    name: `${o.order_number} - ${
+                                        o.client_name
+                                    } - ${formatCurrency(o.total_amount || 0)}`,
                                 })),
                             ]}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
+                            placeholder="Seleccionar orden de servicio..."
                             required
                         />
 
                         {generateForm.client_name && (
                             <div className="mt-3 flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg p-3 border border-slate-200">
                                 <Building2 className="w-4 h-4 text-slate-500" />
-                                <span className="font-medium text-slate-600">Cliente:</span>
-                                <span className="text-slate-900 font-semibold">{generateForm.client_name}</span>
+                                <span className="font-medium text-slate-600">
+                                    Cliente:
+                                </span>
+                                <span className="text-slate-900 font-semibold">
+                                    {generateForm.client_name}
+                                </span>
                             </div>
                         )}
                     </div>
@@ -1181,19 +1409,38 @@ const Invoicing = () => {
                                             setGenerateForm((prev) => {
                                                 let newDueDate = prev.due_date;
                                                 if (prev.service_order) {
-                                                    const selectedOrder = allServiceOrders.find(
-                                                        (o) => o.id === prev.service_order
-                                                    );
-                                                    if (selectedOrder) {
-                                                        const client = clients.find(
-                                                            (c) => c.id === selectedOrder.client
+                                                    const selectedOrder =
+                                                        allServiceOrders.find(
+                                                            (o) =>
+                                                                o.id ===
+                                                                prev.service_order
                                                         );
-                                                        if (client && client.credit_days > 0) {
-                                                            const invoiceDate = new Date(newDate);
-                                                            invoiceDate.setDate(
-                                                                invoiceDate.getDate() + client.credit_days
+                                                    if (selectedOrder) {
+                                                        const client =
+                                                            clients.find(
+                                                                (c) =>
+                                                                    c.id ===
+                                                                    selectedOrder.client
                                                             );
-                                                            newDueDate = invoiceDate.toISOString().split("T")[0];
+                                                        if (
+                                                            client &&
+                                                            client.credit_days >
+                                                                0
+                                                        ) {
+                                                            const invoiceDate =
+                                                                new Date(
+                                                                    newDate
+                                                                );
+                                                            invoiceDate.setDate(
+                                                                invoiceDate.getDate() +
+                                                                    client.credit_days
+                                                            );
+                                                            newDueDate =
+                                                                invoiceDate
+                                                                    .toISOString()
+                                                                    .split(
+                                                                        "T"
+                                                                    )[0];
                                                         }
                                                     }
                                                 }
@@ -1222,7 +1469,8 @@ const Invoicing = () => {
                                         {generateForm.due_date && (
                                             <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
                                                 <CheckCircle className="w-3 h-3" />
-                                                Calculada según días de crédito del cliente
+                                                Calculada según días de crédito
+                                                del cliente
                                             </p>
                                         )}
                                     </div>
@@ -1261,17 +1509,22 @@ const Invoicing = () => {
 
                             <FileUpload
                                 accept=".pdf,.jpg,.jpeg,.png"
-                                onChange={(file) =>
-                                    setGenerateForm({ ...generateForm, invoice_file: file })
+                                onFileChange={(file) =>
+                                    setGenerateForm({
+                                        ...generateForm,
+                                        invoice_file: file,
+                                    })
                                 }
-                                value={generateForm.invoice_file}
+                                label="Subir Factura PDF"
                                 helperText="Formatos aceptados: PDF, JPG, PNG (máx. 5MB)"
                             />
 
                             {generateForm.invoice_file && (
                                 <div className="mt-2 flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg p-2.5 border border-slate-200">
                                     <CheckCircle className="w-4 h-4 text-emerald-600" />
-                                    <span className="text-slate-600">Archivo:</span>
+                                    <span className="text-slate-600">
+                                        Archivo:
+                                    </span>
                                     <span className="font-medium text-slate-900">
                                         {generateForm.invoice_file.name}
                                     </span>
@@ -1305,6 +1558,160 @@ const Invoicing = () => {
                 </ModalFooter>
             </Modal>
 
+            {/* Edit Invoice Modal */}
+            <Modal
+                isOpen={isEditModalOpen}
+                onClose={() => setIsEditModalOpen(false)}
+                title="Editar Factura"
+                size="2xl"
+            >
+                <div className="space-y-4">
+                    {/* Invoice Details */}
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center">
+                                <FileText className="w-4 h-4 text-brand-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-900">
+                                    Información de la Factura
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    {editForm.client_name} -{" "}
+                                    {editForm.service_order_number}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Input
+                                label="Número de Factura / CCF *"
+                                value={editForm.invoice_number}
+                                onChange={(e) =>
+                                    setEditForm({
+                                        ...editForm,
+                                        invoice_number: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: 001-001-0000001234"
+                                required
+                            />
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <Input
+                                    label="Fecha de Emisión *"
+                                    type="date"
+                                    value={editForm.issue_date}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            issue_date: e.target.value,
+                                        })
+                                    }
+                                    required
+                                />
+
+                                <Input
+                                    label="Fecha de Vencimiento"
+                                    type="date"
+                                    value={editForm.due_date}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            due_date: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+
+                            <Input
+                                label="Monto Total *"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editForm.total_amount}
+                                onChange={(e) =>
+                                    setEditForm({
+                                        ...editForm,
+                                        total_amount: e.target.value,
+                                    })
+                                }
+                                placeholder="0.00"
+                                required
+                            />
+
+                            <Input
+                                label="Notas"
+                                value={editForm.notes}
+                                onChange={(e) =>
+                                    setEditForm({
+                                        ...editForm,
+                                        notes: e.target.value,
+                                    })
+                                }
+                                placeholder="Observaciones adicionales..."
+                            />
+                        </div>
+                    </div>
+
+                    {/* Attachment */}
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
+                                <Upload className="w-4 h-4 text-slate-600" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-900">
+                                Actualizar Documento (Opcional)
+                            </h3>
+                        </div>
+
+                        <FileUpload
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onFileChange={(file) =>
+                                setEditForm({
+                                    ...editForm,
+                                    pdf_file: file,
+                                })
+                            }
+                            label="Subir Nuevo Archivo PDF"
+                            helperText="Formatos aceptados: PDF, JPG, PNG (máx. 5MB)"
+                        />
+
+                        {editForm.pdf_file && (
+                            <div className="mt-2 flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg p-2.5 border border-slate-200">
+                                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                                <span className="text-slate-600">
+                                    Archivo nuevo:
+                                </span>
+                                <span className="font-medium text-slate-900">
+                                    {editForm.pdf_file.name}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <ModalFooter>
+                    <Button
+                        variant="ghost"
+                        onClick={() => setIsEditModalOpen(false)}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={handleUpdateInvoice}
+                        disabled={
+                            !editForm.invoice_number ||
+                            !editForm.total_amount ||
+                            !editForm.issue_date
+                        }
+                    >
+                        <CheckCircle className="w-4 h-4 mr-1.5" />
+                        Actualizar Factura
+                    </Button>
+                </ModalFooter>
+            </Modal>
+
             {/* Detail Modal */}
             <Modal
                 isOpen={isDetailModalOpen}
@@ -1315,33 +1722,36 @@ const Invoicing = () => {
                 {selectedInvoice && (
                     <div className="space-y-5">
                         {/* Header Info */}
-                        <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="grid grid-cols-2 gap-6 p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Cliente
                                 </p>
-                                <p className="text-base font-semibold text-slate-900">
+                                <p className="text-base font-medium text-slate-900">
                                     {selectedInvoice.client_name}
                                 </p>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Estado
                                 </p>
-                                <InvoiceStatusBadge status={selectedInvoice.status} />
+                                <InvoiceStatusBadge
+                                    status={selectedInvoice.status}
+                                />
                                 {selectedInvoice.days_overdue > 0 && (
                                     <p className="text-xs text-red-600 font-medium mt-1">
-                                        Vencida hace {selectedInvoice.days_overdue} días
+                                        Vencida hace{" "}
+                                        {selectedInvoice.days_overdue} días
                                     </p>
                                 )}
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Fecha de Emisión
                                 </p>
                                 <p className="text-sm font-medium text-slate-900">
                                     {new Date(
-                                        selectedInvoice.invoice_date + "T00:00:00"
+                                        selectedInvoice.issue_date + "T00:00:00"
                                     ).toLocaleDateString("es-SV", {
                                         weekday: "long",
                                         year: "numeric",
@@ -1351,16 +1761,21 @@ const Invoicing = () => {
                                 </p>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Fecha de Vencimiento
                                 </p>
-                                <p className={cn(
-                                    "text-sm font-medium",
-                                    selectedInvoice.days_overdue > 0 ? "text-red-600" : "text-slate-900"
-                                )}>
+                                <p
+                                    className={cn(
+                                        "text-sm font-medium",
+                                        selectedInvoice.days_overdue > 0
+                                            ? "text-red-600"
+                                            : "text-slate-900"
+                                    )}
+                                >
                                     {selectedInvoice.due_date
                                         ? new Date(
-                                              selectedInvoice.due_date + "T00:00:00"
+                                              selectedInvoice.due_date +
+                                                  "T00:00:00"
                                           ).toLocaleDateString("es-SV", {
                                               weekday: "long",
                                               year: "numeric",
@@ -1372,17 +1787,17 @@ const Invoicing = () => {
                             </div>
                             {selectedInvoice.service_order_number && (
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                         Orden de Servicio
                                     </p>
-                                    <p className="font-mono font-semibold text-brand-600">
+                                    <p className="font-mono font-medium text-brand-600">
                                         {selectedInvoice.service_order_number}
                                     </p>
                                 </div>
                             )}
                             {selectedInvoice.ccf && (
                                 <div>
-                                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                         CCF
                                     </p>
                                     <p className="font-mono font-medium text-slate-900">
@@ -1394,85 +1809,123 @@ const Invoicing = () => {
 
                         {/* Financial Summary */}
                         <div className="grid grid-cols-3 gap-4">
-                            <div className="p-4 bg-brand-50 border border-brand-200 rounded-lg">
-                                <p className="text-xs text-brand-600 font-medium mb-1">Total Facturado</p>
-                                <p className="text-2xl font-bold text-brand-900 tabular-nums">
-                                    {formatCurrency(selectedInvoice.total_amount)}
+                            <div className="px-4 py-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                                    Total Facturado
+                                </p>
+                                <p className="text-xl font-bold text-slate-900 tabular-nums">
+                                    {formatCurrency(
+                                        selectedInvoice.total_amount
+                                    )}
                                 </p>
                             </div>
-                            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                                <p className="text-xs text-emerald-600 font-medium mb-1">Total Pagado</p>
-                                <p className="text-2xl font-bold text-emerald-900 tabular-nums">
-                                    {formatCurrency(selectedInvoice.paid_amount || 0)}
+                            <div className="px-4 py-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                                    Total Pagado
+                                </p>
+                                <p className="text-xl font-bold text-emerald-700 tabular-nums">
+                                    {formatCurrency(
+                                        selectedInvoice.paid_amount || 0
+                                    )}
                                 </p>
                             </div>
-                            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                                <p className="text-xs text-red-600 font-medium mb-1">Saldo Pendiente</p>
-                                <p className="text-2xl font-bold text-red-900 tabular-nums">
+                            <div className="px-4 py-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                                    Saldo Pendiente
+                                </p>
+                                <p
+                                    className={cn(
+                                        "text-xl font-bold tabular-nums",
+                                        parseFloat(selectedInvoice.balance) > 0
+                                            ? "text-red-700"
+                                            : "text-slate-900"
+                                    )}
+                                >
                                     {formatCurrency(selectedInvoice.balance)}
                                 </p>
                             </div>
                         </div>
 
                         {/* Payment History */}
-                        <div>
-                            <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                                <Banknote className="h-4 w-4 text-brand-600" />
+                        <div className="pt-2">
+                            <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <div className="p-1.5 bg-emerald-50 rounded-md">
+                                    <Banknote className="h-4 w-4 text-emerald-600" />
+                                </div>
                                 Historial de Pagos
                             </h3>
-                            {selectedInvoice.payments && selectedInvoice.payments.length > 0 ? (
-                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                            {selectedInvoice.payments &&
+                            selectedInvoice.payments.length > 0 ? (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
                                     <table className="min-w-full divide-y divide-slate-200">
                                         <thead className="bg-slate-50">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                                     Fecha
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                                     Monto
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                                     Método
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                                                     Referencia
                                                 </th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-slate-100">
-                                            {selectedInvoice.payments.map((payment, idx) => (
-                                                <tr key={idx} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-3 text-sm text-slate-900">
-                                                        {new Date(
-                                                            payment.payment_date + "T00:00:00"
-                                                        ).toLocaleDateString("es-SV")}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm font-semibold text-emerald-600 tabular-nums">
-                                                        {formatCurrency(payment.amount)}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-slate-600 capitalize">
-                                                        {payment.payment_method}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-slate-600 font-mono">
-                                                        {payment.reference || "-"}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {selectedInvoice.payments.map(
+                                                (payment, idx) => (
+                                                    <tr
+                                                        key={idx}
+                                                        className="hover:bg-slate-50"
+                                                    >
+                                                        <td className="px-4 py-3 text-sm text-slate-900">
+                                                            {new Date(
+                                                                payment.payment_date +
+                                                                    "T00:00:00"
+                                                            ).toLocaleDateString(
+                                                                "es-SV"
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm font-semibold text-emerald-600 tabular-nums">
+                                                            {formatCurrency(
+                                                                payment.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-slate-600 capitalize">
+                                                            {
+                                                                payment.payment_method
+                                                            }
+                                                        </td>
+                                                        <td className="px-4 py-3 text-sm text-slate-600 font-mono">
+                                                            {payment.reference ||
+                                                                "-"}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
                             ) : (
                                 <div className="text-center py-8 bg-slate-50 rounded-lg border border-slate-200">
                                     <Clock className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                                    <p className="text-sm text-slate-600">No hay pagos registrados</p>
-                                    {parseFloat(selectedInvoice.balance) > 0 && (
+                                    <p className="text-sm text-slate-600">
+                                        No hay pagos registrados
+                                    </p>
+                                    {parseFloat(selectedInvoice.balance) >
+                                        0 && (
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             className="mt-3"
                                             onClick={() => {
                                                 setIsDetailModalOpen(false);
-                                                handleOpenPaymentModal(selectedInvoice);
+                                                handleOpenPaymentModal(
+                                                    selectedInvoice
+                                                );
                                             }}
                                         >
                                             <Plus className="w-4 h-4 mr-1" />
@@ -1486,23 +1939,55 @@ const Invoicing = () => {
                 )}
 
                 <ModalFooter>
-                    <Button variant="ghost" onClick={() => setIsDetailModalOpen(false)}>
+                    <Button
+                        variant="outline"
+                        onClick={() => setIsDetailModalOpen(false)}
+                    >
                         Cerrar
                     </Button>
-                    {selectedInvoice && parseFloat(selectedInvoice.balance) > 0 && (
+                    {selectedInvoice?.pdf_file && (
                         <Button
-                            variant="success"
-                            onClick={() => {
-                                setIsDetailModalOpen(false);
-                                handleOpenPaymentModal(selectedInvoice);
-                            }}
+                            variant="outline"
+                            onClick={() =>
+                                window.open(selectedInvoice.pdf_file, "_blank")
+                            }
                         >
-                            <Banknote className="w-4 h-4 mr-1.5" />
-                            Registrar Pago
+                            <FileText className="w-4 h-4 mr-2" />
+                            Ver Factura
                         </Button>
                     )}
+                    {selectedInvoice &&
+                        parseFloat(selectedInvoice.balance) > 0 && (
+                            <Button
+                                onClick={() => {
+                                    setIsDetailModalOpen(false);
+                                    handleOpenPaymentModal(selectedInvoice);
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white border-transparent shadow-sm"
+                            >
+                                <Banknote className="w-4 h-4 mr-2" />
+                                Registrar Pago
+                            </Button>
+                        )}
                 </ModalFooter>
             </Modal>
+
+            {/* Confirm Delete Dialog */}
+            <ConfirmDialog
+                open={deleteConfirm.open}
+                onOpenChange={(open) =>
+                    setDeleteConfirm({
+                        open,
+                        id: open ? deleteConfirm.id : null,
+                    })
+                }
+                title="Eliminar Factura"
+                description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+                onConfirm={handleDeleteInvoice}
+            />
         </div>
     );
 };

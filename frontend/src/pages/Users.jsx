@@ -15,7 +15,7 @@ import {
     DialogFooter,
     Input,
     Label,
-    Select,
+    SelectERP,
     Skeleton,
     SkeletonTable,
 } from "../components/ui";
@@ -578,23 +578,27 @@ function Users() {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label>Rol *</Label>
-                                <Select
+                                <SelectERP
+                                    label="Rol"
                                     value={formData.role}
-                                    onChange={(e) =>
+                                    onChange={(value) =>
                                         setFormData({
                                             ...formData,
-                                            role: e.target.value,
+                                            role: value,
                                         })
                                     }
+                                    options={[
+                                        { id: "operativo", name: "Operativo" },
+                                        {
+                                            id: "operativo2",
+                                            name: "Operativo 2",
+                                        },
+                                        { id: "admin", name: "Administrador" },
+                                    ]}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
                                     required
-                                >
-                                    <option value="operativo">Operativo</option>
-                                    <option value="operativo2">
-                                        Operativo 2
-                                    </option>
-                                    <option value="admin">Administrador</option>
-                                </Select>
+                                />
                             </div>
                             <div className="flex items-center gap-2 pt-8">
                                 <input

@@ -19,7 +19,7 @@ import {
     DialogFooter,
     Input,
     Label,
-    Select,
+    SelectERP,
     Skeleton,
     EmptyState,
     ConfirmDialog,
@@ -908,10 +908,14 @@ function ServiceOrderDetail() {
                                     <Receipt className="w-4 h-4 text-blue-500" />
                                 </div>
                                 <p className="text-2xl font-bold text-blue-900 tabular-nums">
-                                    {formatCurrency(totals.invoiced || totals.charges)}
+                                    {formatCurrency(
+                                        totals.invoiced || totals.charges
+                                    )}
                                 </p>
                                 <p className="text-xs text-blue-600 mt-1">
-                                    {invoice ? "1 factura emitida" : "Pendiente de facturar"}
+                                    {invoice
+                                        ? "1 factura emitida"
+                                        : "Pendiente de facturar"}
                                 </p>
                             </div>
 
@@ -930,35 +934,51 @@ function ServiceOrderDetail() {
                                 </p>
                             </div>
 
-                            <div className={cn(
-                                "border rounded-lg p-4",
-                                margin.value >= 0
-                                    ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
-                                    : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200"
-                            )}>
+                            <div
+                                className={cn(
+                                    "border rounded-lg p-4",
+                                    margin.value >= 0
+                                        ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
+                                        : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200"
+                                )}
+                            >
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className={cn(
-                                        "text-xs font-medium uppercase tracking-wide",
-                                        margin.value >= 0 ? "text-emerald-600" : "text-red-600"
-                                    )}>
+                                    <span
+                                        className={cn(
+                                            "text-xs font-medium uppercase tracking-wide",
+                                            margin.value >= 0
+                                                ? "text-emerald-600"
+                                                : "text-red-600"
+                                        )}
+                                    >
                                         Margen
                                     </span>
-                                    {margin.value >= 0
-                                        ? <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                        : <TrendingDown className="w-4 h-4 text-red-500" />
-                                    }
+                                    {margin.value >= 0 ? (
+                                        <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                    ) : (
+                                        <TrendingDown className="w-4 h-4 text-red-500" />
+                                    )}
                                 </div>
-                                <p className={cn(
-                                    "text-2xl font-bold tabular-nums",
-                                    margin.value >= 0 ? "text-emerald-900" : "text-red-900"
-                                )}>
+                                <p
+                                    className={cn(
+                                        "text-2xl font-bold tabular-nums",
+                                        margin.value >= 0
+                                            ? "text-emerald-900"
+                                            : "text-red-900"
+                                    )}
+                                >
                                     {formatCurrency(margin.value)}
                                 </p>
-                                <p className={cn(
-                                    "text-xs mt-1",
-                                    margin.value >= 0 ? "text-emerald-600" : "text-red-600"
-                                )}>
-                                    {margin.percentage.toFixed(1)}% de rentabilidad
+                                <p
+                                    className={cn(
+                                        "text-xs mt-1",
+                                        margin.value >= 0
+                                            ? "text-emerald-600"
+                                            : "text-red-600"
+                                    )}
+                                >
+                                    {margin.percentage.toFixed(1)}% de
+                                    rentabilidad
                                 </p>
                             </div>
                         </div>
@@ -976,7 +996,11 @@ function ServiceOrderDetail() {
                                     <Button
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => navigate(`/invoicing?invoice=${invoice.id}`)}
+                                        onClick={() =>
+                                            navigate(
+                                                `/invoicing?invoice=${invoice.id}`
+                                            )
+                                        }
                                         className="text-blue-600 border-blue-200 hover:bg-blue-50"
                                     >
                                         Ver en CXC
@@ -997,20 +1021,31 @@ function ServiceOrderDetail() {
                                             }
                                         />
                                         <div>
-                                            <dt className="data-label">Estado</dt>
+                                            <dt className="data-label">
+                                                Estado
+                                            </dt>
                                             <dd className="mt-1">
-                                                <StatusBadge status={invoice.status} />
+                                                <StatusBadge
+                                                    status={invoice.status}
+                                                />
                                             </dd>
                                         </div>
                                         <DataField
                                             label="Fecha de Emisión"
-                                            value={formatDate(invoice.issue_date, { format: "medium" })}
+                                            value={formatDate(
+                                                invoice.issue_date,
+                                                { format: "medium" }
+                                            )}
                                         />
                                         <DataField
                                             label="Fecha de Vencimiento"
-                                            value={invoice.due_date
-                                                ? formatDate(invoice.due_date, { format: "medium" })
-                                                : "Sin vencimiento"
+                                            value={
+                                                invoice.due_date
+                                                    ? formatDate(
+                                                          invoice.due_date,
+                                                          { format: "medium" }
+                                                      )
+                                                    : "Sin vencimiento"
                                             }
                                         />
                                     </div>
@@ -1019,57 +1054,93 @@ function ServiceOrderDetail() {
                                     <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                         <div className="grid grid-cols-3 gap-4 text-center">
                                             <div>
-                                                <p className="text-xs text-slate-500 mb-1">Total Facturado</p>
+                                                <p className="text-xs text-slate-500 mb-1">
+                                                    Total Facturado
+                                                </p>
                                                 <p className="text-lg font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(invoice.total_amount)}
+                                                    {formatCurrency(
+                                                        invoice.total_amount
+                                                    )}
                                                 </p>
                                             </div>
                                             <div>
-                                                <p className="text-xs text-slate-500 mb-1">Pagado</p>
+                                                <p className="text-xs text-slate-500 mb-1">
+                                                    Pagado
+                                                </p>
                                                 <p className="text-lg font-bold text-emerald-600 tabular-nums">
-                                                    {formatCurrency(invoice.paid_amount || 0)}
+                                                    {formatCurrency(
+                                                        invoice.paid_amount || 0
+                                                    )}
                                                 </p>
                                             </div>
                                             <div>
-                                                <p className="text-xs text-slate-500 mb-1">Saldo Pendiente</p>
-                                                <p className={cn(
-                                                    "text-lg font-bold tabular-nums",
-                                                    parseFloat(invoice.balance) > 0 ? "text-red-600" : "text-emerald-600"
-                                                )}>
-                                                    {formatCurrency(invoice.balance)}
+                                                <p className="text-xs text-slate-500 mb-1">
+                                                    Saldo Pendiente
+                                                </p>
+                                                <p
+                                                    className={cn(
+                                                        "text-lg font-bold tabular-nums",
+                                                        parseFloat(
+                                                            invoice.balance
+                                                        ) > 0
+                                                            ? "text-red-600"
+                                                            : "text-emerald-600"
+                                                    )}
+                                                >
+                                                    {formatCurrency(
+                                                        invoice.balance
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Historial de pagos si existe */}
-                                    {invoice.payments && invoice.payments.length > 0 && (
-                                        <div className="mt-4">
-                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                                Historial de Pagos
-                                            </h4>
-                                            <div className="space-y-2">
-                                                {invoice.payments.map((payment, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                                                        <div className="flex items-center gap-3">
-                                                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                                            <div>
-                                                                <p className="text-sm font-medium text-slate-900 tabular-nums">
-                                                                    {formatCurrency(payment.amount)}
-                                                                </p>
-                                                                <p className="text-xs text-slate-500">
-                                                                    {payment.payment_method} • {payment.reference || "Sin ref."}
-                                                                </p>
+                                    {invoice.payments &&
+                                        invoice.payments.length > 0 && (
+                                            <div className="mt-4">
+                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                                    Historial de Pagos
+                                                </h4>
+                                                <div className="space-y-2">
+                                                    {invoice.payments.map(
+                                                        (payment, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                                                    <div>
+                                                                        <p className="text-sm font-medium text-slate-900 tabular-nums">
+                                                                            {formatCurrency(
+                                                                                payment.amount
+                                                                            )}
+                                                                        </p>
+                                                                        <p className="text-xs text-slate-500">
+                                                                            {
+                                                                                payment.payment_method
+                                                                            }{" "}
+                                                                            •{" "}
+                                                                            {payment.reference ||
+                                                                                "Sin ref."}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <span className="text-xs text-slate-500">
+                                                                    {formatDate(
+                                                                        payment.payment_date,
+                                                                        {
+                                                                            format: "short",
+                                                                        }
+                                                                    )}
+                                                                </span>
                                                             </div>
-                                                        </div>
-                                                        <span className="text-xs text-slate-500">
-                                                            {formatDate(payment.payment_date, { format: "short" })}
-                                                        </span>
-                                                    </div>
-                                                ))}
+                                                        )
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
                                 </div>
                             ) : (
                                 <div className="py-12">
@@ -1081,7 +1152,11 @@ function ServiceOrderDetail() {
                                             totals.charges > 0 && (
                                                 <Button
                                                     size="sm"
-                                                    onClick={() => navigate(`/invoicing?create=true&order=${id}`)}
+                                                    onClick={() =>
+                                                        navigate(
+                                                            `/invoicing?create=true&order=${id}`
+                                                        )
+                                                    }
                                                     className="bg-brand-600 hover:bg-brand-700"
                                                 >
                                                     <Plus className="w-4 h-4 mr-1.5" />
@@ -1106,7 +1181,11 @@ function ServiceOrderDetail() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => navigate(`/provider-payments?order=${id}`)}
+                                    onClick={() =>
+                                        navigate(
+                                            `/provider-payments?order=${id}`
+                                        )
+                                    }
                                     className="text-amber-600 border-amber-200 hover:bg-amber-50"
                                 >
                                     Ver en CXP
@@ -1117,50 +1196,90 @@ function ServiceOrderDetail() {
                             {transfers.length > 0 ? (
                                 <div className="p-5">
                                     <div className="space-y-2">
-                                        {transfers.slice(0, 5).map((transfer, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "w-8 h-8 rounded-lg flex items-center justify-center",
-                                                        transfer.transfer_type === "terceros" ? "bg-amber-100" :
-                                                        transfer.transfer_type === "costos" ? "bg-blue-100" : "bg-slate-100"
-                                                    )}>
-                                                        <DollarSign className={cn(
-                                                            "w-4 h-4",
-                                                            transfer.transfer_type === "terceros" ? "text-amber-600" :
-                                                            transfer.transfer_type === "costos" ? "text-blue-600" : "text-slate-600"
-                                                        )} />
+                                        {transfers
+                                            .slice(0, 5)
+                                            .map((transfer, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div
+                                                            className={cn(
+                                                                "w-8 h-8 rounded-lg flex items-center justify-center",
+                                                                transfer.transfer_type ===
+                                                                    "terceros"
+                                                                    ? "bg-amber-100"
+                                                                    : transfer.transfer_type ===
+                                                                      "costos"
+                                                                    ? "bg-blue-100"
+                                                                    : "bg-slate-100"
+                                                            )}
+                                                        >
+                                                            <DollarSign
+                                                                className={cn(
+                                                                    "w-4 h-4",
+                                                                    transfer.transfer_type ===
+                                                                        "terceros"
+                                                                        ? "text-amber-600"
+                                                                        : transfer.transfer_type ===
+                                                                          "costos"
+                                                                        ? "text-blue-600"
+                                                                        : "text-slate-600"
+                                                                )}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-slate-900">
+                                                                {transfer
+                                                                    .provider
+                                                                    ?.name ||
+                                                                    transfer.beneficiary_name ||
+                                                                    "Gasto"}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500">
+                                                                {transfer.transfer_type ===
+                                                                "terceros"
+                                                                    ? "Gasto a Terceros"
+                                                                    : transfer.transfer_type ===
+                                                                      "costos"
+                                                                    ? "Costo Directo"
+                                                                    : transfer.transfer_type ===
+                                                                      "admin"
+                                                                    ? "Administrativo"
+                                                                    : transfer.transfer_type}
+                                                                {transfer.ccf &&
+                                                                    ` • CCF: ${transfer.ccf}`}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-slate-900">
-                                                            {transfer.provider?.name || transfer.beneficiary_name || "Gasto"}
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-semibold text-amber-600 tabular-nums">
+                                                            {formatCurrency(
+                                                                transfer.amount
+                                                            )}
                                                         </p>
-                                                        <p className="text-xs text-slate-500">
-                                                            {transfer.transfer_type === "terceros" ? "Gasto a Terceros" :
-                                                             transfer.transfer_type === "costos" ? "Costo Directo" :
-                                                             transfer.transfer_type === "admin" ? "Administrativo" : transfer.transfer_type}
-                                                            {transfer.ccf && ` • CCF: ${transfer.ccf}`}
-                                                        </p>
+                                                        <StatusBadge
+                                                            status={
+                                                                transfer.status
+                                                            }
+                                                        />
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-semibold text-amber-600 tabular-nums">
-                                                        {formatCurrency(transfer.amount)}
-                                                    </p>
-                                                    <StatusBadge status={transfer.status} />
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))}
                                     </div>
                                     {transfers.length > 5 && (
                                         <div className="mt-3 text-center">
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => setActiveTab("transfers")}
+                                                onClick={() =>
+                                                    setActiveTab("transfers")
+                                                }
                                                 className="text-slate-600"
                                             >
-                                                Ver todos ({transfers.length} registros)
+                                                Ver todos ({transfers.length}{" "}
+                                                registros)
                                             </Button>
                                         </div>
                                     )}
@@ -1168,9 +1287,13 @@ function ServiceOrderDetail() {
                                     {/* Total de gastos */}
                                     <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
                                         <div className="text-right">
-                                            <p className="text-xs text-slate-500 mb-1">Total Gastos CXP</p>
+                                            <p className="text-xs text-slate-500 mb-1">
+                                                Total Gastos CXP
+                                            </p>
                                             <p className="text-xl font-bold text-amber-600 tabular-nums">
-                                                {formatCurrency(totals.transfers)}
+                                                {formatCurrency(
+                                                    totals.transfers
+                                                )}
                                             </p>
                                         </div>
                                     </div>
@@ -1184,7 +1307,11 @@ function ServiceOrderDetail() {
                                         action={
                                             <Button
                                                 size="sm"
-                                                onClick={() => setIsAddTransferModalOpen(true)}
+                                                onClick={() =>
+                                                    setIsAddTransferModalOpen(
+                                                        true
+                                                    )
+                                                }
                                                 className="bg-brand-600 hover:bg-brand-700"
                                             >
                                                 <Plus className="w-4 h-4 mr-1.5" />
@@ -1343,35 +1470,31 @@ function ServiceOrderDetail() {
                     </DialogHeader>
                     <form onSubmit={handleAddCharge} className="space-y-4">
                         <div>
-                            <Label className="label-corporate label-required">
-                                Servicio
-                            </Label>
-                            <select
+                            <SelectERP
+                                label="Servicio"
                                 value={chargeFormData.service}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                     const service = services.find(
-                                        (s) => s.id === parseInt(e.target.value)
+                                        (s) => s.id === parseInt(value)
                                     );
                                     setChargeFormData({
                                         ...chargeFormData,
-                                        service: e.target.value,
+                                        service: value,
                                         unit_price:
                                             service?.default_price || "",
                                     });
                                 }}
+                                options={services}
+                                getOptionLabel={(s) =>
+                                    `${s.name} - ${formatCurrency(
+                                        s.default_price
+                                    )}`
+                                }
+                                getOptionValue={(s) => s.id}
+                                placeholder="Seleccionar servicio..."
+                                searchable
                                 required
-                                className="input-corporate"
-                            >
-                                <option value="">
-                                    Seleccionar servicio...
-                                </option>
-                                {services.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.name} -{" "}
-                                        {formatCurrency(s.default_price)}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -1441,50 +1564,43 @@ function ServiceOrderDetail() {
                     </DialogHeader>
                     <form onSubmit={handleAddTransfer} className="space-y-4">
                         <div>
-                            <Label className="label-corporate label-required">
-                                Tipo de Gasto
-                            </Label>
-                            <select
+                            <SelectERP
+                                label="Tipo de Gasto"
                                 value={transferFormData.transfer_type}
-                                onChange={(e) =>
+                                onChange={(value) =>
                                     setTransferFormData({
                                         ...transferFormData,
-                                        transfer_type: e.target.value,
+                                        transfer_type: value,
                                     })
                                 }
+                                options={[
+                                    { id: "terceros", name: "Terceros" },
+                                    { id: "propios", name: "Propios" },
+                                    { id: "admin", name: "Administrativos" },
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
                                 required
-                                className="input-corporate"
-                            >
-                                <option value="terceros">Terceros</option>
-                                <option value="propios">Propios</option>
-                                <option value="admin">Administrativos</option>
-                            </select>
+                            />
                         </div>
                         {transferFormData.transfer_type === "terceros" && (
                             <div>
-                                <Label className="label-corporate label-required">
-                                    Proveedor
-                                </Label>
-                                <select
+                                <SelectERP
+                                    label="Proveedor"
                                     value={transferFormData.provider}
-                                    onChange={(e) =>
+                                    onChange={(value) =>
                                         setTransferFormData({
                                             ...transferFormData,
-                                            provider: e.target.value,
+                                            provider: value,
                                         })
                                     }
+                                    options={providers}
+                                    getOptionLabel={(p) => p.name}
+                                    getOptionValue={(p) => p.id}
+                                    placeholder="Seleccionar proveedor..."
+                                    searchable
                                     required
-                                    className="input-corporate"
-                                >
-                                    <option value="">
-                                        Seleccionar proveedor...
-                                    </option>
-                                    {providers.map((p) => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                         )}
                         <div>

@@ -20,6 +20,7 @@ import {
     TabsList,
     TabsTrigger,
     TabsContent,
+    SelectERP,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -764,69 +765,55 @@ const Services = () => {
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <Label>Cliente *</Label>
-                                        <select
+                                        <SelectERP
+                                            label="Cliente"
+                                            placeholder="Seleccione un cliente"
                                             value={customFormData.client}
-                                            onChange={(e) =>
+                                            onChange={(value) =>
                                                 setCustomFormData({
                                                     ...customFormData,
-                                                    client: e.target.value,
+                                                    client: value,
                                                 })
                                             }
-                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            options={clients}
+                                            getOptionLabel={(client) =>
+                                                client.name
+                                            }
+                                            getOptionValue={(client) =>
+                                                client.id
+                                            }
+                                            searchable
+                                            clearable
                                             required
                                             disabled={!!editingCustomPrice}
-                                        >
-                                            <option value="">
-                                                Seleccione un cliente
-                                            </option>
-                                            {clients.map((client) => (
-                                                <option
-                                                    key={client.id}
-                                                    value={client.id}
-                                                >
-                                                    {client.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Cliente al que aplicará el precio
-                                            especial
-                                        </p>
+                                            helperText="Cliente al que aplicará el precio especial"
+                                        />
                                     </div>
 
                                     <div>
-                                        <Label>Servicio *</Label>
-                                        <select
+                                        <SelectERP
+                                            label="Servicio"
+                                            placeholder="Seleccione un servicio"
                                             value={customFormData.service}
-                                            onChange={(e) =>
+                                            onChange={(value) =>
                                                 setCustomFormData({
                                                     ...customFormData,
-                                                    service: e.target.value,
+                                                    service: value,
                                                 })
                                             }
-                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            options={activeServices}
+                                            getOptionLabel={(service) =>
+                                                service.name
+                                            }
+                                            getOptionValue={(service) =>
+                                                service.id
+                                            }
+                                            searchable
+                                            clearable
                                             required
                                             disabled={!!editingCustomPrice}
-                                        >
-                                            <option value="">
-                                                Seleccione un servicio
-                                            </option>
-                                            {activeServices.map(
-                                                (service, index) => (
-                                                    <option
-                                                        key={service.id}
-                                                        value={service.id}
-                                                    >
-                                                        #{index + 1} -{" "}
-                                                        {service.name}
-                                                    </option>
-                                                )
-                                            )}
-                                        </select>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Servicio con precio personalizado
-                                        </p>
+                                            helperText="Servicio con precio personalizado"
+                                        />
                                     </div>
                                 </div>
 

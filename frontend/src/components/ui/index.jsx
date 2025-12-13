@@ -38,6 +38,7 @@ export {
 
 // Form Controls
 export { default as Select } from "./Select";
+export { default as SelectERP } from "./SelectERP";
 export { Input, Textarea, FormField } from "./Input";
 export { Label } from "./Label";
 export { FileUpload } from "./FileUpload";

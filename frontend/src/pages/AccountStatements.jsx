@@ -27,6 +27,8 @@ import {
     MoreVertical,
     Table,
     FileSpreadsheet,
+    Edit2,
+    Trash2,
 } from "lucide-react";
 import {
     Button,
@@ -36,7 +38,7 @@ import {
     CardContent,
     DataTable,
     Badge,
-    Select,
+    SelectERP,
     Input,
     Label,
     Skeleton,
@@ -44,6 +46,7 @@ import {
     Modal,
     ModalFooter,
     FileUpload,
+    ConfirmDialog,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -117,39 +120,26 @@ const KPICard = ({
     icon: Icon,
     variant = "default",
 }) => {
-    const variants = {
-        default: "text-slate-900",
-        primary: "text-blue-600",
-        success: "text-emerald-600",
-        warning: "text-amber-600",
-        danger: "text-red-600",
-    };
-
     return (
         <Card>
-            <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-gray-500">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
                             {label}
                         </p>
-                        <p
-                            className={cn(
-                                "text-2xl font-bold mt-1",
-                                variants[variant]
-                            )}
-                        >
+                        <p className="text-2xl font-semibold text-slate-900 tabular-nums">
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-slate-500 mt-1.5">
                                 {subtext}
                             </p>
                         )}
                     </div>
                     {Icon && (
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <Icon className="w-5 h-5 text-gray-400" />
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                            <Icon className="w-5 h-5 text-slate-400" />
                         </div>
                     )}
                 </div>
@@ -174,67 +164,46 @@ const ClientCard = ({ client, isSelected, onClick }) => {
             className={cn(
                 "p-3 rounded-lg border cursor-pointer transition-all",
                 isSelected
-                    ? "border-blue-500 bg-blue-50 shadow-sm"
-                    : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50"
+                    ? "border-slate-300 bg-slate-50 shadow-sm"
+                    : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50"
             )}
         >
             <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
                     <div
                         className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs",
+                            "w-9 h-9 rounded-lg flex items-center justify-center font-semibold text-xs border",
                             isSelected
-                                ? "bg-blue-500 text-white"
-                                : "bg-slate-100 text-slate-600"
+                                ? "bg-slate-100 text-slate-700 border-slate-300"
+                                : "bg-slate-50 text-slate-600 border-slate-200"
                         )}
                     >
                         {client.name?.charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                        <h3 className="font-medium text-slate-900 text-sm leading-tight">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-slate-900 text-sm leading-tight truncate">
                             {client.name}
                         </h3>
-                        <p className="text-xs text-slate-500">{client.nit}</p>
+                        <p className="text-xs text-slate-500 truncate">
+                            {client.nit}
+                        </p>
                     </div>
                 </div>
-                {hasOverdue && <AlertCircle className="w-4 h-4 text-red-500" />}
+                {hasOverdue && (
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-red-50 flex items-center justify-center">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                    </div>
+                )}
             </div>
 
-            <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Saldo</span>
-                    <span
-                        className={cn(
-                            "font-medium",
-                            client.total_pending > 0
-                                ? "text-amber-600"
-                                : "text-emerald-600"
-                        )}
-                    >
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex justify-between items-baseline text-xs">
+                    <span className="text-slate-500">Saldo pendiente</span>
+                    <span className="font-semibold text-slate-900 tabular-nums">
                         {formatCurrency(client.total_pending || 0)}
                     </span>
                 </div>
 
-                {client.credit_limit > 0 && (
-                    <div className="space-y-1">
-                        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                                className={cn(
-                                    "h-full rounded-full transition-all",
-                                    utilizationPercent > 80
-                                        ? "bg-red-500"
-                                        : utilizationPercent > 50
-                                        ? "bg-amber-500"
-                                        : "bg-emerald-500"
-                                )}
-                                style={{ width: `${utilizationPercent}%` }}
-                            />
-                        </div>
-                        <div className="text-[10px] text-slate-400 text-right">
-                            {utilizationPercent.toFixed(0)}% utilizado
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );
@@ -292,6 +261,10 @@ function AccountStatements() {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState({
+        open: false,
+        id: null,
+    });
 
     // Payment form
     const [paymentForm, setPaymentForm] = useState({
@@ -310,7 +283,9 @@ function AccountStatements() {
     // Auto-select client from URL params
     useEffect(() => {
         if (clientIdFromUrl && clients.length > 0 && !selectedClient) {
-            const clientFromUrl = clients.find(c => c.id === parseInt(clientIdFromUrl));
+            const clientFromUrl = clients.find(
+                (c) => c.id === parseInt(clientIdFromUrl)
+            );
             if (clientFromUrl) {
                 setSelectedClient(clientFromUrl);
             }
@@ -411,16 +386,23 @@ function AccountStatements() {
                     return;
                 }
 
-                // Aquí idealmente llamarías a un endpoint con los IDs de las facturas filtradas
-                // Por ahora, usamos el endpoint completo
+                const params = {
+                    year: selectedYear,
+                    status: statusFilter,
+                    search: searchQuery,
+                    ...filters
+                };
+
                 response = await axios.get(
                     `/clients/${selectedClient.id}/export_statement_excel/`,
                     {
                         responseType: "blob",
-                        params: { year: selectedYear },
+                        params: params,
                     }
                 );
-                filename = `facturas_filtradas_${selectedClient.name}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                filename = `facturas_filtradas_${selectedClient.name}_${
+                    new Date().toISOString().split("T")[0]
+                }.xlsx`;
                 toast.success(`${filteredInvoices.length} facturas exportadas`);
             } else {
                 // Exportar estado de cuenta completo
@@ -463,9 +445,11 @@ function AccountStatements() {
             formData.append("amount", paymentForm.amount);
             formData.append("payment_date", paymentForm.payment_date);
             formData.append("payment_method", paymentForm.payment_method);
-            if (paymentForm.reference) formData.append("reference", paymentForm.reference);
+            if (paymentForm.reference)
+                formData.append("reference", paymentForm.reference);
             if (paymentForm.notes) formData.append("notes", paymentForm.notes);
-            if (paymentForm.payment_proof) formData.append("payment_proof", paymentForm.payment_proof);
+            if (paymentForm.payment_proof)
+                formData.append("payment_proof", paymentForm.payment_proof);
 
             await axios.post(
                 `/orders/invoices/${selectedInvoice.id}/add_payment/`,
@@ -503,6 +487,24 @@ function AccountStatements() {
             amount: invoice.balance || "",
         });
         setIsPaymentModalOpen(true);
+    };
+
+    const handleDeleteInvoice = async () => {
+        if (!deleteConfirm.id) return;
+
+        try {
+            await axios.delete(`/orders/invoices/${deleteConfirm.id}/`);
+            toast.success("Factura eliminada correctamente");
+            setDeleteConfirm({ open: false, id: null });
+            if (selectedClient) {
+                fetchInvoices(selectedClient.id);
+                fetchStatement(selectedClient.id);
+            }
+        } catch (error) {
+            toast.error(
+                error.response?.data?.error || "Error al eliminar factura"
+            );
+        }
     };
 
     // Filtered clients
@@ -547,15 +549,24 @@ function AccountStatements() {
             }
 
             // Filtro de montos
-            if (filters.minAmount && parseFloat(inv.total_amount) < parseFloat(filters.minAmount)) {
+            if (
+                filters.minAmount &&
+                parseFloat(inv.total_amount) < parseFloat(filters.minAmount)
+            ) {
                 return false;
             }
-            if (filters.maxAmount && parseFloat(inv.total_amount) > parseFloat(filters.maxAmount)) {
+            if (
+                filters.maxAmount &&
+                parseFloat(inv.total_amount) > parseFloat(filters.maxAmount)
+            ) {
                 return false;
             }
 
             // Filtro de tipo de factura
-            if (filters.invoiceType && inv.invoice_type !== filters.invoiceType) {
+            if (
+                filters.invoiceType &&
+                inv.invoice_type !== filters.invoiceType
+            ) {
                 return false;
             }
 
@@ -592,14 +603,19 @@ function AccountStatements() {
         const today = new Date();
         const aging = {
             current: { count: 0, amount: 0, invoices: [] }, // 0-30 días
-            days30: { count: 0, amount: 0, invoices: [] },  // 31-60 días
-            days60: { count: 0, amount: 0, invoices: [] },  // 61-90 días
-            days90: { count: 0, amount: 0, invoices: [] },  // 91+ días
+            days30: { count: 0, amount: 0, invoices: [] }, // 31-60 días
+            days60: { count: 0, amount: 0, invoices: [] }, // 61-90 días
+            days90: { count: 0, amount: 0, invoices: [] }, // 91+ días
         };
 
         invoices
-            .filter(inv => inv.status !== "paid" && inv.status !== "cancelled" && parseFloat(inv.balance) > 0)
-            .forEach(inv => {
+            .filter(
+                (inv) =>
+                    inv.status !== "paid" &&
+                    inv.status !== "cancelled" &&
+                    parseFloat(inv.balance) > 0
+            )
+            .forEach((inv) => {
                 const dueDate = new Date(inv.due_date);
                 const diffTime = today - dueDate;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -765,67 +781,97 @@ function AccountStatements() {
             cell: (row) => <StatusBadge status={row.status} />,
         },
         {
+            header: "PDF",
+            accessor: "pdf_file",
+            className: "w-16 text-center",
+            cell: (row) =>
+                row.pdf_file ? (
+                    <div className="relative group">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(row.pdf_file, "_blank");
+                            }}
+                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                            title="Ver factura PDF (click para ver, click derecho para descargar)"
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // Descargar PDF
+                                const link = document.createElement("a");
+                                link.href = row.pdf_file;
+                                link.setAttribute(
+                                    "download",
+                                    `factura_${
+                                        row.invoice_number || row.id
+                                    }.pdf`
+                                );
+                                document.body.appendChild(link);
+                                link.click();
+                                link.remove();
+                                toast.success("Descargando factura...");
+                            }}
+                        >
+                            <FileText className="w-4 h-4" />
+                        </Button>
+                    </div>
+                ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                ),
+        },
+        {
             header: "Acciones",
             accessor: "actions",
             cell: (row) => (
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center justify-end gap-1">
+                    {/* Registrar pago - Solo si no está pagada o cancelada */}
+                    {row.status !== "paid" && row.status !== "cancelled" && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openPaymentModal(row);
+                            }}
+                            className="text-gray-500 hover:text-amber-600"
+                            title="Registrar pago"
+                        >
+                            <Banknote className="w-4 h-4" />
+                        </Button>
+                    )}
+
                     {/* Ver detalles */}
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={(e) => {
                             e.stopPropagation();
                             setSelectedInvoice(row);
                             setIsDetailModalOpen(true);
                         }}
-                        className="group relative inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                        className="text-gray-500 hover:text-blue-600"
                         title="Ver detalles"
                     >
-                        <Eye className="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" />
-                        <span className="absolute bottom-full mb-2 hidden group-hover:block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded whitespace-nowrap z-10">
-                            Ver detalles
-                        </span>
-                    </button>
+                        <Eye className="w-4 h-4" />
+                    </Button>
 
-                    {/* Registrar pago - Solo si no está pagada o cancelada */}
-                    {row.status !== "paid" && row.status !== "cancelled" && (
-                        <button
+                    {/* Eliminar - Solo si no está pagada */}
+                    {row.status !== "paid" && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                openPaymentModal(row);
+                                setDeleteConfirm({ open: true, id: row.id });
                             }}
-                            className="group relative inline-flex items-center justify-center w-8 h-8 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 transition-all duration-200"
-                            title="Registrar pago"
+                            className="text-gray-400 hover:text-red-600"
+                            title="Eliminar"
                         >
-                            <Banknote className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700 transition-colors" />
-                            <span className="absolute bottom-full mb-2 hidden group-hover:block px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded whitespace-nowrap z-10">
-                                Registrar pago
-                            </span>
-                        </button>
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
                     )}
-
-                    {/* Indicador de días de vencimiento */}
-                    {row.due_date && row.status !== "paid" && row.status !== "cancelled" && (() => {
-                        const today = new Date();
-                        const dueDate = new Date(row.due_date);
-                        const diffTime = dueDate - today;
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                        if (diffDays < 0) {
-                            return (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-red-100 text-red-700 rounded-full border border-red-200">
-                                    <AlertCircle className="w-3 h-3" />
-                                    {Math.abs(diffDays)}d vencida
-                                </span>
-                            );
-                        } else if (diffDays <= 7) {
-                            return (
-                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full border border-amber-200">
-                                    <Clock className="w-3 h-3" />
-                                    {diffDays}d restantes
-                                </span>
-                            );
-                        }
-                        return null;
-                    })()}
                 </div>
             ),
         },
@@ -905,12 +951,13 @@ function AccountStatements() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Select
+                    <SelectERP
                         value={selectedYear}
                         onChange={(val) => setSelectedYear(val)}
                         options={YEAR_OPTIONS}
                         getOptionLabel={(opt) => opt.name}
                         getOptionValue={(opt) => opt.id}
+                        size="sm"
                     />
                     <Button
                         variant="outline"
@@ -935,7 +982,9 @@ function AccountStatements() {
                     <div className="relative">
                         <Button
                             variant="outline"
-                            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                            onClick={() =>
+                                setIsExportMenuOpen(!isExportMenuOpen)
+                            }
                             disabled={isExporting || !selectedClient}
                             className="gap-2"
                         >
@@ -969,7 +1018,9 @@ function AccountStatements() {
                                     <div className="p-1">
                                         {/* Exportar Estado de Cuenta Completo */}
                                         <button
-                                            onClick={() => handleExportExcel("full")}
+                                            onClick={() =>
+                                                handleExportExcel("full")
+                                            }
                                             className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-blue-50 rounded-lg transition-colors text-left group"
                                         >
                                             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
@@ -980,15 +1031,20 @@ function AccountStatements() {
                                                     Estado de Cuenta Completo
                                                 </p>
                                                 <p className="text-xs text-gray-500 mt-0.5">
-                                                    Exportar todas las facturas del año {selectedYear}
+                                                    Exportar todas las facturas
+                                                    del año {selectedYear}
                                                 </p>
                                             </div>
                                         </button>
 
                                         {/* Exportar Solo Facturas Filtradas */}
                                         <button
-                                            onClick={() => handleExportExcel("filtered")}
-                                            disabled={filteredInvoices.length === 0}
+                                            onClick={() =>
+                                                handleExportExcel("filtered")
+                                            }
+                                            disabled={
+                                                filteredInvoices.length === 0
+                                            }
                                             className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
@@ -999,28 +1055,9 @@ function AccountStatements() {
                                                     Facturas Filtradas
                                                 </p>
                                                 <p className="text-xs text-gray-500 mt-0.5">
-                                                    Exportar {filteredInvoices.length} factura(s) visible(s)
-                                                </p>
-                                            </div>
-                                        </button>
-
-                                        {/* Exportar Resumen por Cliente */}
-                                        <button
-                                            onClick={() => {
-                                                handleExportExcel("summary");
-                                                setIsExportMenuOpen(false);
-                                            }}
-                                            className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-purple-50 rounded-lg transition-colors text-left group"
-                                        >
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                                                <Building2 className="w-4 h-4 text-purple-600" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900">
-                                                    Resumen del Cliente
-                                                </p>
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    KPIs, límites de crédito y totales
+                                                    Exportar{" "}
+                                                    {filteredInvoices.length}{" "}
+                                                    factura(s) visible(s)
                                                 </p>
                                             </div>
                                         </button>
@@ -1100,16 +1137,16 @@ function AccountStatements() {
                         <>
                             {/* Client Header Card */}
                             <Card>
-                                <CardContent className="p-6">
+                                <CardContent className="p-5">
                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xl text-slate-600">
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="w-12 h-12 rounded-lg bg-slate-50 border-2 border-slate-200 flex items-center justify-center font-semibold text-lg text-slate-700">
                                                 {selectedClient.name
                                                     ?.charAt(0)
                                                     .toUpperCase()}
                                             </div>
                                             <div>
-                                                <h2 className="text-xl font-bold text-gray-900">
+                                                <h2 className="text-lg font-semibold text-slate-900">
                                                     {selectedClient.name}
                                                 </h2>
                                                 <div className="flex items-center gap-4 mt-1 text-gray-500 text-sm">
@@ -1142,6 +1179,7 @@ function AccountStatements() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
+                                                    onClick={() => window.open(`tel:${selectedClient.phone}`)}
                                                 >
                                                     <Phone className="w-4 h-4 mr-2" />
                                                     {selectedClient.phone}
@@ -1151,6 +1189,7 @@ function AccountStatements() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
+                                                    onClick={() => window.open(`mailto:${selectedClient.email}`)}
                                                 >
                                                     <Mail className="w-4 h-4" />
                                                 </Button>
@@ -1164,199 +1203,44 @@ function AccountStatements() {
                             {clientKPIs && (
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                     <KPICard
-                                        label="Límite de Crédito"
+                                        label="Total Facturado"
                                         value={formatCurrency(
-                                            clientKPIs.creditLimit
+                                            clientKPIs.totalInvoiced
                                         )}
-                                        icon={CreditCard}
+                                        icon={FileText}
                                         variant="primary"
                                     />
                                     <KPICard
-                                        label="Crédito Utilizado"
+                                        label="Total Cobrado"
                                         value={formatCurrency(
-                                            clientKPIs.creditUsed
+                                            clientKPIs.totalPaid
                                         )}
-                                        icon={TrendingUp}
-                                        variant="warning"
+                                        icon={CheckCircle2}
+                                        variant="success"
                                     />
                                     <KPICard
-                                        label="Crédito Disponible"
+                                        label="Saldo Pendiente"
                                         value={formatCurrency(
-                                            clientKPIs.creditAvailable
+                                            clientKPIs.totalPending
                                         )}
-                                        icon={TrendingDown}
+                                        icon={TrendingUp}
                                         variant={
-                                            clientKPIs.creditAvailable > 0
-                                                ? "success"
-                                                : "danger"
+                                            clientKPIs.totalPending > 0
+                                                ? "warning"
+                                                : "default"
                                         }
                                     />
                                     <KPICard
                                         label="OS Pendientes"
                                         value={clientKPIs.pendingOrders}
                                         subtext="En proceso"
-                                        icon={FileText}
+                                        icon={Clock}
                                         variant="default"
                                     />
                                 </div>
                             )}
 
-                            {/* Aging Analysis - Antigüedad de Cuentas por Cobrar */}
-                            {agingData && (agingData.current.count > 0 || agingData.days30.count > 0 || agingData.days60.count > 0 || agingData.days90.count > 0) && (
-                                <Card>
-                                    <CardHeader>
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-base flex items-center gap-2">
-                                                <Clock className="w-5 h-5 text-purple-500" />
-                                                Análisis de Antigüedad (Aging)
-                                            </CardTitle>
-                                            <Badge variant="outline" className="text-xs">
-                                                {agingData.current.count + agingData.days30.count + agingData.days60.count + agingData.days90.count} facturas
-                                            </Badge>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="px-5 pb-5 pt-0">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                            {/* Al Corriente (0-30 días) */}
-                                            <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                                                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">
-                                                        {agingData.current.count}
-                                                    </span>
-                                                </div>
-                                                <h4 className="text-xs font-medium text-emerald-700 mb-1">
-                                                    Al Corriente
-                                                </h4>
-                                                <p className="text-xl font-bold text-emerald-900">
-                                                    {formatCurrency(agingData.current.amount)}
-                                                </p>
-                                                <p className="text-[10px] text-emerald-600 mt-1">
-                                                    No vencidas
-                                                </p>
-                                            </div>
-
-                                            {/* 1-30 días vencidas */}
-                                            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-4 border border-amber-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                                                        <Clock className="w-5 h-5 text-amber-600" />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
-                                                        {agingData.days30.count}
-                                                    </span>
-                                                </div>
-                                                <h4 className="text-xs font-medium text-amber-700 mb-1">
-                                                    1-30 días
-                                                </h4>
-                                                <p className="text-xl font-bold text-amber-900">
-                                                    {formatCurrency(agingData.days30.amount)}
-                                                </p>
-                                                <p className="text-[10px] text-amber-600 mt-1">
-                                                    Vencimiento reciente
-                                                </p>
-                                            </div>
-
-                                            {/* 31-60 días vencidas */}
-                                            <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-4 border border-orange-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                                                        <AlertCircle className="w-5 h-5 text-orange-600" />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-1 rounded-full">
-                                                        {agingData.days60.count}
-                                                    </span>
-                                                </div>
-                                                <h4 className="text-xs font-medium text-orange-700 mb-1">
-                                                    31-60 días
-                                                </h4>
-                                                <p className="text-xl font-bold text-orange-900">
-                                                    {formatCurrency(agingData.days60.amount)}
-                                                </p>
-                                                <p className="text-[10px] text-orange-600 mt-1">
-                                                    Requiere seguimiento
-                                                </p>
-                                            </div>
-
-                                            {/* Más de 60 días vencidas */}
-                                            <div className="bg-gradient-to-br from-red-50 to-rose-50 rounded-xl p-4 border border-red-200">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                                                        <XCircle className="w-5 h-5 text-red-600" />
-                                                    </div>
-                                                    <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-1 rounded-full">
-                                                        {agingData.days90.count}
-                                                    </span>
-                                                </div>
-                                                <h4 className="text-xs font-medium text-red-700 mb-1">
-                                                    Más de 60 días
-                                                </h4>
-                                                <p className="text-xl font-bold text-red-900">
-                                                    {formatCurrency(agingData.days90.amount)}
-                                                </p>
-                                                <p className="text-[10px] text-red-600 mt-1">
-                                                    Acción urgente
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {/* Barra de progreso visual */}
-                                        <div className="mt-4 pt-4 border-t border-gray-200">
-                                            <div className="flex items-center justify-between text-xs text-gray-600 mb-2">
-                                                <span>Distribución de saldos pendientes</span>
-                                                <span className="font-semibold">
-                                                    Total: {formatCurrency(
-                                                        agingData.current.amount +
-                                                        agingData.days30.amount +
-                                                        agingData.days60.amount +
-                                                        agingData.days90.amount
-                                                    )}
-                                                </span>
-                                            </div>
-                                            <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                                                {(() => {
-                                                    const total = agingData.current.amount + agingData.days30.amount + agingData.days60.amount + agingData.days90.amount;
-                                                    if (total === 0) return null;
-                                                    return (
-                                                        <>
-                                                            {agingData.current.amount > 0 && (
-                                                                <div
-                                                                    className="bg-emerald-500 h-full"
-                                                                    style={{ width: `${(agingData.current.amount / total) * 100}%` }}
-                                                                    title={`Al corriente: ${formatCurrency(agingData.current.amount)}`}
-                                                                />
-                                                            )}
-                                                            {agingData.days30.amount > 0 && (
-                                                                <div
-                                                                    className="bg-amber-500 h-full"
-                                                                    style={{ width: `${(agingData.days30.amount / total) * 100}%` }}
-                                                                    title={`1-30 días: ${formatCurrency(agingData.days30.amount)}`}
-                                                                />
-                                                            )}
-                                                            {agingData.days60.amount > 0 && (
-                                                                <div
-                                                                    className="bg-orange-500 h-full"
-                                                                    style={{ width: `${(agingData.days60.amount / total) * 100}%` }}
-                                                                    title={`31-60 días: ${formatCurrency(agingData.days60.amount)}`}
-                                                                />
-                                                            )}
-                                                            {agingData.days90.amount > 0 && (
-                                                                <div
-                                                                    className="bg-red-500 h-full"
-                                                                    style={{ width: `${(agingData.days90.amount / total) * 100}%` }}
-                                                                    title={`Más de 60 días: ${formatCurrency(agingData.days90.amount)}`}
-                                                                />
-                                                            )}
-                                                        </>
-                                                    );
-                                                })()}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                            {/* Aging Analysis - Removed */}
 
                             {/* Órdenes Pendientes */}
                             {statement?.pending_invoices?.length > 0 && (
@@ -1398,7 +1282,11 @@ function AccountStatements() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                                onClick={() =>
+                                                    setIsFiltersOpen(
+                                                        !isFiltersOpen
+                                                    )
+                                                }
                                                 className="relative"
                                             >
                                                 <Filter className="w-4 h-4 mr-2" />
@@ -1408,33 +1296,29 @@ function AccountStatements() {
                                                         {activeFiltersCount}
                                                     </span>
                                                 )}
-                                                <ChevronDown className={cn(
-                                                    "w-4 h-4 ml-1 transition-transform",
-                                                    isFiltersOpen && "rotate-180"
-                                                )} />
-                                            </Button>
-                                            <div className="relative w-48">
-                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                                <Input
-                                                    placeholder="Buscar factura..."
-                                                    value={searchQuery}
-                                                    onChange={(e) =>
-                                                        setSearchQuery(
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    className="pl-9 text-sm m-0"
+                                                <ChevronDown
+                                                    className={cn(
+                                                        "w-4 h-4 ml-1 transition-transform",
+                                                        isFiltersOpen &&
+                                                            "rotate-180"
+                                                    )}
                                                 />
-                                            </div>
+                                            </Button>
                                             <div className="min-w-[180px]">
-                                                <Select
+                                                <SelectERP
                                                     value={statusFilter}
                                                     onChange={(val) =>
                                                         setStatusFilter(val)
                                                     }
                                                     options={STATUS_OPTIONS}
-                                                    getOptionLabel={(opt) => opt.name}
-                                                    getOptionValue={(opt) => opt.id}
+                                                    getOptionLabel={(opt) =>
+                                                        opt.name
+                                                    }
+                                                    getOptionValue={(opt) =>
+                                                        opt.id
+                                                    }
+                                                    clearable
+                                                    size="sm"
                                                 />
                                             </div>
                                         </div>
@@ -1450,9 +1334,19 @@ function AccountStatements() {
                                                         <h4 className="text-sm font-semibold text-gray-900">
                                                             Filtros Avanzados
                                                         </h4>
-                                                        {activeFiltersCount > 0 && (
+                                                        {activeFiltersCount >
+                                                            0 && (
                                                             <span className="text-xs text-blue-600 font-medium">
-                                                                ({activeFiltersCount} activo{activeFiltersCount > 1 ? 's' : ''})
+                                                                (
+                                                                {
+                                                                    activeFiltersCount
+                                                                }{" "}
+                                                                activo
+                                                                {activeFiltersCount >
+                                                                1
+                                                                    ? "s"
+                                                                    : ""}
+                                                                )
                                                             </span>
                                                         )}
                                                     </div>
@@ -1460,7 +1354,9 @@ function AccountStatements() {
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            onClick={clearFilters}
+                                                            onClick={
+                                                                clearFilters
+                                                            }
                                                             className="text-xs h-7"
                                                         >
                                                             <X className="w-3 h-3 mr-1" />
@@ -1477,11 +1373,15 @@ function AccountStatements() {
                                                         </Label>
                                                         <Input
                                                             type="date"
-                                                            value={filters.dateFrom}
+                                                            value={
+                                                                filters.dateFrom
+                                                            }
                                                             onChange={(e) =>
                                                                 setFilters({
                                                                     ...filters,
-                                                                    dateFrom: e.target.value,
+                                                                    dateFrom:
+                                                                        e.target
+                                                                            .value,
                                                                 })
                                                             }
                                                             className="text-sm h-9"
@@ -1495,11 +1395,15 @@ function AccountStatements() {
                                                         </Label>
                                                         <Input
                                                             type="date"
-                                                            value={filters.dateTo}
+                                                            value={
+                                                                filters.dateTo
+                                                            }
                                                             onChange={(e) =>
                                                                 setFilters({
                                                                     ...filters,
-                                                                    dateTo: e.target.value,
+                                                                    dateTo: e
+                                                                        .target
+                                                                        .value,
                                                                 })
                                                             }
                                                             className="text-sm h-9"
@@ -1518,11 +1422,16 @@ function AccountStatements() {
                                                                 step="0.01"
                                                                 min="0"
                                                                 placeholder="0.00"
-                                                                value={filters.minAmount}
+                                                                value={
+                                                                    filters.minAmount
+                                                                }
                                                                 onChange={(e) =>
                                                                     setFilters({
                                                                         ...filters,
-                                                                        minAmount: e.target.value,
+                                                                        minAmount:
+                                                                            e
+                                                                                .target
+                                                                                .value,
                                                                     })
                                                                 }
                                                                 className="text-sm h-9 pl-8"
@@ -1542,11 +1451,16 @@ function AccountStatements() {
                                                                 step="0.01"
                                                                 min="0"
                                                                 placeholder="0.00"
-                                                                value={filters.maxAmount}
+                                                                value={
+                                                                    filters.maxAmount
+                                                                }
                                                                 onChange={(e) =>
                                                                     setFilters({
                                                                         ...filters,
-                                                                        maxAmount: e.target.value,
+                                                                        maxAmount:
+                                                                            e
+                                                                                .target
+                                                                                .value,
                                                                     })
                                                                 }
                                                                 className="text-sm h-9 pl-8"
@@ -1556,26 +1470,44 @@ function AccountStatements() {
 
                                                     {/* Filtro de Tipo de Factura */}
                                                     <div>
-                                                        <Label className="text-xs font-medium text-gray-700 mb-1.5 block">
-                                                            Tipo de factura
-                                                        </Label>
-                                                        <Select
-                                                            value={filters.invoiceType}
+                                                        <SelectERP
+                                                            label="Tipo de factura"
+                                                            value={
+                                                                filters.invoiceType
+                                                            }
                                                             onChange={(val) =>
                                                                 setFilters({
                                                                     ...filters,
-                                                                    invoiceType: val,
+                                                                    invoiceType:
+                                                                        val,
                                                                 })
                                                             }
                                                             options={[
-                                                                { id: "", name: "Todos los tipos" },
-                                                                { id: "ccf", name: "CCF" },
-                                                                { id: "factura", name: "Factura" },
-                                                                { id: "ticket", name: "Ticket" },
+                                                                {
+                                                                    id: "",
+                                                                    name: "Todos los tipos",
+                                                                },
+                                                                {
+                                                                    id: "ccf",
+                                                                    name: "CCF",
+                                                                },
+                                                                {
+                                                                    id: "factura",
+                                                                    name: "Factura",
+                                                                },
+                                                                {
+                                                                    id: "ticket",
+                                                                    name: "Ticket",
+                                                                },
                                                             ]}
-                                                            getOptionLabel={(opt) => opt.name}
-                                                            getOptionValue={(opt) => opt.id}
-                                                            className="h-9"
+                                                            getOptionLabel={(
+                                                                opt
+                                                            ) => opt.name}
+                                                            getOptionValue={(
+                                                                opt
+                                                            ) => opt.id}
+                                                            clearable
+                                                            size="sm"
                                                         />
                                                     </div>
                                                 </div>
@@ -1583,7 +1515,17 @@ function AccountStatements() {
                                                 {/* Indicador de resultados filtrados */}
                                                 <div className="pt-2 border-t border-blue-100">
                                                     <p className="text-xs text-gray-600">
-                                                        Mostrando <span className="font-semibold text-blue-600">{filteredInvoices.length}</span> de <span className="font-semibold">{invoices.length}</span> facturas
+                                                        Mostrando{" "}
+                                                        <span className="font-semibold text-blue-600">
+                                                            {
+                                                                filteredInvoices.length
+                                                            }
+                                                        </span>{" "}
+                                                        de{" "}
+                                                        <span className="font-semibold">
+                                                            {invoices.length}
+                                                        </span>{" "}
+                                                        facturas
                                                     </p>
                                                 </div>
                                             </div>
@@ -1595,6 +1537,8 @@ function AccountStatements() {
                                         <DataTable
                                             data={filteredInvoices}
                                             columns={invoiceColumns}
+                                            searchable={true}
+                                            searchPlaceholder="Buscar por factura, OS..."
                                         />
                                     ) : (
                                         <div className="text-center py-12 text-gray-500">
@@ -1608,45 +1552,7 @@ function AccountStatements() {
                                 </CardContent>
                             </Card>
 
-                            {/* Resumen de Pagos */}
-                            {invoices.length > 0 && clientKPIs && (
-                                <Card>
-                                    <CardContent className="p-4">
-                                        <div className="grid grid-cols-3 gap-4 text-center">
-                                            <div className="p-3 bg-slate-50 rounded-lg">
-                                                <div className="text-xs text-slate-500 mb-1">
-                                                    Total Facturado
-                                                </div>
-                                                <div className="text-lg font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(
-                                                        clientKPIs.totalInvoiced
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="p-3 bg-emerald-50 rounded-lg">
-                                                <div className="text-xs text-emerald-600 mb-1">
-                                                    Total Cobrado
-                                                </div>
-                                                <div className="text-lg font-bold text-emerald-600 tabular-nums">
-                                                    {formatCurrency(
-                                                        clientKPIs.totalPaid
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="p-3 bg-amber-50 rounded-lg">
-                                                <div className="text-xs text-amber-600 mb-1">
-                                                    Por Cobrar
-                                                </div>
-                                                <div className="text-lg font-bold text-amber-600 tabular-nums">
-                                                    {formatCurrency(
-                                                        clientKPIs.totalPending
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                            {/* Resumen de Pagos - Removed */}
                         </>
                     )}
                 </div>
@@ -1665,10 +1571,10 @@ function AccountStatements() {
                 <form onSubmit={handleAddPayment} className="space-y-6">
                     {/* Información de Factura */}
                     {selectedInvoice && (
-                        <div className="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                        <div className="p-5 bg-slate-50 rounded-lg border border-slate-200">
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                                 <div>
-                                    <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
                                         Factura a Pagar
                                     </div>
                                     <div className="font-mono text-xl font-bold text-slate-900">
@@ -1676,25 +1582,34 @@ function AccountStatements() {
                                     </div>
                                     <div className="flex items-center gap-2 mt-2">
                                         <Badge variant="outline">
-                                            {selectedInvoice.invoice_type || "DTE"}
+                                            {selectedInvoice.invoice_type ||
+                                                "DTE"}
                                         </Badge>
                                         {selectedInvoice.service_order_number && (
                                             <span className="text-xs text-slate-600">
-                                                OS: {selectedInvoice.service_order_number}
+                                                OS:{" "}
+                                                {
+                                                    selectedInvoice.service_order_number
+                                                }
                                             </span>
                                         )}
                                     </div>
                                 </div>
                                 <div className="text-left sm:text-right">
-                                    <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
                                         Saldo Pendiente
                                     </div>
-                                    <div className="font-bold text-3xl text-amber-600 tabular-nums">
-                                        {formatCurrency(selectedInvoice.balance)}
+                                    <div className="font-bold text-3xl text-slate-900 tabular-nums">
+                                        {formatCurrency(
+                                            selectedInvoice.balance
+                                        )}
                                     </div>
                                     {selectedInvoice.total_amount && (
                                         <div className="text-xs text-slate-500 mt-1">
-                                            Total: {formatCurrency(selectedInvoice.total_amount)}
+                                            Total:{" "}
+                                            {formatCurrency(
+                                                selectedInvoice.total_amount
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1705,13 +1620,13 @@ function AccountStatements() {
                     {/* Sección 1: Datos del Pago */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
                                 1
                             </span>
                             Datos del Pago
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
+                            <div className="space-y-1">
                                 <Label>Monto del Pago *</Label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
@@ -1734,11 +1649,14 @@ function AccountStatements() {
                                         required
                                     />
                                 </div>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Máximo: {formatCurrency(selectedInvoice?.balance || 0)}
+                                <p className="text-xs text-slate-500 leading-5">
+                                    Máximo:{" "}
+                                    {formatCurrency(
+                                        selectedInvoice?.balance || 0
+                                    )}
                                 </p>
                             </div>
-                            <div>
+                            <div className="space-y-1">
                                 <Label>Fecha de Pago *</Label>
                                 <Input
                                     type="date"
@@ -1751,6 +1669,9 @@ function AccountStatements() {
                                     }
                                     required
                                 />
+                                <div className="text-xs leading-5 invisible">
+                                    Spacer
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1760,15 +1681,16 @@ function AccountStatements() {
                     {/* Sección 2: Información de Transacción */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
                                 2
                             </span>
                             Información de Transacción
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <div>
-                                <Label>Método de Pago *</Label>
-                                <Select
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 items-start">
+                            <div className="space-y-1">
+                                <Label>Método de Pago</Label>
+                                <SelectERP
+                                    label={null}
                                     value={paymentForm.payment_method}
                                     onChange={(val) =>
                                         setPaymentForm({
@@ -1777,16 +1699,26 @@ function AccountStatements() {
                                         })
                                     }
                                     options={[
-                                        { id: "transferencia", name: "Transferencia Bancaria" },
+                                        {
+                                            id: "transferencia",
+                                            name: "Transferencia Bancaria",
+                                        },
                                         { id: "efectivo", name: "Efectivo" },
                                         { id: "cheque", name: "Cheque" },
-                                        { id: "tarjeta", name: "Tarjeta de Crédito/Débito" },
+                                        {
+                                            id: "tarjeta",
+                                            name: "Tarjeta de Crédito/Débito",
+                                        },
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
+                                    required
                                     getOptionValue={(opt) => opt.id}
                                 />
+                                <div className="text-xs leading-5 invisible">
+                                    placeholder
+                                </div>
                             </div>
-                            <div>
+                            <div className="space-y-1">
                                 <Label>Referencia / No. Documento</Label>
                                 <Input
                                     value={paymentForm.reference}
@@ -1799,7 +1731,7 @@ function AccountStatements() {
                                     placeholder="Ej: TRF-12345, CHQ-789"
                                     className="font-mono"
                                 />
-                                <p className="text-xs text-slate-500 mt-1">
+                                <p className="text-xs text-slate-500 leading-5">
                                     Número de transferencia, cheque, etc.
                                 </p>
                             </div>
@@ -1811,7 +1743,7 @@ function AccountStatements() {
                     {/* Sección 3: Comprobante */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
                                 3
                             </span>
                             Comprobante de Pago
@@ -1828,7 +1760,8 @@ function AccountStatements() {
                                 }
                             />
                             <p className="text-xs text-slate-500 mt-2">
-                                Sube el comprobante de pago (transferencia, captura, recibo, etc.)
+                                Sube el comprobante de pago (transferencia,
+                                captura, recibo, etc.)
                             </p>
                         </div>
                     </div>
@@ -1860,11 +1793,7 @@ function AccountStatements() {
                         >
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="bg-emerald-600 hover:bg-emerald-700"
-                        >
+                        <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
                                 <>
                                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -1985,6 +1914,47 @@ function AccountStatements() {
                             </div>
                         </div>
 
+                        {/* Invoice Document */}
+                        {selectedInvoice.pdf_file && (
+                            <div>
+                                <div className="text-sm font-semibold text-slate-900 mb-3">
+                                    Documento de Factura
+                                </div>
+                                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                                            <FileText className="w-6 h-6 text-white" />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-semibold text-slate-900">
+                                                Factura PDF
+                                            </div>
+                                            <div className="text-xs text-slate-500">
+                                                {selectedInvoice.invoice_type ||
+                                                    "DTE"}{" "}
+                                                •{" "}
+                                                {selectedInvoice.invoice_number}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            window.open(
+                                                selectedInvoice.pdf_file,
+                                                "_blank"
+                                            )
+                                        }
+                                        className="border-purple-300 text-purple-700 hover:bg-purple-100"
+                                    >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Ver/Descargar
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Payment History */}
                         {selectedInvoice.payments &&
                             selectedInvoice.payments.length > 0 && (
@@ -2056,6 +2026,23 @@ function AccountStatements() {
                     </div>
                 )}
             </Modal>
+
+            {/* Confirm Delete Dialog */}
+            <ConfirmDialog
+                open={deleteConfirm.open}
+                onOpenChange={(open) =>
+                    setDeleteConfirm({
+                        open,
+                        id: open ? deleteConfirm.id : null,
+                    })
+                }
+                title="Eliminar Factura"
+                description="¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer y eliminará todos los pagos asociados."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+                onConfirm={handleDeleteInvoice}
+            />
         </div>
     );
 }

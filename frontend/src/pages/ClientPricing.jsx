@@ -11,7 +11,7 @@ import {
     Modal,
     Button,
     Card,
-    Select,
+    SelectERP,
     Input,
     Badge,
     EmptyState,
@@ -314,7 +314,7 @@ const ClientPricing = () => {
             <Card>
                 <div className="flex items-center space-x-4">
                     <div className="flex-1">
-                        <Select
+                        <SelectERP
                             label="Cliente"
                             value={selectedClient}
                             onChange={(value) => setSelectedClient(value)}
@@ -322,6 +322,7 @@ const ClientPricing = () => {
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
+                            clearable
                         />
                     </div>
                     {selectedClientData && (
@@ -395,7 +396,7 @@ const ClientPricing = () => {
                         </div>
                     </div>
 
-                    <Select
+                    <SelectERP
                         label="Servicio"
                         value={priceForm.service}
                         onChange={(value) => {
@@ -413,6 +414,8 @@ const ClientPricing = () => {
                                 opt.default_price
                             ).toFixed(2)})`
                         }
+                        searchable
+                        required
                         getOptionValue={(opt) => opt.id}
                         searchable
                         required

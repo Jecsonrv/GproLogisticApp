@@ -31,7 +31,7 @@ import {
     CardContent,
     DataTable,
     Badge,
-    Select,
+    SelectERP,
     Input,
     Label,
     Skeleton,
@@ -998,7 +998,7 @@ function ProviderPayments() {
                 {isFiltersOpen && (
                     <CardContent className="pt-0 pb-4 border-b border-gray-100">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-gray-50 rounded-lg">
-                            <Select
+                            <SelectERP
                                 label="Tipo de Gasto"
                                 value={filters.transfer_type}
                                 onChange={(val) =>
@@ -1010,8 +1010,9 @@ function ProviderPayments() {
                                 options={TRANSFER_TYPE_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
+                                clearable
                             />
-                            <Select
+                            <SelectERP
                                 label="Estado"
                                 value={filters.status}
                                 onChange={(val) =>
@@ -1020,14 +1021,17 @@ function ProviderPayments() {
                                 options={STATUS_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
+                                clearable
                             />
-                            <Select
+                            <SelectERP
                                 label="Proveedor"
                                 value={filters.provider}
                                 onChange={(val) =>
                                     setFilters({ ...filters, provider: val })
                                 }
                                 options={filterProviderOptions}
+                                searchable
+                                clearable
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
                                 searchable
@@ -1102,8 +1106,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <Label>Orden de Servicio</Label>
-                                <Select
+                                <SelectERP
+                                    label="Orden de Servicio"
                                     value={formData.service_order}
                                     onChange={(val) =>
                                         setFormData({
@@ -1115,14 +1119,13 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
+                                    helperText="Deja vacío para gastos de operación"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Deja vacío para gastos de operación
-                                </p>
                             </div>
                             <div>
-                                <Label>Tipo de Gasto *</Label>
-                                <Select
+                                <SelectERP
+                                    label="Tipo de Gasto"
                                     value={formData.transfer_type}
                                     onChange={(val) =>
                                         setFormData({
@@ -1130,6 +1133,7 @@ function ProviderPayments() {
                                             transfer_type: val,
                                         })
                                     }
+                                    required
                                     options={CREATE_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1150,8 +1154,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <Label>Proveedor</Label>
-                                <Select
+                                <SelectERP
+                                    label="Proveedor"
                                     value={formData.provider}
                                     onChange={(val) =>
                                         setFormData({
@@ -1163,6 +1167,7 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
@@ -1237,8 +1242,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                             <div>
-                                <Label>Método de Pago</Label>
-                                <Select
+                                <SelectERP
+                                    label="Método de Pago"
                                     value={formData.payment_method}
                                     onChange={(val) =>
                                         setFormData({
@@ -1249,11 +1254,12 @@ function ProviderPayments() {
                                     options={PAYMENT_METHOD_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Banco</Label>
-                                <Select
+                                <SelectERP
+                                    label="Banco"
                                     value={formData.bank}
                                     onChange={(val) =>
                                         setFormData({ ...formData, bank: val })
@@ -1262,11 +1268,12 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Estado</Label>
-                                <Select
+                                <SelectERP
+                                    label="Estado"
                                     value={formData.status}
                                     onChange={(val) =>
                                         setFormData({
@@ -1367,8 +1374,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <Label>Orden de Servicio</Label>
-                                <Select
+                                <SelectERP
+                                    label="Orden de Servicio"
                                     value={formData.service_order}
                                     onChange={(val) =>
                                         setFormData({
@@ -1380,11 +1387,12 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Tipo de Gasto *</Label>
-                                <Select
+                                <SelectERP
+                                    label="Tipo de Gasto"
                                     value={formData.transfer_type}
                                     onChange={(val) =>
                                         setFormData({
@@ -1395,6 +1403,7 @@ function ProviderPayments() {
                                     options={EDIT_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    required
                                 />
                             </div>
                         </div>
@@ -1412,8 +1421,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <Label>Proveedor</Label>
-                                <Select
+                                <SelectERP
+                                    label="Proveedor"
                                     value={formData.provider}
                                     onChange={(val) =>
                                         setFormData({
@@ -1425,6 +1434,7 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
@@ -1499,8 +1509,8 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                             <div>
-                                <Label>Método de Pago</Label>
-                                <Select
+                                <SelectERP
+                                    label="Método de Pago"
                                     value={formData.payment_method}
                                     onChange={(val) =>
                                         setFormData({
@@ -1511,11 +1521,12 @@ function ProviderPayments() {
                                     options={PAYMENT_METHOD_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Banco</Label>
-                                <Select
+                                <SelectERP
+                                    label="Banco"
                                     value={formData.bank}
                                     onChange={(val) =>
                                         setFormData({ ...formData, bank: val })
@@ -1524,11 +1535,12 @@ function ProviderPayments() {
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
+                                    clearable
                                 />
                             </div>
                             <div>
-                                <Label>Estado</Label>
-                                <Select
+                                <SelectERP
+                                    label="Estado"
                                     value={formData.status}
                                     onChange={(val) =>
                                         setFormData({

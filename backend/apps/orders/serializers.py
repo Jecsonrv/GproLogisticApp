@@ -128,7 +128,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'subtotal_services', 'iva_services', 'total_services',
             'subtotal_third_party', 'total_amount', 'paid_amount', 'balance',
             'status', 'status_display', 'payment_condition',
-            'notes', 'payments', 'days_overdue', 'ccf', 'invoice_file',
+            'notes', 'payments', 'days_overdue', 'ccf', 'pdf_file', 'dte_file',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ('paid_amount', 'balance', 'created_at', 'updated_at')
@@ -166,7 +166,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'invoice_type', 'service_order_number',
             'client_id', 'client_name', 'issue_date', 'due_date',
             'total_amount', 'paid_amount', 'balance', 'status',
-            'status_display', 'days_overdue', 'payments'
+            'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes'
         ]
 
     def get_client_name(self, obj):

@@ -51,16 +51,28 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         except ServiceOrder.DoesNotExist:
             raise ValueError("Orden de servicio no encontrada")
 
+        # Get file if provided
+        pdf_file = self.request.FILES.get('pdf_file')
+        dte_file = self.request.FILES.get('dte_file')
+
         # Create invoice with values
-        invoice = serializer.save(
-            created_by=self.request.user,
-            invoice_number=invoice_number,
-            issue_date=issue_date,
-            due_date=due_date,
-            total_amount=total_amount,
-            balance=total_amount,
-            paid_amount=Decimal('0.00')
-        )
+        invoice_data = {
+            'created_by': self.request.user,
+            'invoice_number': invoice_number,
+            'issue_date': issue_date,
+            'due_date': due_date,
+            'total_amount': total_amount,
+            'balance': total_amount,
+            'paid_amount': Decimal('0.00')
+        }
+
+        # Add files if provided
+        if pdf_file:
+            invoice_data['pdf_file'] = pdf_file
+        if dte_file:
+            invoice_data['dte_file'] = dte_file
+
+        invoice = serializer.save(**invoice_data)
 
         # Mark service order as invoiced
         service_order.facturado = True
@@ -97,6 +109,39 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(mes=mes)
 
         return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete invoice and unmark service order as invoiced"""
+        invoice = self.get_object()
+
+        # Check if invoice has payments
+        if invoice.paid_amount > 0:
+            return Response(
+                {'error': 'No se puede eliminar una factura con pagos registrados. Elimine los pagos primero.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            service_order = invoice.service_order
+            
+            # Delete invoice
+            invoice.delete()
+
+            # Unmark service order as invoiced if it has no other invoices
+            if service_order and not service_order.invoices.exists():
+                service_order.facturado = False
+                service_order.save()
+
+            return Response(
+                {'message': 'Factura eliminada correctamente'},
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -161,7 +206,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'total_invoices': queryset.count(),
         })
 
-    @action(detail=False, methods=['get'], permission_classes=[IsOperativo2])
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
     def export_excel(self, request):
         """Export invoices to Excel with professional formatting"""
         queryset = self.get_queryset()
@@ -302,7 +347,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 amount=amount,
                 payment_date=request.data.get('payment_date'),
                 payment_method=request.data.get('payment_method', 'transferencia'),
-                reference=request.data.get('reference', ''),
+                reference_number=request.data.get('reference', ''),
                 notes=request.data.get('notes', ''),
                 created_by=request.user
             )

@@ -25,7 +25,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             return ClientListSerializer
         return ClientSerializer
 
-    @action(detail=True, methods=['get'], permission_classes=[IsOperativo2])
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def account_statement(self, request, pk=None):
         """Estado de cuenta detallado de un cliente con facturas y pagos"""
         from apps.orders.models import Invoice, InvoicePayment
@@ -96,7 +96,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             'amount': float(payment.amount),
             'payment_date': payment.payment_date,
             'payment_method': payment.get_payment_method_display(),
-            'reference': payment.reference or '',
+            'reference': payment.reference_number or '',
             'notes': payment.notes or ''
         } for payment in recent_payments]
 
@@ -130,13 +130,22 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         return Response(data)
     
-    @action(detail=True, methods=['get'], permission_classes=[IsOperativo2])
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def export_statement_excel(self, request, pk=None):
         """Exportar estado de cuenta completo a Excel con facturas y pagos"""
         from apps.orders.models import Invoice, InvoicePayment
 
         client = self.get_object()
         year = request.query_params.get('year', datetime.now().year)
+        
+        # Filtros adicionales
+        status_filter = request.query_params.get('status')
+        date_from = request.query_params.get('dateFrom')
+        date_to = request.query_params.get('dateTo')
+        min_amount = request.query_params.get('minAmount')
+        max_amount = request.query_params.get('maxAmount')
+        invoice_type = request.query_params.get('invoiceType')
+        search_query = request.query_params.get('search')
 
         # Obtener facturas del cliente
         invoices = Invoice.objects.filter(
@@ -145,14 +154,30 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         if year:
             invoices = invoices.filter(issue_date__year=year)
+            
+        if status_filter:
+            invoices = invoices.filter(status=status_filter)
+        
+        if date_from:
+            invoices = invoices.filter(issue_date__gte=date_from)
+            
+        if date_to:
+            invoices = invoices.filter(issue_date__lte=date_to)
 
-        # Calcular crédito usado
-        credit_used = invoices.filter(
-            status__in=['pending', 'partial', 'overdue'],
-            balance__gt=0
-        ).aggregate(Sum('balance'))['balance__sum'] or 0
+        if min_amount:
+            invoices = invoices.filter(total_amount__gte=min_amount)
 
-        available_credit = max(0, float(client.credit_limit) - float(credit_used))
+        if max_amount:
+            invoices = invoices.filter(total_amount__lte=max_amount)
+
+        if invoice_type:
+            invoices = invoices.filter(invoice_type=invoice_type)
+
+        if search_query:
+            invoices = invoices.filter(
+                Q(invoice_number__icontains=search_query) |
+                Q(service_order__order_number__icontains=search_query)
+            )
 
         # Crear workbook
         wb = openpyxl.Workbook()
@@ -178,7 +203,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         ws['A1'].font = title_font
         ws.merge_cells('A1:H1')
 
-        ws['A2'] = "GPRO LOGISTIC - FREIGHT FORWARDER"
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
         ws['A2'].font = Font(size=11, color="666666")
         ws.merge_cells('A2:H2')
 
@@ -188,7 +213,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         # === INFORMACIÓN DEL CLIENTE ===
         ws['A5'] = "INFORMACIÓN DEL CLIENTE"
         ws['A5'].font = subtitle_font
-        ws.merge_cells('A5:D5')
+        ws.merge_cells('A5:H5')
 
         # Datos del cliente
         client_data = [
@@ -199,37 +224,18 @@ class ClientViewSet(viewsets.ModelViewSet):
             ('Email:', client.email or 'No especificado'),
             ('Contacto:', client.contact_person or 'No especificado'),
             ('Condición de Pago:', client.get_payment_condition_display()),
-            ('Días de Crédito:', f'{client.credit_days} días' if client.credit_days else 'N/A'),
         ]
 
         row = 6
         for label, value in client_data:
             ws.cell(row=row, column=1, value=label).font = label_font
             ws.cell(row=row, column=2, value=value)
-            row += 1
-
-        # === RESUMEN DE CRÉDITO ===
-        ws['E5'] = "RESUMEN DE CRÉDITO"
-        ws['E5'].font = subtitle_font
-        ws.merge_cells('E5:H5')
-
-        credit_data = [
-            ('Límite de Crédito:', float(client.credit_limit)),
-            ('Crédito Utilizado:', float(credit_used)),
-            ('Crédito Disponible:', float(available_credit)),
-            ('% Utilización:', f'{(float(credit_used) / float(client.credit_limit) * 100):.1f}%' if client.credit_limit > 0 else '0%'),
-        ]
-
-        row = 6
-        for label, value in credit_data:
-            ws.cell(row=row, column=5, value=label).font = label_font
-            cell = ws.cell(row=row, column=6, value=value)
-            if isinstance(value, (int, float)):
-                cell.number_format = currency_format
+            # Unir celdas para el valor para que tenga más espacio
+            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
             row += 1
 
         # === TABLA DE FACTURAS ===
-        start_row = 15
+        start_row = 14
         ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
         ws.merge_cells(f'A{start_row}:H{start_row}')
 
