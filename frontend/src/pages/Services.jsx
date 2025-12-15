@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Plus, DollarSign, Tag, FileText, Search } from "lucide-react";
 import {
     Card,
@@ -68,6 +68,8 @@ const Services = () => {
         effective_date: new Date().toLocaleDateString("en-CA"),
     });
 
+    const [searchTerm, setSearchTerm] = useState("");
+
     useEffect(() => {
         fetchServices();
         fetchClients();
@@ -78,7 +80,29 @@ const Services = () => {
         if (activeTab === "custom") {
             fetchCustomPrices();
         }
+        setSearchTerm(""); // Reset search on tab change
     }, [activeTab]);
+
+    // Filtered Data
+    const filteredServices = useMemo(() => {
+        if (!searchTerm) return services;
+        const lowerTerm = searchTerm.toLowerCase();
+        return services.filter((item) =>
+            Object.values(item).some((val) =>
+                String(val).toLowerCase().includes(lowerTerm)
+            )
+        );
+    }, [services, searchTerm]);
+
+    const filteredCustomPrices = useMemo(() => {
+        if (!searchTerm) return customPrices;
+        const lowerTerm = searchTerm.toLowerCase();
+        return customPrices.filter((item) =>
+            Object.values(item).some((val) =>
+                String(val).toLowerCase().includes(lowerTerm)
+            )
+        );
+    }, [customPrices, searchTerm]);
 
     // Funciones para Servicios Generales
     const fetchServices = async () => {
@@ -499,20 +523,30 @@ const Services = () => {
                 {/* Servicios Generales */}
                 <TabsContent value="general" key="general">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Catálogo de Servicios</CardTitle>
-                            <Button onClick={() => handleOpenModal()}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Servicio
-                            </Button>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Catálogo de Servicios</CardTitle>
+                                <Button onClick={() => handleOpenModal()}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Servicio
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar servicios..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
-                                data={services}
+                                data={filteredServices}
                                 columns={columns}
                                 loading={loading}
-                                searchable
-                                searchPlaceholder="Buscar servicios..."
+                                searchable={false}
                                 emptyMessage="No hay servicios registrados"
                                 pagination
                             />
@@ -523,28 +557,30 @@ const Services = () => {
                 {/* Precios Personalizados */}
                 <TabsContent value="custom" key="custom">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <div>
-                                <CardTitle>
-                                    Tarifas Personalizadas por Cliente
-                                </CardTitle>
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Configura precios especiales para clientes
-                                    específicos
-                                </p>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Tarifas Personalizadas</CardTitle>
+                                <Button onClick={() => handleOpenCustomModal()}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Precio
+                                </Button>
                             </div>
-                            <Button onClick={() => handleOpenCustomModal()}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Precio
-                            </Button>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar tarifas..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
-                                data={customPrices}
+                                data={filteredCustomPrices}
                                 columns={customPriceColumns}
                                 loading={loadingCustom}
-                                searchable
-                                searchPlaceholder="Buscar por cliente o servicio..."
+                                searchable={false}
                                 emptyMessage="No hay precios personalizados registrados"
                                 pagination
                             />

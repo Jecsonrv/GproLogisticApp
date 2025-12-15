@@ -1,12 +1,13 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q, Sum
 from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
 from .models import Transfer
 from .serializers import TransferSerializer, TransferListSerializer
-from apps.users.permissions import IsOperativo, IsOperativo2
+from apps.users.permissions import IsAnyOperativo, IsOperativo2OrAdmin, TransferApprovalPermission, IsOperativo
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill
@@ -36,7 +37,8 @@ class TransferViewSet(viewsets.ModelViewSet):
         'created_by'
     ).all()
     serializer_class = TransferSerializer
-    permission_classes = [IsOperativo]
+    permission_classes = [IsAnyOperativo]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     filterset_class = TransferFilter
     search_fields = ['description', 'invoice_number', 'service_order__order_number']
     ordering_fields = ['transaction_date', 'amount', 'created_at']
@@ -47,14 +49,50 @@ class TransferViewSet(viewsets.ModelViewSet):
             return TransferListSerializer
         return TransferSerializer
     
+    def update(self, request, *args, **kwargs):
+        """
+        Override update para validar permisos de aprobación.
+        Operativo básico NO puede cambiar estado a 'aprobado'.
+        """
+        new_status = request.data.get('status')
+        
+        # Validar permiso de aprobación
+        if new_status == 'aprobado':
+            if request.user.role not in ['admin', 'operativo2']:
+                return Response(
+                    {'error': 'No tiene permisos para aprobar pagos. Contacte a un supervisor.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        return super().update(request, *args, **kwargs)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Override partial_update para validar permisos de aprobación.
+        Operativo básico NO puede cambiar estado a 'aprobado'.
+        """
+        new_status = request.data.get('status')
+        
+        # Validar permiso de aprobación
+        if new_status == 'aprobado':
+            if request.user.role not in ['admin', 'operativo2']:
+                return Response(
+                    {'error': 'No tiene permisos para aprobar pagos. Contacte a un supervisor.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        return super().partial_update(request, *args, **kwargs)
+    
     def perform_create(self, serializer):
         """Asignar usuario que crea la transferencia"""
+        serializer.context['request'] = self.request
         transfer = serializer.save(created_by=self.request.user)
         transfer._current_user = self.request.user
         return transfer
     
     def perform_update(self, serializer):
         """Set current user for signal on update"""
+        serializer.context['request'] = self.request
         transfer = serializer.save()
         transfer._current_user = self.request.user
         return transfer
@@ -64,7 +102,7 @@ class TransferViewSet(viewsets.ModelViewSet):
         instance._current_user = self.request.user
         instance.delete()
     
-    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    @action(detail=False, methods=['get'], permission_classes=[IsAnyOperativo])
     def export_excel(self, request):
         """Exportar transfers a Excel"""
         queryset = self.filter_queryset(self.get_queryset())
@@ -205,3 +243,223 @@ class TransferViewSet(viewsets.ModelViewSet):
                 {'error': f'Error al descargar el archivo: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    def register_payment(self, request, pk=None):
+        """Registrar un pago parcial o total a una transferencia (gasto a proveedor)"""
+        from .models import TransferPayment
+        from decimal import Decimal
+        
+        transfer = self.get_object()
+        
+        # Validar que la transferencia no esté completamente pagada
+        if transfer.status == 'pagado' and transfer.balance <= 0:
+            return Response(
+                {'error': 'Esta transferencia ya está completamente pagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar datos requeridos
+        amount = request.data.get('amount')
+        if not amount:
+            return Response(
+                {'error': 'El monto es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            amount = Decimal(str(amount))
+            if amount <= 0:
+                return Response(
+                    {'error': 'El monto debe ser mayor a cero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validar que el monto no exceda el saldo pendiente
+            if amount > transfer.balance:
+                return Response(
+                    {'error': f'El monto excede el saldo pendiente de ${transfer.balance}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Monto inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Actualizar método de pago y banco en el transfer si es el primer pago
+        if transfer.paid_amount == 0:
+            payment_method = request.data.get('payment_method', 'transferencia')
+            transfer.payment_method = payment_method
+            
+            # Solo actualizar banco si el método requiere banco
+            if payment_method in ['transferencia', 'cheque', 'tarjeta']:
+                bank_id = request.data.get('bank')
+                if bank_id:
+                    transfer.bank_id = bank_id
+            
+            transfer.save(update_fields=['payment_method', 'bank'])
+        
+        # Crear el pago
+        payment = TransferPayment(
+            transfer=transfer,
+            amount=amount,
+            payment_date=request.data.get('payment_date'),
+            payment_method=request.data.get('payment_method', 'transferencia'),
+            reference_number=request.data.get('reference', ''),
+            notes=request.data.get('notes', ''),
+            created_by=request.user
+        )
+        
+        # Manejar archivo de comprobante si existe
+        if 'proof_file' in request.FILES:
+            payment.proof_file = request.FILES['proof_file']
+        
+        payment.save()
+        
+        # Refrescar el transfer para obtener los valores actualizados
+        transfer.refresh_from_db()
+        
+        return Response({
+            'message': 'Pago registrado exitosamente',
+            'payment': {
+                'id': payment.id,
+                'amount': str(payment.amount),
+                'payment_date': payment.payment_date,
+                'payment_method': payment.payment_method,
+                'reference_number': payment.reference_number
+            },
+            'transfer': {
+                'id': transfer.id,
+                'paid_amount': str(transfer.paid_amount),
+                'balance': str(transfer.balance),
+                'status': transfer.status,
+                'status_display': transfer.get_status_display()
+            }
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    def register_credit_note(self, request, pk=None):
+        """Registrar una nota de crédito del proveedor"""
+        from .models import TransferPayment
+        from decimal import Decimal
+        
+        transfer = self.get_object()
+        
+        # Validar que la transferencia no esté completamente pagada
+        if transfer.status == 'pagado' and transfer.balance <= 0:
+            return Response(
+                {'error': 'Esta transferencia ya está completamente pagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar datos requeridos
+        amount = request.data.get('amount')
+        note_number = request.data.get('note_number')
+        reason = request.data.get('reason', '')
+        
+        if not amount or not note_number:
+            return Response(
+                {'error': 'El monto y número de nota de crédito son requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            amount = Decimal(str(amount))
+            if amount <= 0:
+                return Response(
+                    {'error': 'El monto debe ser mayor a cero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validar que el monto no exceda el saldo pendiente
+            if amount > transfer.balance:
+                return Response(
+                    {'error': f'El monto excede el saldo pendiente de ${transfer.balance}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Monto inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Crear el pago como nota de crédito
+        payment = TransferPayment(
+            transfer=transfer,
+            amount=amount,
+            payment_date=request.data.get('issue_date'),
+            payment_method='nota_credito',
+            reference_number=note_number,
+            notes=f"Nota de Crédito: {reason}" if reason else "Nota de Crédito",
+            created_by=request.user
+        )
+        
+        # Manejar archivo PDF de la nota de crédito si existe
+        if 'pdf_file' in request.FILES:
+            payment.proof_file = request.FILES['pdf_file']
+        
+        payment.save()
+        
+        # Refrescar el transfer
+        transfer.refresh_from_db()
+        
+        return Response({
+            'message': 'Nota de crédito registrada exitosamente',
+            'credit_note': {
+                'id': payment.id,
+                'amount': str(payment.amount),
+                'note_number': payment.reference_number,
+                'issue_date': payment.payment_date,
+                'reason': reason
+            },
+            'transfer': {
+                'id': transfer.id,
+                'paid_amount': str(transfer.paid_amount),
+                'balance': str(transfer.balance),
+                'status': transfer.status,
+                'status_display': transfer.get_status_display()
+            }
+        }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
+    def detail_with_payments(self, request, pk=None):
+        """Obtener detalle completo de una transferencia incluyendo historial de pagos"""
+        from .models import TransferPayment
+        from decimal import Decimal
+        
+        transfer = self.get_object()
+        
+        # Serializar transferencia
+        transfer_data = TransferSerializer(transfer, context={'request': request}).data
+        
+        # Obtener historial de pagos
+        payments = TransferPayment.objects.filter(
+            transfer=transfer,
+            is_deleted=False
+        ).order_by('-payment_date')
+        
+        payments_data = [{
+            'id': p.id,
+            'amount': str(p.amount),
+            'payment_date': p.payment_date,
+            'payment_method': p.payment_method,
+            'payment_method_display': p.get_payment_method_display(),
+            'reference_number': p.reference_number,
+            'notes': p.notes,
+            'proof_file': p.proof_file.url if p.proof_file else None,
+            'created_by': p.created_by.username if p.created_by else None,
+            'created_at': p.created_at
+        } for p in payments]
+        
+        # Identificar notas de crédito (pagos con método nota_credito)
+        credit_notes = [p for p in payments_data if p['payment_method'] == 'nota_credito']
+        regular_payments = [p for p in payments_data if p['payment_method'] != 'nota_credito']
+        
+        transfer_data['payments'] = regular_payments
+        transfer_data['credit_notes'] = credit_notes
+        transfer_data['total_payments_count'] = len(regular_payments)
+        transfer_data['total_credit_notes_count'] = len(credit_notes)
+        transfer_data['credited_amount'] = str(sum(Decimal(cn['amount']) for cn in credit_notes))
+        
+        return Response(transfer_data)

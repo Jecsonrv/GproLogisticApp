@@ -1,17 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import {
-    Card,
-    CardHeader,
-    CardTitle,
-    CardContent,
-    Tabs,
-    TabsList,
-    TabsTrigger,
-    TabsContent,
     Button,
-    Badge,
-    DataTable,
+    Modal, // Usaremos Modal genérico si Dialog da problemas, o el Dialog existente
     Dialog,
     DialogContent,
     DialogHeader,
@@ -20,1625 +12,258 @@ import {
     Input,
     Label,
     SelectERP,
-    Skeleton,
-    EmptyState,
-    ConfirmDialog,
 } from "../components/ui";
-import {
-    ArrowLeft,
-    FileText,
-    DollarSign,
-    ArrowRightLeft,
-    Receipt,
-    BarChart3,
-    Plus,
-    Trash2,
-    Edit,
-    Building2,
-    Ship,
-    Calendar,
-    Clock,
-    User,
-    Hash,
-    Package,
-    CheckCircle2,
-    AlertCircle,
-    TrendingUp,
-    TrendingDown,
-    Minus,
-} from "lucide-react";
+import ServiceOrderDetailComponent from "../components/ServiceOrderDetail";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { useServiceOrder } from "../hooks/useServiceOrders";
-import { formatCurrency, formatDate, cn } from "../lib/utils";
 
-// ============================================
-// DATA DISPLAY COMPONENT
-// ============================================
-const DataField = ({ label, value, mono = false, className = "" }) => (
-    <div className={className}>
-        <dt className="data-label">{label}</dt>
-        <dd className={cn("data-value", mono && "font-mono")}>
-            {value || "N/A"}
-        </dd>
-    </div>
-);
-
-// ============================================
-// STATUS BADGE COMPONENT
-// ============================================
-const StatusBadge = ({ status, size = "default" }) => {
-    const config = {
-        abierta: {
-            label: "En Proceso",
-            className: "badge-info",
-        },
-        cerrada: {
-            label: "Cerrada",
-            className: "badge-success",
-        },
-        pagada: {
-            label: "Pagada",
-            className: "badge-success",
-        },
-        pendiente: {
-            label: "Pendiente",
-            className: "badge-warning",
-        },
-    };
-
-    const { label, className } = config[status] || {
-        label: status,
-        className: "badge-default",
-    };
-
-    return <span className={className}>{label}</span>;
-};
-
-// ============================================
-// SUMMARY CARD COMPONENT
-// ============================================
-const SummaryCard = ({ title, value, variant = "default", icon: Icon }) => {
-    // Professional ERP styling: subtle backgrounds, neutral colors
-    const iconColors = {
-        default: "text-slate-400",
-        success: "text-slate-500",
-        warning: "text-slate-500",
-        danger: "text-slate-500",
-        info: "text-slate-500",
-    };
-
-    const valueColors = {
-        default: "text-slate-900",
-        success: "text-slate-900",
-        warning: "text-slate-900",
-        danger: "text-slate-900",
-        info: "text-slate-900",
-    };
-
-    return (
-        <div className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-            <div className="flex items-center justify-between">
-                <div className="flex-1">
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                        {title}
-                    </p>
-                    <p
-                        className={cn(
-                            "text-xl font-bold mt-1.5 tabular-nums",
-                            valueColors[variant]
-                        )}
-                    >
-                        {value}
-                    </p>
-                </div>
-                {Icon && (
-                    <div className={cn("ml-3", iconColors[variant])}>
-                        <Icon className="w-5 h-5" />
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// ============================================
-// MAIN COMPONENT
-// ============================================
-function ServiceOrderDetail() {
+function ServiceOrderDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { data: order, isLoading } = useServiceOrder(id);
+    const { data: order } = useServiceOrder(id);
 
-    // Data state
-    const [charges, setCharges] = useState([]);
-    const [transfers, setTransfers] = useState([]);
-    const [invoice, setInvoice] = useState(null);
-    const [services, setServices] = useState([]);
+    // Catalogs for Edit Form
+    const [clients, setClients] = useState([]);
     const [providers, setProviders] = useState([]);
+    const [shipmentTypes, setShipmentTypes] = useState([]);
 
-    // UI state
-    const [activeTab, setActiveTab] = useState("general");
-    const [isAddChargeModalOpen, setIsAddChargeModalOpen] = useState(false);
-    const [isAddTransferModalOpen, setIsAddTransferModalOpen] = useState(false);
-    const [confirmDialog, setConfirmDialog] = useState({
-        open: false,
-        id: null,
-    });
-
-    // Form state
-    const [chargeFormData, setChargeFormData] = useState({
-        service: "",
-        quantity: 1,
-        unit_price: "",
-    });
-
-    const [transferFormData, setTransferFormData] = useState({
-        transfer_type: "terceros",
+    // Edit State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editFormData, setEditFormData] = useState({
+        client: "",
+        sub_client: null,
+        shipment_type: "",
         provider: "",
-        amount: "",
-        notes: "",
+        customs_agent: "",
+        purchase_order: "",
+        bl_reference: "",
+        eta: "",
+        duca: "",
     });
 
-    // ============================================
-    // DATA FETCHING
-    // ============================================
     useEffect(() => {
-        if (id) {
-            fetchOrderDetails();
-            fetchCatalogs();
-        }
-    }, [id]);
-
-    const fetchOrderDetails = async () => {
-        try {
-            const [chargesRes, transfersRes, invoiceRes] = await Promise.all([
-                axios.get(`/orders/order-charges/?service_order=${id}`),
-                axios.get(`/transfers/?service_order=${id}`),
-                axios.get(`/invoices/?service_order=${id}`),
-            ]);
-            setCharges(chargesRes.data);
-            setTransfers(transfersRes.data);
-            setInvoice(invoiceRes.data[0] || null);
-        } catch (error) {
-            console.error("Error fetching order details:", error);
-        }
-    };
+        fetchCatalogs();
+    }, []);
 
     const fetchCatalogs = async () => {
         try {
-            const [servicesRes, providersRes] = await Promise.all([
-                axios.get("/catalogs/services/"),
+            const [clientsRes, providersRes, typesRes] = await Promise.all([
+                axios.get("/clients/"),
                 axios.get("/catalogs/providers/"),
+                axios.get("/catalogs/shipment-types/"),
             ]);
-            setServices(servicesRes.data);
+            setClients(clientsRes.data);
             setProviders(providersRes.data);
+            setShipmentTypes(typesRes.data);
         } catch (error) {
-            toast.error("Error al cargar catálogos");
+            console.error("Error loading catalogs", error);
         }
     };
 
-    // ============================================
-    // HANDLERS
-    // ============================================
-    const handleAddCharge = useCallback(
-        async (e) => {
-            e.preventDefault();
-            try {
-                await axios.post("/orders/order-charges/", {
-                    ...chargeFormData,
-                    service_order: id,
-                });
-                toast.success("Cobro agregado exitosamente");
-                setIsAddChargeModalOpen(false);
-                setChargeFormData({ service: "", quantity: 1, unit_price: "" });
-                fetchOrderDetails();
-            } catch (error) {
-                toast.error("Error al agregar cobro");
-            }
-        },
-        [id, chargeFormData]
-    );
+    const handleEditOrder = (orderData) => {
+        setEditFormData({
+            client: orderData.client || "",
+            sub_client: orderData.sub_client || null,
+            shipment_type: orderData.shipment_type || "",
+            provider: orderData.provider || "",
+            purchase_order: orderData.purchase_order || "",
+            bl_reference: orderData.bl_reference || "",
+            eta: orderData.eta || "",
+            duca: orderData.duca || "",
+        });
+        setIsEditModalOpen(true);
+    };
 
-    const handleDeleteCharge = useCallback((chargeId) => {
-        setConfirmDialog({ open: true, id: chargeId });
-    }, []);
-
-    const confirmDeleteCharge = async () => {
-        const { id } = confirmDialog;
-        setConfirmDialog({ open: false, id: null });
-
+    const handleUpdateOrder = async (e) => {
+        e.preventDefault();
         try {
-            await axios.delete(`/orders/order-charges/${id}/`);
-            toast.success("Cobro eliminado exitosamente");
-            fetchOrderDetails();
+            await axios.patch(`/orders/service-orders/${id}/`, editFormData);
+            toast.success("Orden actualizada exitosamente");
+            setIsEditModalOpen(false);
+            // El componente hijo debería refrescarse si detecta cambios, 
+            // pero como no compartimos estado de 'refetch', podemos forzar recarga o pasar un trigger.
+            // ServiceOrderDetailComponent tiene su propio fetch en useEffect[orderId].
+            // Una recarga de página es lo más seguro y rápido aquí.
+            window.location.reload();
         } catch (error) {
-            const errorMessage =
-                error.response?.data?.error ||
-                error.response?.data?.detail ||
-                "Error al eliminar cobro";
-            toast.error(errorMessage);
+            const errorMsg = error.response?.data?.message || "Error al actualizar orden";
+            toast.error(errorMsg);
         }
     };
 
-    const handleAddTransfer = useCallback(
-        async (e) => {
-            e.preventDefault();
-            try {
-                await axios.post("/transfers/", {
-                    ...transferFormData,
-                    service_order: id,
-                });
-                toast.success("Transferencia agregada");
-                setIsAddTransferModalOpen(false);
-                setTransferFormData({
-                    transfer_type: "terceros",
-                    provider: "",
-                    amount: "",
-                    notes: "",
-                });
-                fetchOrderDetails();
-            } catch (error) {
-                toast.error("Error al agregar transferencia");
-            }
-        },
-        [id, transferFormData]
-    );
-
-    // ============================================
-    // COMPUTED VALUES
-    // ============================================
-    const totals = useMemo(
-        () => ({
-            charges: charges.reduce(
-                (sum, c) => sum + parseFloat(c.total || 0),
-                0
-            ),
-            transfers: transfers.reduce(
-                (sum, t) => sum + parseFloat(t.amount || 0),
-                0
-            ),
-            invoiced: invoice ? parseFloat(invoice.total_amount || 0) : 0,
-        }),
-        [charges, transfers, invoice]
-    );
-
-    const margin = useMemo(() => {
-        const value = totals.charges - totals.transfers;
-        const percentage =
-            totals.charges > 0 ? (value / totals.charges) * 100 : 0;
-        return { value, percentage };
-    }, [totals]);
-
-    // ============================================
-    // TABLE COLUMNS
-    // ============================================
-    const chargesColumns = [
-        {
-            header: "Servicio",
-            accessor: "service_name",
-            cell: (row) => (
-                <span className="font-medium text-slate-900">
-                    {row.service_name || "N/A"}
-                </span>
-            ),
-        },
-        {
-            header: "Cantidad",
-            accessor: "quantity",
-            className: "w-20 text-center",
-            cell: (row) => <span className="tabular-nums">{row.quantity}</span>,
-        },
-        {
-            header: "Precio Unit.",
-            accessor: "unit_price",
-            className: "w-28 text-right",
-            cell: (row) => (
-                <span className="tabular-nums">
-                    {formatCurrency(row.unit_price)}
-                </span>
-            ),
-        },
-        {
-            header: "Subtotal",
-            accessor: "subtotal",
-            className: "w-28 text-right",
-            cell: (row) => (
-                <span className="tabular-nums">
-                    {formatCurrency(row.subtotal)}
-                </span>
-            ),
-        },
-        {
-            header: "IVA 13%",
-            accessor: "iva_amount",
-            className: "w-24 text-right",
-            cell: (row) => (
-                <span className="tabular-nums text-slate-500">
-                    {formatCurrency(row.iva_amount)}
-                </span>
-            ),
-        },
-        {
-            header: "Total",
-            accessor: "total",
-            className: "w-28 text-right",
-            cell: (row) => (
-                <span className="font-semibold tabular-nums text-slate-900">
-                    {formatCurrency(row.total)}
-                </span>
-            ),
-        },
-        {
-            header: "",
-            accessor: "actions",
-            className: "w-16",
-            cell: (row) => (
-                <button
-                    onClick={() => handleDeleteCharge(row.id)}
-                    className="p-1.5 text-slate-400 hover:text-danger-600 hover:bg-danger-50 rounded transition-colors"
-                    title="Eliminar"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </button>
-            ),
-        },
-    ];
-
-    const transfersColumns = [
-        {
-            header: "Tipo",
-            accessor: "transfer_type",
-            className: "w-28",
-            cell: (row) => {
-                const types = {
-                    terceros: { label: "Terceros", className: "badge-warning" },
-                    propios: { label: "Propios", className: "badge-info" },
-                    admin: { label: "Admin", className: "badge-default" },
-                };
-                const config = types[row.transfer_type] || types.terceros;
-                return <span className={config.className}>{config.label}</span>;
-            },
-        },
-        {
-            header: "Proveedor",
-            accessor: "provider",
-            cell: (row) => (
-                <span className="text-slate-900">
-                    {row.provider?.name || "-"}
-                </span>
-            ),
-        },
-        {
-            header: "Monto",
-            accessor: "amount",
-            className: "w-32 text-right",
-            cell: (row) => (
-                <span className="font-semibold tabular-nums">
-                    {formatCurrency(row.amount)}
-                </span>
-            ),
-        },
-        {
-            header: "Estado",
-            accessor: "status",
-            className: "w-28",
-            cell: (row) => <StatusBadge status={row.status} />,
-        },
-        {
-            header: "Notas",
-            accessor: "notes",
-            cell: (row) => (
-                <span className="text-sm text-slate-500 truncate max-w-[200px] block">
-                    {row.notes || "-"}
-                </span>
-            ),
-        },
-    ];
-
-    // ============================================
-    // LOADING STATE
-    // ============================================
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-slate-50 p-6">
-                <div className="space-y-6 max-w-7xl mx-auto">
-                    <div className="flex items-center gap-4">
-                        <Skeleton className="h-10 w-24" />
-                        <Skeleton className="h-8 w-64" />
-                    </div>
-                    <div className="grid grid-cols-4 gap-4">
-                        <Skeleton className="h-24" />
-                        <Skeleton className="h-24" />
-                        <Skeleton className="h-24" />
-                        <Skeleton className="h-24" />
-                    </div>
-                    <Skeleton className="h-96" />
-                </div>
-            </div>
-        );
-    }
-
-    // ============================================
-    // NOT FOUND STATE
-    // ============================================
-    if (!order) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <EmptyState
-                    icon={FileText}
-                    title="Orden no encontrada"
-                    description="No se pudo cargar la información de la orden de servicio"
-                    action={
-                        <Button
-                            variant="outline"
-                            onClick={() => navigate("/service-orders")}
-                        >
-                            <ArrowLeft className="w-4 h-4 mr-2" />
-                            Volver al listado
-                        </Button>
-                    }
-                />
-            </div>
-        );
-    }
-
-    // ============================================
-    // RENDER
-    // ============================================
     return (
-        <div className="min-h-screen bg-slate-50">
-            {/* Header */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
-                <div className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => navigate("/service-orders")}
-                                className="text-slate-600"
-                            >
-                                <ArrowLeft className="w-4 h-4 mr-1.5" />
-                                Volver
-                            </Button>
-                            <div className="h-6 w-px bg-slate-200" />
-                            <div>
-                                <div className="flex items-center gap-3">
-                                    <h1 className="text-xl font-semibold text-slate-900 font-mono">
-                                        {order.order_number}
-                                    </h1>
-                                    <StatusBadge status={order.status} />
-                                    {order.facturado && (
-                                        <span className="badge-success">
-                                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                                            Facturado
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-sm text-slate-500 mt-0.5">
-                                    {order.client?.name} •{" "}
-                                    {order.shipment_type?.name}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm">
-                                <Edit className="w-4 h-4 mr-1.5" />
-                                Editar
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tabs Navigation */}
-                <div className="px-6 tabs-corporate">
-                    <button
-                        onClick={() => setActiveTab("general")}
-                        className={cn(
-                            "tab-item",
-                            activeTab === "general" && "tab-item-active"
-                        )}
-                    >
-                        <FileText className="w-4 h-4 mr-2 inline" />
-                        Información General
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("charges")}
-                        className={cn(
-                            "tab-item",
-                            activeTab === "charges" && "tab-item-active"
-                        )}
-                    >
-                        <DollarSign className="w-4 h-4 mr-2 inline" />
-                        Cobros ({charges.length})
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("transfers")}
-                        className={cn(
-                            "tab-item",
-                            activeTab === "transfers" && "tab-item-active"
-                        )}
-                    >
-                        <ArrowRightLeft className="w-4 h-4 mr-2 inline" />
-                        Transferencias ({transfers.length})
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("invoice")}
-                        className={cn(
-                            "tab-item",
-                            activeTab === "invoice" && "tab-item-active"
-                        )}
-                    >
-                        <Receipt className="w-4 h-4 mr-2 inline" />
-                        Facturación
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("analysis")}
-                        className={cn(
-                            "tab-item",
-                            activeTab === "analysis" && "tab-item-active"
-                        )}
-                    >
-                        <BarChart3 className="w-4 h-4 mr-2 inline" />
-                        Análisis
-                    </button>
-                </div>
+        <div className="space-y-6">
+            <div className="flex items-center gap-4">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate("/service-orders")}
+                    className="text-slate-600"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Volver al Listado
+                </Button>
             </div>
 
-            {/* Content */}
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
-                {/* Tab: General Info */}
-                {activeTab === "general" && (
-                    <div className="space-y-6 animate-fade-in">
-                        {/* Quick Summary */}
-                        <div className="grid grid-cols-4 gap-4">
-                            <SummaryCard
-                                title="Total Cobros"
-                                value={formatCurrency(totals.charges)}
-                                variant="success"
-                                icon={DollarSign}
-                            />
-                            <SummaryCard
-                                title="Total Gastos"
-                                value={formatCurrency(totals.transfers)}
-                                variant="warning"
-                                icon={ArrowRightLeft}
-                            />
-                            <SummaryCard
-                                title="Margen"
-                                value={formatCurrency(margin.value)}
-                                variant={margin.value >= 0 ? "info" : "danger"}
-                                icon={
-                                    margin.value >= 0
-                                        ? TrendingUp
-                                        : TrendingDown
-                                }
-                            />
-                            <SummaryCard
-                                title="Facturado"
-                                value={formatCurrency(totals.invoiced)}
-                                variant="default"
-                                icon={Receipt}
-                            />
-                        </div>
+            <ServiceOrderDetailComponent 
+                orderId={id} 
+                onEdit={handleEditOrder}
+            />
 
-                        {/* Info Cards */}
-                        <div className="grid grid-cols-2 gap-5">
-                            {/* Client Info */}
-                            <div className="card-corporate p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Building2 className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Información del Cliente
-                                    </h3>
-                                </div>
-                                <dl className="grid grid-cols-2 gap-4">
-                                    <DataField
-                                        label="Cliente"
-                                        value={order.client?.name}
-                                    />
-                                    <DataField
-                                        label="NIT"
-                                        value={order.client?.nit}
-                                        mono
-                                    />
-                                    {order.sub_client && (
-                                        <DataField
-                                            label="Subcliente"
-                                            value={order.sub_client.name}
-                                            className="col-span-2"
-                                        />
-                                    )}
-                                </dl>
-                            </div>
-
-                            {/* Shipment Info */}
-                            <div className="card-corporate p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Ship className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Detalles del Embarque
-                                    </h3>
-                                </div>
-                                <dl className="grid grid-cols-2 gap-4">
-                                    <DataField
-                                        label="Tipo de Embarque"
-                                        value={order.shipment_type?.name}
-                                    />
-                                    <DataField
-                                        label="Proveedor"
-                                        value={order.provider?.name}
-                                    />
-                                    <DataField
-                                        label="Aforador"
-                                        value={order.customs_agent?.name}
-                                        className="col-span-2"
-                                    />
-                                </dl>
-                            </div>
-
-                            {/* References */}
-                            <div className="card-corporate p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Hash className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Referencias
-                                    </h3>
-                                </div>
-                                <dl className="grid grid-cols-2 gap-4">
-                                    <DataField
-                                        label="DUCA"
-                                        value={order.duca}
-                                        mono
-                                    />
-                                    <DataField
-                                        label="BL / Referencia"
-                                        value={order.bl_reference}
-                                        mono
-                                    />
-                                    <DataField
-                                        label="Orden de Compra"
-                                        value={order.purchase_order}
-                                        mono
-                                    />
-                                </dl>
-                            </div>
-
-                            {/* Dates */}
-                            <div className="card-corporate p-5">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Calendar className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Fechas y Estado
-                                    </h3>
-                                </div>
-                                <dl className="grid grid-cols-2 gap-4">
-                                    <DataField
-                                        label="ETA"
-                                        value={formatDate(order.eta, {
-                                            format: "medium",
-                                        })}
-                                    />
-                                    <DataField
-                                        label="Fecha de Creación"
-                                        value={formatDate(order.created_at, {
-                                            format: "medium",
-                                        })}
-                                    />
-                                    <div>
-                                        <dt className="data-label">Estado</dt>
-                                        <dd className="mt-1">
-                                            <StatusBadge
-                                                status={order.status}
-                                            />
-                                        </dd>
-                                    </div>
-                                    {order.closed_at && (
-                                        <DataField
-                                            label="Fecha de Cierre"
-                                            value={formatDate(order.closed_at, {
-                                                format: "medium",
-                                            })}
-                                        />
-                                    )}
-                                </dl>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Tab: Charges */}
-                {activeTab === "charges" && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="card-corporate overflow-hidden">
-                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Cálculo de Cobros
-                                    </h3>
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                        Servicios facturables con IVA 13%
-                                    </p>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    onClick={() =>
-                                        setIsAddChargeModalOpen(true)
-                                    }
-                                    className="bg-brand-600 hover:bg-brand-700"
-                                >
-                                    <Plus className="w-4 h-4 mr-1.5" />
-                                    Agregar Cobro
-                                </Button>
-                            </div>
-
-                            {charges.length > 0 ? (
-                                <>
-                                    <DataTable
-                                        columns={chargesColumns}
-                                        data={charges}
-                                    />
-                                    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
-                                        <div className="flex justify-end">
-                                            <div className="text-right">
-                                                <p className="text-sm text-slate-600">
-                                                    Total Cobros
-                                                </p>
-                                                <p className="text-2xl font-bold text-success-600 tabular-nums">
-                                                    {formatCurrency(
-                                                        totals.charges
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="py-12">
-                                    <EmptyState
-                                        icon={DollarSign}
-                                        title="Sin cobros registrados"
-                                        description="Agrega cobros para esta orden de servicio"
-                                        action={
-                                            <Button
-                                                size="sm"
-                                                onClick={() =>
-                                                    setIsAddChargeModalOpen(
-                                                        true
-                                                    )
-                                                }
-                                                className="bg-brand-600 hover:bg-brand-700"
-                                            >
-                                                <Plus className="w-4 h-4 mr-1.5" />
-                                                Agregar Cobro
-                                            </Button>
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Tab: Transfers */}
-                {activeTab === "transfers" && (
-                    <div className="space-y-5 animate-fade-in">
-                        <div className="card-corporate overflow-hidden">
-                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Gastos y Transferencias
-                                    </h3>
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                        Gastos a terceros, propios y
-                                        administrativos
-                                    </p>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    onClick={() =>
-                                        setIsAddTransferModalOpen(true)
-                                    }
-                                    className="bg-brand-600 hover:bg-brand-700"
-                                >
-                                    <Plus className="w-4 h-4 mr-1.5" />
-                                    Agregar Gasto
-                                </Button>
-                            </div>
-
-                            {transfers.length > 0 ? (
-                                <>
-                                    <DataTable
-                                        columns={transfersColumns}
-                                        data={transfers}
-                                    />
-                                    <div className="px-5 py-4 bg-slate-50 border-t border-slate-200">
-                                        <div className="flex justify-end">
-                                            <div className="text-right">
-                                                <p className="text-sm text-slate-600">
-                                                    Total Gastos
-                                                </p>
-                                                <p className="text-2xl font-bold text-warning-600 tabular-nums">
-                                                    {formatCurrency(
-                                                        totals.transfers
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="py-12">
-                                    <EmptyState
-                                        icon={ArrowRightLeft}
-                                        title="Sin transferencias registradas"
-                                        description="Agrega gastos a terceros para esta orden"
-                                        action={
-                                            <Button
-                                                size="sm"
-                                                onClick={() =>
-                                                    setIsAddTransferModalOpen(
-                                                        true
-                                                    )
-                                                }
-                                                className="bg-brand-600 hover:bg-brand-700"
-                                            >
-                                                <Plus className="w-4 h-4 mr-1.5" />
-                                                Agregar Gasto
-                                            </Button>
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Tab: Invoice - Trazabilidad Financiera */}
-                {activeTab === "invoice" && (
-                    <div className="space-y-5 animate-fade-in">
-                        {/* Resumen de documentos financieros */}
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-blue-600 uppercase tracking-wide">
-                                        CXC (Ingresos)
-                                    </span>
-                                    <Receipt className="w-4 h-4 text-blue-500" />
-                                </div>
-                                <p className="text-2xl font-bold text-blue-900 tabular-nums">
-                                    {formatCurrency(
-                                        totals.invoiced || totals.charges
-                                    )}
-                                </p>
-                                <p className="text-xs text-blue-600 mt-1">
-                                    {invoice
-                                        ? "1 factura emitida"
-                                        : "Pendiente de facturar"}
-                                </p>
-                            </div>
-
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-amber-600 uppercase tracking-wide">
-                                        CXP (Gastos)
-                                    </span>
-                                    <ArrowRightLeft className="w-4 h-4 text-amber-500" />
-                                </div>
-                                <p className="text-2xl font-bold text-amber-900 tabular-nums">
-                                    {formatCurrency(totals.transfers)}
-                                </p>
-                                <p className="text-xs text-amber-600 mt-1">
-                                    {transfers.length} registro(s) de gastos
-                                </p>
-                            </div>
-
-                            <div
-                                className={cn(
-                                    "border rounded-lg p-4",
-                                    margin.value >= 0
-                                        ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200"
-                                        : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200"
-                                )}
-                            >
-                                <div className="flex items-center justify-between mb-2">
-                                    <span
-                                        className={cn(
-                                            "text-xs font-medium uppercase tracking-wide",
-                                            margin.value >= 0
-                                                ? "text-emerald-600"
-                                                : "text-red-600"
-                                        )}
-                                    >
-                                        Margen
-                                    </span>
-                                    {margin.value >= 0 ? (
-                                        <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                    ) : (
-                                        <TrendingDown className="w-4 h-4 text-red-500" />
-                                    )}
-                                </div>
-                                <p
-                                    className={cn(
-                                        "text-2xl font-bold tabular-nums",
-                                        margin.value >= 0
-                                            ? "text-emerald-900"
-                                            : "text-red-900"
-                                    )}
-                                >
-                                    {formatCurrency(margin.value)}
-                                </p>
-                                <p
-                                    className={cn(
-                                        "text-xs mt-1",
-                                        margin.value >= 0
-                                            ? "text-emerald-600"
-                                            : "text-red-600"
-                                    )}
-                                >
-                                    {margin.percentage.toFixed(1)}% de
-                                    rentabilidad
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Factura CXC */}
-                        <div className="card-corporate overflow-hidden">
-                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                                <div className="flex items-center gap-2">
-                                    <Receipt className="w-4 h-4 text-blue-600" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Factura de Venta (CXC)
-                                    </h3>
-                                </div>
-                                {invoice && (
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                            navigate(
-                                                `/invoicing?invoice=${invoice.id}`
-                                            )
-                                        }
-                                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                                    >
-                                        Ver en CXC
-                                        <ArrowRightLeft className="w-3.5 h-3.5 ml-1.5" />
-                                    </Button>
-                                )}
-                            </div>
-
-                            {invoice ? (
-                                <div className="p-5">
-                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                                        <DataField
-                                            label="Número de Factura"
-                                            value={
-                                                <span className="font-mono font-semibold text-blue-600">
-                                                    {invoice.invoice_number}
-                                                </span>
-                                            }
-                                        />
-                                        <div>
-                                            <dt className="data-label">
-                                                Estado
-                                            </dt>
-                                            <dd className="mt-1">
-                                                <StatusBadge
-                                                    status={invoice.status}
-                                                />
-                                            </dd>
-                                        </div>
-                                        <DataField
-                                            label="Fecha de Emisión"
-                                            value={formatDate(
-                                                invoice.issue_date,
-                                                { format: "medium" }
-                                            )}
-                                        />
-                                        <DataField
-                                            label="Fecha de Vencimiento"
-                                            value={
-                                                invoice.due_date
-                                                    ? formatDate(
-                                                          invoice.due_date,
-                                                          { format: "medium" }
-                                                      )
-                                                    : "Sin vencimiento"
-                                            }
-                                        />
-                                    </div>
-
-                                    {/* Resumen financiero */}
-                                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                        <div className="grid grid-cols-3 gap-4 text-center">
-                                            <div>
-                                                <p className="text-xs text-slate-500 mb-1">
-                                                    Total Facturado
-                                                </p>
-                                                <p className="text-lg font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(
-                                                        invoice.total_amount
-                                                    )}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 mb-1">
-                                                    Pagado
-                                                </p>
-                                                <p className="text-lg font-bold text-emerald-600 tabular-nums">
-                                                    {formatCurrency(
-                                                        invoice.paid_amount || 0
-                                                    )}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-slate-500 mb-1">
-                                                    Saldo Pendiente
-                                                </p>
-                                                <p
-                                                    className={cn(
-                                                        "text-lg font-bold tabular-nums",
-                                                        parseFloat(
-                                                            invoice.balance
-                                                        ) > 0
-                                                            ? "text-red-600"
-                                                            : "text-emerald-600"
-                                                    )}
-                                                >
-                                                    {formatCurrency(
-                                                        invoice.balance
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Historial de pagos si existe */}
-                                    {invoice.payments &&
-                                        invoice.payments.length > 0 && (
-                                            <div className="mt-4">
-                                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                                    Historial de Pagos
-                                                </h4>
-                                                <div className="space-y-2">
-                                                    {invoice.payments.map(
-                                                        (payment, idx) => (
-                                                            <div
-                                                                key={idx}
-                                                                className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200"
-                                                            >
-                                                                <div className="flex items-center gap-3">
-                                                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                                                    <div>
-                                                                        <p className="text-sm font-medium text-slate-900 tabular-nums">
-                                                                            {formatCurrency(
-                                                                                payment.amount
-                                                                            )}
-                                                                        </p>
-                                                                        <p className="text-xs text-slate-500">
-                                                                            {
-                                                                                payment.payment_method
-                                                                            }{" "}
-                                                                            •{" "}
-                                                                            {payment.reference ||
-                                                                                "Sin ref."}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                                <span className="text-xs text-slate-500">
-                                                                    {formatDate(
-                                                                        payment.payment_date,
-                                                                        {
-                                                                            format: "short",
-                                                                        }
-                                                                    )}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                </div>
-                            ) : (
-                                <div className="py-12">
-                                    <EmptyState
-                                        icon={Receipt}
-                                        title="Sin factura generada"
-                                        description="Esta orden aún no tiene una factura de venta asociada"
-                                        action={
-                                            totals.charges > 0 && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        navigate(
-                                                            `/invoicing?create=true&order=${id}`
-                                                        )
-                                                    }
-                                                    className="bg-brand-600 hover:bg-brand-700"
-                                                >
-                                                    <Plus className="w-4 h-4 mr-1.5" />
-                                                    Crear Factura
-                                                </Button>
-                                            )
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Gastos CXP */}
-                        <div className="card-corporate overflow-hidden">
-                            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                                <div className="flex items-center gap-2">
-                                    <ArrowRightLeft className="w-4 h-4 text-amber-600" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Gastos y Proveedores (CXP)
-                                    </h3>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                        navigate(
-                                            `/provider-payments?order=${id}`
-                                        )
-                                    }
-                                    className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                                >
-                                    Ver en CXP
-                                    <ArrowRightLeft className="w-3.5 h-3.5 ml-1.5" />
-                                </Button>
-                            </div>
-
-                            {transfers.length > 0 ? (
-                                <div className="p-5">
-                                    <div className="space-y-2">
-                                        {transfers
-                                            .slice(0, 5)
-                                            .map((transfer, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className={cn(
-                                                                "w-8 h-8 rounded-lg flex items-center justify-center",
-                                                                transfer.transfer_type ===
-                                                                    "terceros"
-                                                                    ? "bg-amber-100"
-                                                                    : transfer.transfer_type ===
-                                                                      "costos"
-                                                                    ? "bg-blue-100"
-                                                                    : "bg-slate-100"
-                                                            )}
-                                                        >
-                                                            <DollarSign
-                                                                className={cn(
-                                                                    "w-4 h-4",
-                                                                    transfer.transfer_type ===
-                                                                        "terceros"
-                                                                        ? "text-amber-600"
-                                                                        : transfer.transfer_type ===
-                                                                          "costos"
-                                                                        ? "text-blue-600"
-                                                                        : "text-slate-600"
-                                                                )}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-900">
-                                                                {transfer
-                                                                    .provider
-                                                                    ?.name ||
-                                                                    transfer.beneficiary_name ||
-                                                                    "Gasto"}
-                                                            </p>
-                                                            <p className="text-xs text-slate-500">
-                                                                {transfer.transfer_type ===
-                                                                "terceros"
-                                                                    ? "Gasto a Terceros"
-                                                                    : transfer.transfer_type ===
-                                                                      "costos"
-                                                                    ? "Costo Directo"
-                                                                    : transfer.transfer_type ===
-                                                                      "admin"
-                                                                    ? "Administrativo"
-                                                                    : transfer.transfer_type}
-                                                                {transfer.ccf &&
-                                                                    ` • CCF: ${transfer.ccf}`}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-sm font-semibold text-amber-600 tabular-nums">
-                                                            {formatCurrency(
-                                                                transfer.amount
-                                                            )}
-                                                        </p>
-                                                        <StatusBadge
-                                                            status={
-                                                                transfer.status
-                                                            }
-                                                        />
-                                                    </div>
-                                                </div>
-                                            ))}
-                                    </div>
-                                    {transfers.length > 5 && (
-                                        <div className="mt-3 text-center">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    setActiveTab("transfers")
-                                                }
-                                                className="text-slate-600"
-                                            >
-                                                Ver todos ({transfers.length}{" "}
-                                                registros)
-                                            </Button>
-                                        </div>
-                                    )}
-
-                                    {/* Total de gastos */}
-                                    <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
-                                        <div className="text-right">
-                                            <p className="text-xs text-slate-500 mb-1">
-                                                Total Gastos CXP
-                                            </p>
-                                            <p className="text-xl font-bold text-amber-600 tabular-nums">
-                                                {formatCurrency(
-                                                    totals.transfers
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="py-12">
-                                    <EmptyState
-                                        icon={ArrowRightLeft}
-                                        title="Sin gastos registrados"
-                                        description="No hay gastos a proveedores para esta orden"
-                                        action={
-                                            <Button
-                                                size="sm"
-                                                onClick={() =>
-                                                    setIsAddTransferModalOpen(
-                                                        true
-                                                    )
-                                                }
-                                                className="bg-brand-600 hover:bg-brand-700"
-                                            >
-                                                <Plus className="w-4 h-4 mr-1.5" />
-                                                Agregar Gasto
-                                            </Button>
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Tab: Analysis */}
-                {activeTab === "analysis" && (
-                    <div className="space-y-5 animate-fade-in">
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-3 gap-4">
-                            <SummaryCard
-                                title="Cobros Calculados"
-                                value={formatCurrency(totals.charges)}
-                                variant="success"
-                                icon={DollarSign}
-                            />
-                            <SummaryCard
-                                title="Gastos a Terceros"
-                                value={formatCurrency(totals.transfers)}
-                                variant="warning"
-                                icon={ArrowRightLeft}
-                            />
-                            <SummaryCard
-                                title="Total Facturado"
-                                value={formatCurrency(totals.invoiced)}
-                                variant="info"
-                                icon={Receipt}
-                            />
-                        </div>
-
-                        {/* Profitability Analysis */}
-                        <div className="card-corporate p-5">
-                            <div className="flex items-center gap-2 mb-5">
-                                <BarChart3 className="w-4 h-4 text-slate-400" />
-                                <h3 className="text-sm font-semibold text-slate-900">
-                                    Análisis de Rentabilidad
-                                </h3>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center py-2">
-                                    <span className="text-sm text-slate-600">
-                                        Ingresos (Cobros)
-                                    </span>
-                                    <span className="font-semibold tabular-nums text-success-600">
-                                        +{formatCurrency(totals.charges)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-center py-2">
-                                    <span className="text-sm text-slate-600">
-                                        Gastos (Terceros)
-                                    </span>
-                                    <span className="font-semibold tabular-nums text-danger-600">
-                                        -{formatCurrency(totals.transfers)}
-                                    </span>
-                                </div>
-                                <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
-                                    <span className="text-sm font-semibold text-slate-900">
-                                        Margen Bruto
-                                    </span>
-                                    <div className="text-right">
-                                        <span
-                                            className={cn(
-                                                "text-xl font-bold tabular-nums",
-                                                margin.value >= 0
-                                                    ? "text-success-600"
-                                                    : "text-danger-600"
-                                            )}
-                                        >
-                                            {formatCurrency(margin.value)}
-                                        </span>
-                                        {totals.charges > 0 && (
-                                            <span className="text-sm text-slate-500 ml-2">
-                                                ({margin.percentage.toFixed(1)}
-                                                %)
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Cobros vs Facturado */}
-                        {invoice && (
-                            <div className="card-corporate p-5">
-                                <div className="flex items-center gap-2 mb-5">
-                                    <Receipt className="w-4 h-4 text-slate-400" />
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                        Cobros vs Facturado
-                                    </h3>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-600">
-                                            Total Cobros
-                                        </span>
-                                        <span className="font-semibold tabular-nums">
-                                            {formatCurrency(totals.charges)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-600">
-                                            Total Facturado
-                                        </span>
-                                        <span className="font-semibold tabular-nums">
-                                            {formatCurrency(totals.invoiced)}
-                                        </span>
-                                    </div>
-                                    <div className="border-t border-slate-200 pt-4 flex justify-between items-center">
-                                        <span className="text-sm font-semibold text-slate-900">
-                                            Diferencia
-                                        </span>
-                                        <span
-                                            className={cn(
-                                                "text-lg font-bold tabular-nums",
-                                                Math.abs(
-                                                    totals.charges -
-                                                        totals.invoiced
-                                                ) < 0.01
-                                                    ? "text-success-600"
-                                                    : "text-warning-600"
-                                            )}
-                                        >
-                                            {formatCurrency(
-                                                Math.abs(
-                                                    totals.charges -
-                                                        totals.invoiced
-                                                )
-                                            )}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Modal: Add Charge */}
-            <Dialog
-                open={isAddChargeModalOpen}
-                onOpenChange={setIsAddChargeModalOpen}
-            >
-                <DialogContent className="max-w-md">
+            {/* Edit Modal */}
+            <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+                <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>Agregar Cobro</DialogTitle>
+                        <DialogTitle>Editar Orden: {order?.order_number}</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleAddCharge} className="space-y-4">
-                        <div>
-                            <SelectERP
-                                label="Servicio"
-                                value={chargeFormData.service}
-                                onChange={(value) => {
-                                    const service = services.find(
-                                        (s) => s.id === parseInt(value)
-                                    );
-                                    setChargeFormData({
-                                        ...chargeFormData,
-                                        service: value,
-                                        unit_price:
-                                            service?.default_price || "",
-                                    });
-                                }}
-                                options={services}
-                                getOptionLabel={(s) =>
-                                    `${s.name} - ${formatCurrency(
-                                        s.default_price
-                                    )}`
-                                }
-                                getOptionValue={(s) => s.id}
-                                placeholder="Seleccionar servicio..."
-                                searchable
-                                required
-                            />
-                        </div>
+                    <form onSubmit={handleUpdateOrder} className="space-y-6">
+                        {/* Client Info */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label className="label-corporate label-required">
-                                    Cantidad
-                                </Label>
-                                <Input
-                                    type="number"
-                                    min="1"
-                                    value={chargeFormData.quantity}
-                                    onChange={(e) =>
-                                        setChargeFormData({
-                                            ...chargeFormData,
-                                            quantity: e.target.value,
-                                        })
-                                    }
-                                    required
-                                    className="input-corporate"
-                                />
+                            <div className="col-span-2">
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                        1
+                                    </span>
+                                    Información del Cliente
+                                </h4>
                             </div>
-                            <div>
-                                <Label className="label-corporate label-required">
-                                    Precio Unitario
-                                </Label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={chargeFormData.unit_price}
-                                    onChange={(e) =>
-                                        setChargeFormData({
-                                            ...chargeFormData,
-                                            unit_price: e.target.value,
-                                        })
-                                    }
-                                    required
-                                    className="input-corporate"
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsAddChargeModalOpen(false)}
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                type="submit"
-                                className="bg-brand-600 hover:bg-brand-700"
-                            >
-                                Agregar Cobro
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Modal: Add Transfer */}
-            <Dialog
-                open={isAddTransferModalOpen}
-                onOpenChange={setIsAddTransferModalOpen}
-            >
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Agregar Gasto</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleAddTransfer} className="space-y-4">
-                        <div>
                             <SelectERP
-                                label="Tipo de Gasto"
-                                value={transferFormData.transfer_type}
-                                onChange={(value) =>
-                                    setTransferFormData({
-                                        ...transferFormData,
-                                        transfer_type: value,
+                                label="Cliente"
+                                value={editFormData.client}
+                                onChange={(val) =>
+                                    setEditFormData({
+                                        ...editFormData,
+                                        client: val,
                                     })
                                 }
-                                options={[
-                                    { id: "terceros", name: "Terceros" },
-                                    { id: "propios", name: "Propios" },
-                                    { id: "admin", name: "Administrativos" },
-                                ]}
+                                options={clients}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
                                 required
                             />
                         </div>
-                        {transferFormData.transfer_type === "terceros" && (
-                            <div>
-                                <SelectERP
-                                    label="Proveedor"
-                                    value={transferFormData.provider}
-                                    onChange={(value) =>
-                                        setTransferFormData({
-                                            ...transferFormData,
-                                            provider: value,
-                                        })
-                                    }
-                                    options={providers}
-                                    getOptionLabel={(p) => p.name}
-                                    getOptionValue={(p) => p.id}
-                                    placeholder="Seleccionar proveedor..."
-                                    searchable
-                                    required
-                                />
+
+                        <div className="border-t border-gray-100 my-4"></div>
+
+                        {/* Shipment Info */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                        2
+                                    </span>
+                                    Datos del Embarque
+                                </h4>
                             </div>
-                        )}
-                        <div>
-                            <Label className="label-corporate label-required">
-                                Monto
-                            </Label>
-                            <Input
-                                type="number"
-                                step="0.01"
-                                value={transferFormData.amount}
-                                onChange={(e) =>
-                                    setTransferFormData({
-                                        ...transferFormData,
-                                        amount: e.target.value,
+                            <SelectERP
+                                label="Tipo de Embarque"
+                                value={editFormData.shipment_type}
+                                onChange={(val) =>
+                                    setEditFormData({
+                                        ...editFormData,
+                                        shipment_type: val,
                                     })
                                 }
+                                options={shipmentTypes}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                clearable
                                 required
-                                className="input-corporate"
                             />
-                        </div>
-                        <div>
-                            <Label className="label-corporate">Notas</Label>
-                            <textarea
-                                className="input-corporate min-h-[80px] resize-none"
-                                value={transferFormData.notes}
-                                onChange={(e) =>
-                                    setTransferFormData({
-                                        ...transferFormData,
-                                        notes: e.target.value,
+                            <SelectERP
+                                label="Proveedor Logístico"
+                                value={editFormData.provider}
+                                onChange={(val) =>
+                                    setEditFormData({
+                                        ...editFormData,
+                                        provider: val,
                                     })
                                 }
+                                options={providers}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
                             />
                         </div>
+
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                        DUCA
+                                    </Label>
+                                    <Input
+                                        value={editFormData.duca}
+                                        onChange={(e) =>
+                                            setEditFormData({
+                                                ...editFormData,
+                                                duca: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: 4-12345"
+                                        required
+                                        className="font-mono uppercase"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                        BL / Guía
+                                    </Label>
+                                    <Input
+                                        value={editFormData.bl_reference}
+                                        onChange={(e) =>
+                                            setEditFormData({
+                                                ...editFormData,
+                                                bl_reference: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: MAEU123456789"
+                                        className="font-mono uppercase"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                        Fecha ETA
+                                    </Label>
+                                    <Input
+                                        type="date"
+                                        value={editFormData.eta}
+                                        onChange={(e) =>
+                                            setEditFormData({
+                                                ...editFormData,
+                                                eta: e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                        Orden de Compra (PO)
+                                    </Label>
+                                    <Input
+                                        value={editFormData.purchase_order}
+                                        onChange={(e) =>
+                                            setEditFormData({
+                                                ...editFormData,
+                                                purchase_order: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: PO-998877"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <DialogFooter>
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setIsAddTransferModalOpen(false)}
+                                onClick={() => setIsEditModalOpen(false)}
                             >
                                 Cancelar
                             </Button>
@@ -1646,26 +271,14 @@ function ServiceOrderDetail() {
                                 type="submit"
                                 className="bg-brand-600 hover:bg-brand-700"
                             >
-                                Agregar Gasto
+                                Guardar Cambios
                             </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
-
-            {/* Confirm Delete Dialog - Cobros */}
-            <ConfirmDialog
-                open={confirmDialog.open}
-                onClose={() => setConfirmDialog({ open: false, id: null })}
-                onConfirm={confirmDeleteCharge}
-                title="¿Eliminar este cobro?"
-                description="Esta acción no se puede deshacer. El cobro será eliminado permanentemente de la orden de servicio."
-                confirmText="Eliminar"
-                cancelText="Cancelar"
-                variant="danger"
-            />
         </div>
     );
 }
 
-export default ServiceOrderDetail;
+export default ServiceOrderDetailPage;

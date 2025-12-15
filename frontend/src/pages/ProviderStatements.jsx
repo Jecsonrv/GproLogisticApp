@@ -1,0 +1,1402 @@
+import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import {
+    Search,
+    RefreshCw,
+    Download,
+    Truck,
+    Clock,
+    DollarSign,
+    CheckCircle2,
+    AlertCircle,
+    FileText,
+    Calendar,
+    Filter,
+    Eye,
+    X,
+    Upload,
+    CreditCard,
+    FileMinus,
+    Banknote,
+} from "lucide-react";
+import {
+    Button,
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    DataTable,
+    Badge,
+    SelectERP,
+    Input,
+    Label,
+    Modal,
+    ModalFooter,
+    FileUpload,
+    Skeleton,
+} from "../components/ui";
+import axios from "../lib/axios";
+import toast from "react-hot-toast";
+import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+
+// ============================================
+// STATUS CONFIGURATION
+// ============================================
+const TRANSFER_STATUS = {
+    pendiente: {
+        label: "Pendiente",
+        bgColor: "bg-amber-50",
+        textColor: "text-amber-700",
+        borderColor: "border-amber-200",
+        dotColor: "bg-amber-500",
+    },
+    aprobado: {
+        label: "Aprobado",
+        bgColor: "bg-blue-50",
+        textColor: "text-blue-700",
+        borderColor: "border-blue-200",
+        dotColor: "bg-blue-500",
+    },
+    parcial: {
+        label: "Pago Parcial",
+        bgColor: "bg-orange-50",
+        textColor: "text-orange-700",
+        borderColor: "border-orange-200",
+        dotColor: "bg-orange-500",
+    },
+    pagado: {
+        label: "Pagado",
+        bgColor: "bg-emerald-50",
+        textColor: "text-emerald-700",
+        borderColor: "border-emerald-200",
+        dotColor: "bg-emerald-500",
+    },
+    provisionada: {
+        label: "Provisionada",
+        bgColor: "bg-slate-50",
+        textColor: "text-slate-600",
+        borderColor: "border-slate-200",
+        dotColor: "bg-slate-400",
+    },
+};
+
+const StatusBadge = ({ status }) => {
+    const config = TRANSFER_STATUS[status] || TRANSFER_STATUS.pendiente;
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border",
+                config.bgColor,
+                config.textColor,
+                config.borderColor
+            )}
+        >
+            <span
+                className={cn(
+                    "w-1.5 h-1.5 rounded-full mr-1.5",
+                    config.dotColor
+                )}
+            />
+            {config.label}
+        </span>
+    );
+};
+
+// ============================================
+// PROVIDER CARD COMPONENT (Sidebar)
+// ============================================
+const ProviderCard = ({ provider, isSelected, onClick }) => {
+    const hasDebt = provider.total_debt > 0;
+
+    return (
+        <div
+            onClick={onClick}
+            className={cn(
+                "p-3 rounded-lg border cursor-pointer transition-all",
+                isSelected
+                    ? "border-slate-300 bg-slate-50 shadow-sm"
+                    : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50"
+            )}
+        >
+            <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    <div
+                        className={cn(
+                            "w-9 h-9 rounded-lg flex items-center justify-center font-semibold text-xs border",
+                            isSelected
+                                ? "bg-slate-100 text-slate-700 border-slate-300"
+                                : "bg-slate-50 text-slate-600 border-slate-200"
+                        )}
+                    >
+                        {provider.name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-slate-900 text-sm leading-tight truncate">
+                            {provider.name}
+                        </h3>
+                        <p className="text-xs text-slate-500 truncate">
+                            {provider.nit || "Sin NIT"}
+                        </p>
+                    </div>
+                </div>
+                {hasDebt && (
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-red-50 flex items-center justify-center">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                    </div>
+                )}
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex justify-between items-baseline text-xs">
+                    <span className="text-slate-500">Deuda pendiente</span>
+                    <span className="font-semibold text-slate-900 tabular-nums">
+                        {formatCurrency(provider.total_debt || 0)}
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ProviderStatements = () => {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const providerIdFromUrl = searchParams.get("provider");
+
+    // Data
+    const [providers, setProviders] = useState([]);
+    const [banks, setBanks] = useState([]);
+    const [selectedProvider, setSelectedProvider] = useState(null);
+    const [statement, setStatement] = useState(null);
+    const [selectedTransfer, setSelectedTransfer] = useState(null);
+
+    // UI State
+    const [loading, setLoading] = useState(false);
+    const [loadingStatement, setLoadingStatement] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Forms
+    const [paymentForm, setPaymentForm] = useState({
+        amount: "",
+        payment_date: getTodayDate(),
+        payment_method: "transferencia",
+        bank: "",
+        reference: "",
+        notes: "",
+        proof_file: null,
+    });
+
+    const [creditNoteForm, setCreditNoteForm] = useState({
+        amount: "",
+        note_number: "",
+        reason: "",
+        issue_date: getTodayDate(),
+        pdf_file: null,
+    });
+
+    useEffect(() => {
+        fetchProviders();
+        fetchBanks();
+    }, []);
+
+    useEffect(() => {
+        if (selectedProvider) {
+            fetchStatement(selectedProvider.id);
+        }
+    }, [selectedProvider, selectedYear]);
+
+    const fetchProviders = async () => {
+        try {
+            setLoading(true);
+            const response = await axios.get("/catalogs/providers/");
+
+            // Enriquecer proveedores con información de deuda
+            const enrichedProviders = await Promise.all(
+                response.data.map(async (provider) => {
+                    try {
+                        const stmtRes = await axios.get(
+                            `/catalogs/providers/${provider.id}/account_statement/`
+                        );
+                        return {
+                            ...provider,
+                            total_debt: stmtRes.data.total_debt || 0,
+                        };
+                    } catch {
+                        return {
+                            ...provider,
+                            total_debt: 0,
+                        };
+                    }
+                })
+            );
+            setProviders(enrichedProviders);
+
+            if (providerIdFromUrl) {
+                const found = enrichedProviders.find(
+                    (p) => p.id === parseInt(providerIdFromUrl)
+                );
+                if (found) setSelectedProvider(found);
+            }
+        } catch (error) {
+            toast.error("Error al cargar proveedores");
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchBanks = async () => {
+        try {
+            const response = await axios.get("/catalogs/banks/");
+            setBanks(response.data);
+        } catch (error) {
+            console.error("Error al cargar bancos:", error);
+        }
+    };
+
+    const fetchStatement = async (providerId) => {
+        try {
+            setLoadingStatement(true);
+            const response = await axios.get(
+                `/catalogs/providers/${providerId}/account_statement/`,
+                { params: { year: selectedYear } }
+            );
+            setStatement(response.data);
+        } catch (error) {
+            toast.error("Error al cargar estado de cuenta");
+        } finally {
+            setLoadingStatement(false);
+        }
+    };
+
+    const fetchTransferDetails = async (transferId) => {
+        try {
+            const response = await axios.get(
+                `/transfers/transfers/${transferId}/detail_with_payments/`
+            );
+            setSelectedTransfer(response.data);
+        } catch (error) {
+            toast.error("Error al cargar detalles");
+        }
+    };
+
+    const handleRegisterPayment = async (e) => {
+        e.preventDefault();
+        if (!selectedTransfer) return;
+
+        try {
+            setIsSubmitting(true);
+            const formData = new FormData();
+            Object.keys(paymentForm).forEach((key) => {
+                if (paymentForm[key] !== null) {
+                    formData.append(key, paymentForm[key]);
+                }
+            });
+
+            await axios.post(
+                `/transfers/transfers/${selectedTransfer.id}/register_payment/`,
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+
+            toast.success("Pago registrado exitosamente");
+            setIsPaymentModalOpen(false);
+            fetchStatement(selectedProvider.id);
+
+            // Reset form
+            setPaymentForm({
+                amount: "",
+                payment_date: getTodayDate(),
+                payment_method: "transferencia",
+                bank: "",
+                reference: "",
+                notes: "",
+                proof_file: null,
+            });
+        } catch (error) {
+            toast.error(
+                error.response?.data?.error || "Error al registrar pago"
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleRegisterCreditNote = async (e) => {
+        e.preventDefault();
+        if (!selectedTransfer) return;
+
+        try {
+            setIsSubmitting(true);
+            const formData = new FormData();
+            Object.keys(creditNoteForm).forEach((key) => {
+                if (creditNoteForm[key] !== null) {
+                    formData.append(key, creditNoteForm[key]);
+                }
+            });
+
+            await axios.post(
+                `/transfers/transfers/${selectedTransfer.id}/register_credit_note/`,
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+
+            toast.success("Nota de crédito registrada exitosamente");
+            setIsCreditNoteModalOpen(false);
+            fetchStatement(selectedProvider.id);
+
+            // Reset form
+            setCreditNoteForm({
+                amount: "",
+                note_number: "",
+                reason: "",
+                issue_date: getTodayDate(),
+                pdf_file: null,
+            });
+        } catch (error) {
+            toast.error(
+                error.response?.data?.error ||
+                    "Error al registrar nota de crédito"
+            );
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const openPaymentModal = (transfer) => {
+        setSelectedTransfer(transfer);
+        setPaymentForm((prev) => ({
+            ...prev,
+            amount: transfer.balance, // Default to balance amount
+        }));
+        setIsPaymentModalOpen(true);
+    };
+
+    const openCreditNoteModal = (transfer) => {
+        setSelectedTransfer(transfer);
+        setIsCreditNoteModalOpen(true);
+    };
+
+    const openDetailModal = async (transfer) => {
+        await fetchTransferDetails(transfer.id);
+        setIsDetailModalOpen(true);
+    };
+
+    const filteredProviders = useMemo(() => {
+        return providers.filter(
+            (p) =>
+                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.nit?.includes(searchQuery)
+        );
+    }, [providers, searchQuery]);
+
+    const columns = [
+        {
+            header: "Fecha",
+            accessor: "transaction_date",
+            cell: (row) =>
+                formatDate(row.transaction_date, { format: "short" }),
+        },
+        {
+            header: "Factura Prov.",
+            accessor: "invoice_number",
+            cell: (row) => (
+                <span className="font-mono text-sm">{row.invoice_number}</span>
+            ),
+        },
+        {
+            header: "Orden de Servicio",
+            accessor: "service_order",
+            cell: (row) => (
+                row.service_order_id ? (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/service-orders/${row.service_order_id}`);
+                        }}
+                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                        {row.service_order}
+                    </button>
+                ) : (
+                    <span className="font-medium text-slate-500">
+                        {row.service_order}
+                    </span>
+                )
+            ),
+        },
+        {
+            header: "Tipo",
+            accessor: "type",
+            cell: (row) => <Badge variant="outline">{row.type}</Badge>,
+        },
+        {
+            header: "Total",
+            accessor: "amount",
+            cell: (row) => (
+                <div className="text-right font-semibold text-gray-900 tabular-nums">
+                    {formatCurrency(row.amount)}
+                </div>
+            ),
+        },
+        {
+            header: "Pagado",
+            accessor: "paid_amount",
+            cell: (row) => (
+                <div className="text-right text-emerald-600 tabular-nums">
+                    {formatCurrency(row.paid_amount || 0)}
+                </div>
+            ),
+        },
+        {
+            header: "Saldo",
+            accessor: "balance",
+            cell: (row) => (
+                <div
+                    className={cn(
+                        "text-right font-semibold tabular-nums",
+                        parseFloat(row.balance) > 0
+                            ? "text-amber-600"
+                            : "text-emerald-600"
+                    )}
+                >
+                    {formatCurrency(row.balance || 0)}
+                </div>
+            ),
+        },
+        {
+            header: "Estado",
+            accessor: "status",
+            cell: (row) => <StatusBadge status={row.status} />,
+        },
+        {
+            header: "PDF",
+            accessor: "invoice_file",
+            className: "w-16 text-center",
+            cell: (row) =>
+                row.invoice_file ? (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(row.invoice_file, "_blank");
+                        }}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        title="Ver factura PDF"
+                    >
+                        <FileText className="w-4 h-4" />
+                    </Button>
+                ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                ),
+        },
+        {
+            header: "Acciones",
+            accessor: "actions",
+            cell: (row) => (
+                <div className="flex items-center justify-end gap-1">
+                    {row.status !== "pagado" && (
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPaymentModal(row);
+                                }}
+                                className="text-gray-500 hover:text-amber-600"
+                                title="Registrar Pago"
+                            >
+                                <Banknote className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openCreditNoteModal(row);
+                                }}
+                                className="text-gray-500 hover:text-purple-600"
+                                title="Nota de Crédito"
+                            >
+                                <FileMinus className="w-4 h-4" />
+                            </Button>
+                        </>
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openDetailModal(row);
+                        }}
+                        className="text-gray-500 hover:text-blue-600"
+                        title="Ver Detalles"
+                    >
+                        <Eye className="w-4 h-4" />
+                    </Button>
+                </div>
+            ),
+        },
+    ];
+
+    if (loading)
+        return <div className="p-8 text-center">Cargando proveedores...</div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">
+                        Cuentas por Pagar
+                    </h1>
+                    <p className="text-slate-500 text-sm">
+                        Gestión de deuda a proveedores y estados de cuenta
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <SelectERP
+                        value={selectedYear}
+                        onChange={setSelectedYear}
+                        options={[
+                            { id: 2025, name: "2025" },
+                            { id: 2024, name: "2024" },
+                            { id: 2023, name: "2023" },
+                        ]}
+                        getOptionLabel={(o) => o.name}
+                        getOptionValue={(o) => o.id}
+                        size="sm"
+                        className="w-32"
+                    />
+                    <Button
+                        variant="outline"
+                        onClick={() => fetchStatement(selectedProvider?.id)}
+                        disabled={!selectedProvider}
+                    >
+                        <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
+                    </Button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Sidebar Proveedores */}
+                <div className="lg:col-span-3">
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                <Truck className="w-4 h-4" />
+                                Proveedores
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <Input
+                                    placeholder="Buscar proveedor..."
+                                    value={searchQuery}
+                                    onChange={(e) =>
+                                        setSearchQuery(e.target.value)
+                                    }
+                                    className="pl-9 text-sm"
+                                />
+                            </div>
+                            <div className="space-y-2 max-h-[calc(100vh-350px)] overflow-y-auto pr-1">
+                                {filteredProviders.map((provider) => (
+                                    <ProviderCard
+                                        key={provider.id}
+                                        provider={provider}
+                                        isSelected={
+                                            selectedProvider?.id === provider.id
+                                        }
+                                        onClick={() =>
+                                            setSelectedProvider(provider)
+                                        }
+                                    />
+                                ))}
+                                {filteredProviders.length === 0 && (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        No se encontraron proveedores
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Contenido Principal */}
+                <div className="lg:col-span-9 space-y-6">
+                    {!selectedProvider ? (
+                        <Card>
+                            <CardContent className="py-16">
+                                <div className="text-center">
+                                    <Truck className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                        Selecciona un Proveedor
+                                    </h3>
+                                    <p className="text-gray-500 max-w-md mx-auto">
+                                        Selecciona un proveedor de la lista para
+                                        ver su estado de cuenta, historial de
+                                        facturas y registrar pagos.
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <>
+                            {/* Header Provider */}
+                            <Card>
+                                <CardContent className="p-6">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h2 className="text-xl font-bold text-slate-900">
+                                                {selectedProvider.name}
+                                            </h2>
+                                            <p className="text-slate-500 text-sm mt-1">
+                                                NIT: {selectedProvider.nit}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-sm font-medium text-slate-500 uppercase">
+                                                Deuda Total
+                                            </div>
+                                            <div className="text-3xl font-bold text-red-600 tabular-nums">
+                                                {statement
+                                                    ? formatCurrency(
+                                                          statement.total_debt
+                                                      )
+                                                    : "..."}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Aging */}
+                            {statement?.aging && (
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                Corriente
+                                            </span>
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                statement.aging.current
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                1-30 Días
+                                            </span>
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                statement.aging["1-30"]
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                31-60 Días
+                                            </span>
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                statement.aging["31-60"]
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                61-90 Días
+                                            </span>
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                statement.aging["61-90"]
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                +90 Días
+                                            </span>
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                statement.aging["90+"]
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Transfers Table */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>
+                                        Historial de Movimientos ({selectedYear}
+                                        )
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <DataTable
+                                        columns={columns}
+                                        data={statement?.transfers || []}
+                                        loading={loadingStatement}
+                                        emptyMessage="No hay movimientos registrados para este año"
+                                    />
+                                </CardContent>
+                            </Card>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* Payment Modal */}
+            <Modal
+                isOpen={isPaymentModalOpen}
+                onClose={() => setIsPaymentModalOpen(false)}
+                title="Registrar Pago a Proveedor"
+                size="lg"
+            >
+                <form onSubmit={handleRegisterPayment} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Monto a Pagar *</Label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="pl-9"
+                                    value={paymentForm.amount}
+                                    onChange={(e) =>
+                                        setPaymentForm({
+                                            ...paymentForm,
+                                            amount: e.target.value,
+                                        })
+                                    }
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Fecha de Pago *</Label>
+                            <Input
+                                type="date"
+                                value={paymentForm.payment_date}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_date: e.target.value,
+                                    })
+                                }
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Método de Pago *</Label>
+                            <SelectERP
+                                value={paymentForm.payment_method}
+                                onChange={(val) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        payment_method: val,
+                                        bank:
+                                            val === "efectivo"
+                                                ? ""
+                                                : paymentForm.bank,
+                                    })
+                                }
+                                options={[
+                                    {
+                                        id: "transferencia",
+                                        name: "Transferencia Bancaria",
+                                    },
+                                    { id: "cheque", name: "Cheque" },
+                                    { id: "efectivo", name: "Efectivo" },
+                                    { id: "tarjeta", name: "Tarjeta" },
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
+                        </div>
+                        <div>
+                            <Label>Referencia / No. Cheque</Label>
+                            <Input
+                                value={paymentForm.reference}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        reference: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: TRF-12345"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Banco - Solo visible para transferencia, cheque o tarjeta */}
+                    {["transferencia", "cheque", "tarjeta"].includes(
+                        paymentForm.payment_method
+                    ) && (
+                        <div>
+                            <Label>Banco *</Label>
+                            <SelectERP
+                                value={paymentForm.bank}
+                                onChange={(val) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        bank: val,
+                                    })
+                                }
+                                options={[
+                                    { id: "", name: "Seleccionar banco" },
+                                    ...banks.map((b) => ({
+                                        id: String(b.id),
+                                        name: b.name,
+                                    })),
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
+                                helperText="Cuenta bancaria desde donde se realizará el pago"
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <Label>Comprobante (Opcional)</Label>
+                        <FileUpload
+                            accept=".pdf,.jpg,.png"
+                            onChange={(file) =>
+                                setPaymentForm({
+                                    ...paymentForm,
+                                    proof_file: file,
+                                })
+                            }
+                            value={paymentForm.proof_file}
+                        />
+                    </div>
+
+                    <div>
+                        <Label>Notas</Label>
+                        <Input
+                            value={paymentForm.notes}
+                            onChange={(e) =>
+                                setPaymentForm({
+                                    ...paymentForm,
+                                    notes: e.target.value,
+                                })
+                            }
+                            placeholder="Observaciones adicionales..."
+                        />
+                    </div>
+
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsPaymentModalOpen(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? "Registrando..." : "Registrar Pago"}
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
+
+            {/* Credit Note Modal */}
+            <Modal
+                isOpen={isCreditNoteModalOpen}
+                onClose={() => setIsCreditNoteModalOpen(false)}
+                title="Registrar Nota de Crédito"
+                size="lg"
+            >
+                <form onSubmit={handleRegisterCreditNote} className="space-y-4">
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-100 mb-4">
+                        <p className="text-sm text-purple-800">
+                            Registra una nota de crédito emitida por el
+                            proveedor para reducir el saldo de esta factura.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Monto de la Nota *</Label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="pl-9"
+                                    value={creditNoteForm.amount}
+                                    onChange={(e) =>
+                                        setCreditNoteForm({
+                                            ...creditNoteForm,
+                                            amount: e.target.value,
+                                        })
+                                    }
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Fecha de Emisión *</Label>
+                            <Input
+                                type="date"
+                                value={creditNoteForm.issue_date}
+                                onChange={(e) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        issue_date: e.target.value,
+                                    })
+                                }
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Número de Nota *</Label>
+                            <Input
+                                value={creditNoteForm.note_number}
+                                onChange={(e) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        note_number: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: NC-001"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <Label>Motivo / Razón</Label>
+                            <Input
+                                value={creditNoteForm.reason}
+                                onChange={(e) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        reason: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: Devolución, Descuento..."
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label>Documento PDF (Opcional)</Label>
+                        <FileUpload
+                            accept=".pdf"
+                            onChange={(file) =>
+                                setCreditNoteForm({
+                                    ...creditNoteForm,
+                                    pdf_file: file,
+                                })
+                            }
+                            value={creditNoteForm.pdf_file}
+                        />
+                    </div>
+
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsCreditNoteModalOpen(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="bg-purple-600 hover:bg-purple-700"
+                        >
+                            {isSubmitting
+                                ? "Registrando..."
+                                : "Registrar Nota de Crédito"}
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
+
+            {/* Detail Modal */}
+            <Modal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                title="Detalle de Gasto"
+                size="2xl"
+            >
+                {selectedTransfer ? (
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <div>
+                                <div className="text-sm text-slate-500">
+                                    Factura Proveedor
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-slate-900">
+                                    {selectedTransfer.invoice_number ||
+                                        "Sin número"}
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="outline">
+                                        {selectedTransfer.type || "Gasto"}
+                                    </Badge>
+                                    <StatusBadge
+                                        status={selectedTransfer.status}
+                                    />
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm text-slate-500">
+                                    Total
+                                </div>
+                                <div className="text-2xl font-bold text-slate-900 tabular-nums">
+                                    {formatCurrency(selectedTransfer.amount)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Orden de Servicio
+                                    </div>
+                                    <div className="font-mono text-sm">
+                                        {selectedTransfer.service_order_number ||
+                                            "Gasto Administrativo"}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Fecha de Transacción
+                                    </div>
+                                    <div className="text-sm">
+                                        {formatDate(
+                                            selectedTransfer.transaction_date,
+                                            { format: "long" }
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Descripción
+                                    </div>
+                                    <div className="text-sm">
+                                        {selectedTransfer.description || "—"}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Monto Pagado
+                                    </div>
+                                    <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        {formatCurrency(
+                                            selectedTransfer.paid_amount || 0
+                                        )}
+                                    </div>
+                                </div>
+                                {parseFloat(
+                                    selectedTransfer.credited_amount || 0
+                                ) > 0 && (
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                            Notas de Crédito
+                                        </div>
+                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(
+                                                selectedTransfer.credited_amount ||
+                                                    0
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Saldo Pendiente
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "text-xl font-bold tabular-nums",
+                                            parseFloat(
+                                                selectedTransfer.balance
+                                            ) > 0
+                                                ? "text-red-600"
+                                                : "text-slate-900"
+                                        )}
+                                    >
+                                        {formatCurrency(
+                                            selectedTransfer.balance || 0
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Invoice Document */}
+                        {selectedTransfer.invoice_file && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
+                                    Documento Factura
+                                </h4>
+                                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-md group hover:border-slate-300 transition-all">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-white border border-slate-200 rounded flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition-colors">
+                                            <FileText className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Factura{" "}
+                                                {
+                                                    selectedTransfer.invoice_number
+                                                }
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                Documento PDF
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            window.open(
+                                                selectedTransfer.invoice_file,
+                                                "_blank",
+                                                "noopener,noreferrer"
+                                            );
+                                        }}
+                                        type="button"
+                                    >
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Ver PDF
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Historial de Pagos */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                <Clock className="w-4 h-4" /> Historial de Pagos
+                            </h4>
+                            {selectedTransfer.payments &&
+                            selectedTransfer.payments.length > 0 ? (
+                                <div className="border rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Fecha
+                                                </th>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Método
+                                                </th>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Referencia
+                                                </th>
+                                                <th className="px-4 py-2 text-right font-medium">
+                                                    Monto
+                                                </th>
+                                                <th className="px-4 py-2 text-center font-medium">
+                                                    Comprobante
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {selectedTransfer.payments.map(
+                                                (payment) => (
+                                                    <tr
+                                                        key={payment.id}
+                                                        className="hover:bg-slate-50"
+                                                    >
+                                                        <td className="px-4 py-2 text-slate-700">
+                                                            {formatDate(
+                                                                payment.payment_date
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2 capitalize text-slate-700">
+                                                            {
+                                                                payment.payment_method
+                                                            }
+                                                        </td>
+                                                        <td className="px-4 py-2 font-mono text-xs text-slate-600">
+                                                            {payment.reference_number ||
+                                                                "—"}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-right font-semibold text-emerald-600 tabular-nums">
+                                                            {formatCurrency(
+                                                                payment.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            {payment.proof_file ? (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={(
+                                                                        e
+                                                                    ) => {
+                                                                        e.stopPropagation();
+                                                                        window.open(
+                                                                            payment.proof_file,
+                                                                            "_blank"
+                                                                        );
+                                                                    }}
+                                                                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                                    title="Ver comprobante de pago"
+                                                                >
+                                                                    <FileText className="w-4 h-4" />
+                                                                </Button>
+                                                            ) : (
+                                                                <span className="text-slate-400">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg text-sm">
+                                    No hay pagos registrados
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Notas de Crédito */}
+                        {selectedTransfer.credit_notes &&
+                            selectedTransfer.credit_notes.length > 0 && (
+                                <div className="bg-white border border-purple-200 rounded-lg p-4 shadow-sm">
+                                    <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                        <FileMinus className="w-4 h-4" /> Notas
+                                        de Crédito
+                                    </h4>
+                                    <div className="border border-purple-100 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-purple-50 text-purple-700">
+                                                <tr>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        Fecha
+                                                    </th>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        No. Nota
+                                                    </th>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        Motivo
+                                                    </th>
+                                                    <th className="px-4 py-2 text-right font-medium">
+                                                        Monto
+                                                    </th>
+                                                    <th className="px-4 py-2 text-center font-medium">
+                                                        PDF
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-purple-100">
+                                                {selectedTransfer.credit_notes.map(
+                                                    (nc) => (
+                                                        <tr
+                                                            key={nc.id}
+                                                            className="hover:bg-purple-50/50"
+                                                        >
+                                                            <td className="px-4 py-2 text-slate-700">
+                                                                {formatDate(
+                                                                    nc.payment_date
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 font-mono text-xs text-slate-600">
+                                                                {
+                                                                    nc.reference_number
+                                                                }
+                                                            </td>
+                                                            <td className="px-4 py-2 text-slate-700">
+                                                                {nc.notes ||
+                                                                    "—"}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-right font-semibold text-purple-600 tabular-nums">
+                                                                -
+                                                                {formatCurrency(
+                                                                    nc.amount
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-center">
+                                                                {nc.proof_file ? (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={(
+                                                                            e
+                                                                        ) => {
+                                                                            e.stopPropagation();
+                                                                            window.open(
+                                                                                nc.proof_file,
+                                                                                "_blank"
+                                                                            );
+                                                                        }}
+                                                                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                                        title="Ver nota de crédito"
+                                                                    >
+                                                                        <FileText className="w-4 h-4" />
+                                                                    </Button>
+                                                                ) : (
+                                                                    <span className="text-slate-400">
+                                                                        —
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    )
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                    </div>
+                ) : (
+                    <div className="p-4 text-center">Cargando detalles...</div>
+                )}
+            </Modal>
+        </div>
+    );
+};
+
+export default ProviderStatements;

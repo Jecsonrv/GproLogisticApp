@@ -28,6 +28,7 @@ import {
     Landmark,
     Ship,
     UserCircle,
+    Search,
 } from "lucide-react";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -46,11 +47,11 @@ function Catalogs() {
 
     // Estados para cada catálogo
     const [providers, setProviders] = useState([]);
-    const [customsAgents, setCustomsAgents] = useState([]);
     const [banks, setBanks] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [subClients, setSubClients] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
     const [formData, setFormData] = useState({});
 
@@ -58,18 +59,21 @@ function Catalogs() {
         fetchAllCatalogs();
     }, []);
 
+    // Reset search when tab changes
+    useEffect(() => {
+        setSearchTerm("");
+    }, [activeTab]);
+
     const fetchAllCatalogs = async () => {
         setLoading(true);
         try {
-            const [prov, cust, bnk, ship, sub] = await Promise.all([
+            const [prov, bnk, ship, sub] = await Promise.all([
                 axios.get("/catalogs/providers/"),
-                axios.get("/catalogs/customs-agents/"),
                 axios.get("/catalogs/banks/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/sub-clients/"),
             ]);
             setProviders(prov.data);
-            setCustomsAgents(cust.data);
             setBanks(bnk.data);
             setShipmentTypes(ship.data);
             setSubClients(sub.data);
@@ -100,12 +104,6 @@ function Catalogs() {
                 address: "",
                 is_active: true,
             },
-            customsAgents: {
-                name: "",
-                phone: "",
-                email: "",
-                is_active: true,
-            },
             banks: {
                 name: "",
                 contact_phone: "",
@@ -127,7 +125,6 @@ function Catalogs() {
         try {
             const endpoints = {
                 providers: "/catalogs/providers/",
-                customsAgents: "/catalogs/customs-agents/",
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
                 subClients: "/catalogs/sub-clients/",
@@ -192,7 +189,6 @@ function Catalogs() {
         try {
             const endpoints = {
                 providers: "/catalogs/providers/",
-                customsAgents: "/catalogs/customs-agents/",
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
                 subClients: "/catalogs/sub-clients/",
@@ -236,21 +232,6 @@ function Catalogs() {
                 { accessor: "name", header: "Nombre" },
                 { accessor: "nit", header: "NIT" },
                 { accessor: "phone", header: "Teléfono" },
-                {
-                    accessor: "is_active",
-                    header: "Estado",
-                    cell: (row) => (
-                        <Badge variant={row.is_active ? "success" : "default"}>
-                            {row.is_active ? "Activo" : "Inactivo"}
-                        </Badge>
-                    ),
-                },
-                actionsColumn,
-            ],
-            customsAgents: [
-                { accessor: "name", header: "Nombre" },
-                { accessor: "phone", header: "Teléfono" },
-                { accessor: "email", header: "Email" },
                 {
                     accessor: "is_active",
                     header: "Estado",
@@ -312,12 +293,23 @@ function Catalogs() {
     const getData = (catalog) => {
         const data = {
             providers,
-            customsAgents,
             banks,
             shipmentTypes,
             subClients,
         };
         return data[catalog] || [];
+    };
+
+    const getFilteredData = (catalog) => {
+        const data = getData(catalog);
+        if (!searchTerm) return data;
+
+        const lowerTerm = searchTerm.toLowerCase();
+        return data.filter((item) => {
+            return Object.values(item).some((val) =>
+                String(val).toLowerCase().includes(lowerTerm)
+            );
+        });
     };
 
     const renderForm = () => {
@@ -387,52 +379,6 @@ function Catalogs() {
                                     setFormData({
                                         ...formData,
                                         address: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                    </>
-                );
-
-            case "customsAgents":
-                return (
-                    <>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Nombre *</Label>
-                                <Input
-                                    value={formData.name || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            name: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Teléfono</Label>
-                                <Input
-                                    value={formData.phone || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            phone: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Email</Label>
-                            <Input
-                                type="email"
-                                value={formData.email || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        email: e.target.value,
                                     })
                                 }
                             />
@@ -543,7 +489,6 @@ function Catalogs() {
     const getModalTitle = () => {
         const titles = {
             providers: "Proveedor",
-            customsAgents: "Aforador",
             banks: "Banco",
             shipmentTypes: "Tipo de Embarque",
             subClients: "Subcliente",
@@ -582,10 +527,6 @@ function Catalogs() {
                         <Building2 className="h-4 w-4 mr-2" />
                         Proveedores
                     </TabsTrigger>
-                    <TabsTrigger value="customsAgents">
-                        <Users className="h-4 w-4 mr-2" />
-                        Aforadores
-                    </TabsTrigger>
                     <TabsTrigger value="banks">
                         <Landmark className="h-4 w-4 mr-2" />
                         Bancos
@@ -603,39 +544,29 @@ function Catalogs() {
                 {/* Proveedores */}
                 <TabsContent value="providers" key="providers">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Proveedores</CardTitle>
-                            <Button onClick={() => openModal("providers")}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Proveedor
-                            </Button>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Proveedores</CardTitle>
+                                <Button onClick={() => openModal("providers")}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Proveedor
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar proveedores..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("providers")}
-                                data={getData("providers")}
-                                searchable
-                                pagination
-                            />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Aforadores */}
-                <TabsContent value="customsAgents" key="customsAgents">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Aforadores</CardTitle>
-                            <Button onClick={() => openModal("customsAgents")}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Aforador
-                            </Button>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
-                            <DataTable
-                                columns={getColumns("customsAgents")}
-                                data={getData("customsAgents")}
-                                searchable
+                                data={getFilteredData("providers")}
+                                searchable={false}
                                 pagination
                             />
                         </CardContent>
@@ -645,18 +576,29 @@ function Catalogs() {
                 {/* Bancos */}
                 <TabsContent value="banks" key="banks">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Bancos</CardTitle>
-                            <Button onClick={() => openModal("banks")}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Banco
-                            </Button>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Bancos</CardTitle>
+                                <Button onClick={() => openModal("banks")}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Banco
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar bancos..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("banks")}
-                                data={getData("banks")}
-                                searchable
+                                data={getFilteredData("banks")}
+                                searchable={false}
                                 pagination
                             />
                         </CardContent>
@@ -666,18 +608,28 @@ function Catalogs() {
                 {/* Tipos de Embarque */}
                 <TabsContent value="shipmentTypes" key="shipmentTypes">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Tipos de Embarque</CardTitle>
-                            <Button onClick={() => openModal("shipmentTypes")}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Tipo
-                            </Button>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Tipos de Embarque</CardTitle>
+                                <Button onClick={() => openModal("shipmentTypes")}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Tipo
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar tipos..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
+                        </CardHeader>                        <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("shipmentTypes")}
-                                data={getData("shipmentTypes")}
-                                searchable
+                                data={getFilteredData("shipmentTypes")}
+                                searchable={false}
                                 pagination
                             />
                         </CardContent>
@@ -687,18 +639,29 @@ function Catalogs() {
                 {/* Subclientes */}
                 <TabsContent value="subClients" key="subClients">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Subclientes</CardTitle>
-                            <Button onClick={() => openModal("subClients")}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nuevo Subcliente
-                            </Button>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Subclientes</CardTitle>
+                                <Button onClick={() => openModal("subClients")}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nuevo Subcliente
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar subclientes..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
                         </CardHeader>
                         <CardContent className="px-5 pb-5 pt-0">
                             <DataTable
                                 columns={getColumns("subClientes")}
-                                data={getData("subClientes")}
-                                searchable
+                                data={getFilteredData("subClients")}
+                                searchable={false}
                                 pagination
                             />
                         </CardContent>

@@ -1,5 +1,11 @@
 import React from "react";
-import { Menu, LogOut, Bell, HelpCircle, ChevronDown } from "lucide-react";
+import {
+    Menu,
+    LogOut,
+    ChevronDown,
+    User,
+    Settings,
+} from "lucide-react";
 import useAuthStore from "../stores/authStore";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -12,6 +18,7 @@ import {
 } from "./ui/DropdownMenu";
 import { Button } from "./ui/Button";
 import { cn } from "../lib/utils";
+import { NotificationsDropdown } from "./NotificationsDropdown";
 
 /**
  * Header Component - Design System Corporativo GPRO
@@ -29,6 +36,9 @@ const pageTitles = {
     "/services": "Servicios y Tarifario",
     "/catalogs": "Catálogos Generales",
     "/users": "Usuarios",
+    "/profile": "Mi Perfil",
+    "/provider-payments": "Pagos a Proveedores",
+    "/provider-statements": "Cuentas por Pagar",
 };
 
 export function Header({ onMenuClick }) {
@@ -68,6 +78,13 @@ export function Header({ onMenuClick }) {
             .slice(0, 2);
     };
 
+    const getFullName = () => {
+        const fullName = `${user?.first_name || ""} ${
+            user?.last_name || ""
+        }`.trim();
+        return fullName || "Usuario";
+    };
+
     return (
         <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-6">
             {/* Left Section */}
@@ -94,26 +111,8 @@ export function Header({ onMenuClick }) {
 
             {/* Right Section */}
             <div className="flex items-center gap-1 sm:gap-2">
-                {/* Help Button */}
-                <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-slate-400 hover:text-slate-600 hidden sm:flex"
-                    title="Ayuda"
-                >
-                    <HelpCircle className="h-4 w-4" />
-                </Button>
-
                 {/* Notifications */}
-                <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="relative text-slate-400 hover:text-slate-600"
-                    title="Notificaciones"
-                >
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-danger-500" />
-                </Button>
+                <NotificationsDropdown />
 
                 {/* Divider */}
                 <div className="h-5 w-px bg-slate-200 mx-1 hidden sm:block" />
@@ -125,13 +124,13 @@ export function Header({ onMenuClick }) {
                         variant="ghost"
                         className="h-8 gap-2 px-2 hover:bg-slate-100"
                     >
-                        <div className="h-6 w-6 rounded bg-brand-100 flex items-center justify-center">
-                            <span className="text-xs font-semibold text-brand-700">
-                                {getInitials(user?.first_name)}
+                        <div className="h-6 w-6 rounded bg-slate-100 flex items-center justify-center border border-slate-200">
+                            <span className="text-xs font-semibold text-slate-600">
+                                {getInitials(getFullName())}
                             </span>
                         </div>
-                        <span className="hidden text-sm font-medium text-slate-700 sm:inline-block max-w-[120px] truncate">
-                            {user?.first_name || "Usuario"}
+                        <span className="hidden text-sm font-medium text-slate-700 sm:inline-block max-w-[140px] truncate">
+                            {getFullName()}
                         </span>
                         <ChevronDown className="h-3.5 w-3.5 text-slate-400 hidden sm:block" />
                     </DropdownMenuTrigger>
@@ -140,13 +139,21 @@ export function Header({ onMenuClick }) {
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex flex-col space-y-1">
                                 <p className="text-sm font-medium text-slate-900">
-                                    {user?.first_name || "Usuario"}
+                                    {getFullName()}
                                 </p>
                                 <p className="text-xs text-slate-500 truncate">
                                     {user?.email || "usuario@gpro.com"}
                                 </p>
                             </div>
                         </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            onClick={() => navigate("/profile")}
+                            className="cursor-pointer"
+                        >
+                            <User className="mr-2 h-4 w-4" />
+                            <span>Mi Perfil</span>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={handleLogout}

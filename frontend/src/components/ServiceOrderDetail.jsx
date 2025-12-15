@@ -8,6 +8,7 @@ import {
     Trash2,
     Plus,
     AlertCircle,
+    Edit,
 } from "lucide-react";
 import {
     Badge,
@@ -21,7 +22,7 @@ import {
     ConfirmDialog,
 } from "./ui";
 import ProviderPaymentsTab from "./ProviderPaymentsTab";
-import DocumentsTab from "./DocumentsTab";
+import DocumentsTabUnified from "./DocumentsTabUnified";
 import HistoryTab from "./HistoryTab";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -30,7 +31,7 @@ import { formatCurrency } from "../lib/utils";
 /**
  * ServiceOrderDetail - Vista detallada de Orden de Servicio con Tabs
  */
-const ServiceOrderDetail = ({ orderId, onUpdate }) => {
+const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const [activeTab, setActiveTab] = useState("info");
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -196,7 +197,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
     const tabs = [
         { id: "info", name: "Info General", icon: FileText },
         { id: "charges", name: "Cobros/Servicios", icon: DollarSign },
-        { id: "expenses", name: "Gastos a Terceros", icon: Truck },
+        { id: "expenses", name: "Costos de la Orden", icon: Truck },
         { id: "documents", name: "Documentos", icon: Folder },
         { id: "history", name: "Historial", icon: Clock },
     ];
@@ -245,11 +246,24 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                         )}
                     </div>
                 </div>
-                <div className="text-right">
-                    <div className="text-sm text-gray-500">Total</div>
-                    <div className="text-3xl font-bold text-blue-700">
-                        {formatCurrency(order.total_amount || 0)}
+                <div className="flex flex-col items-end gap-2">
+                    <div className="text-right">
+                        <div className="text-sm text-gray-500">Total</div>
+                        <div className="text-3xl font-bold text-blue-700">
+                            {formatCurrency(order.total_amount || 0)}
+                        </div>
                     </div>
+                    {onEdit && order.status === "abierta" && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onEdit(order)}
+                            className="mt-1"
+                        >
+                            <Edit className="w-4 h-4 mr-2" />
+                            Editar Orden
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -410,7 +424,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                     </div>
                                     <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                            Gastos a Terceros
+                                            Costos de la Orden
                                         </div>
                                         <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
                                             {formatCurrency(
@@ -669,7 +683,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                                         className="hover:bg-gray-50 transition-colors"
                                                     >
                                                         <td className="px-4 py-3">
-                                                            <div className="text-sm font-medium text-gray-900">
+                                                            <div className="text-sm font-medium text-gray-900 py-2">
                                                                 {charge.service_code
                                                                     ? `${charge.service_code} - `
                                                                     : ""}
@@ -685,20 +699,20 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
                                                             {charge.quantity}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
                                                             {formatCurrency(
                                                                 charge.unit_price
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600">
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
                                                             {charge.discount > 0
                                                                 ? `${charge.discount}%`
                                                                 : "-"}
                                                         </td>
-                                                        <td className="px-4 py-3 text-center">
+                                                        <td className="px-4 py-3 text-center py-2">
                                                             {charge.applies_iva ? (
                                                                 <Badge
                                                                     variant="secondary"
@@ -712,7 +726,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                                                 </span>
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                                                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 py-2">
                                                             {formatCurrency(
                                                                 calculateChargeTotal(
                                                                     charge
@@ -721,7 +735,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                                                         </td>
                                                         {order.status ===
                                                             "abierta" && (
-                                                            <td className="px-4 py-3 text-center">
+                                                            <td className="px-4 py-3 text-center py-2">
                                                                 <button
                                                                     onClick={() =>
                                                                         handleDeleteCharge(
@@ -775,9 +789,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate }) => {
                     />
                 )}
 
-                {/* Documentos */}
+                {/* Documentos - Vista Unificada */}
                 {activeTab === "documents" && (
-                    <DocumentsTab
+                    <DocumentsTabUnified
                         orderId={orderId}
                         onUpdate={() => {
                             fetchOrderDetail();

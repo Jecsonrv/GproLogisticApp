@@ -13,6 +13,7 @@ import {
     RefreshCw,
     XCircle,
     Calendar,
+    Edit,
 } from "lucide-react";
 import {
     DataTable,
@@ -86,39 +87,26 @@ const KPICard = ({
     icon: Icon,
     variant = "default",
 }) => {
-    const variants = {
-        default: "text-slate-900",
-        primary: "text-blue-600",
-        success: "text-emerald-600",
-        warning: "text-amber-600",
-        danger: "text-red-600",
-    };
-
     return (
         <Card>
-            <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-gray-500">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
                             {label}
                         </p>
-                        <p
-                            className={cn(
-                                "text-2xl font-bold mt-1",
-                                variants[variant]
-                            )}
-                        >
+                        <p className="text-2xl font-semibold text-slate-900 tabular-nums">
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-slate-500 mt-1.5">
                                 {subtext}
                             </p>
                         )}
                     </div>
                     {Icon && (
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <Icon className="w-5 h-5 text-gray-400" />
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                            <Icon className="w-5 h-5 text-slate-400" />
                         </div>
                     )}
                 </div>
@@ -131,13 +119,13 @@ const ServiceOrders = () => {
     // Data state
     const [orders, setOrders] = useState([]);
     const [clients, setClients] = useState([]);
-    const [customsAgents, setCustomsAgents] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [providers, setProviders] = useState([]);
 
     // UI state
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -158,7 +146,6 @@ const ServiceOrders = () => {
         sub_client: null,
         shipment_type: "",
         provider: "",
-        customs_agent: "",
         purchase_order: "",
         bl_reference: "",
         eta: "",
@@ -185,15 +172,12 @@ const ServiceOrders = () => {
 
     const fetchCatalogs = async () => {
         try {
-            const [clientsRes, agentsRes, typesRes, providersRes] =
-                await Promise.all([
-                    axios.get("/clients/"),
-                    axios.get("/catalogs/customs-agents/"),
-                    axios.get("/catalogs/shipment-types/"),
-                    axios.get("/catalogs/providers/"),
-                ]);
+            const [clientsRes, typesRes, providersRes] = await Promise.all([
+                axios.get("/clients/"),
+                axios.get("/catalogs/shipment-types/"),
+                axios.get("/catalogs/providers/"),
+            ]);
             setClients(clientsRes.data);
-            setCustomsAgents(agentsRes.data);
             setShipmentTypes(typesRes.data);
             setProviders(providersRes.data);
         } catch (error) {
@@ -218,13 +202,48 @@ const ServiceOrders = () => {
         }
     };
 
+    const handleEdit = (order) => {
+        setSelectedOrder(order);
+        setFormData({
+            client: order.client || "",
+            sub_client: order.sub_client || null,
+            shipment_type: order.shipment_type || "",
+            provider: order.provider || "",
+            purchase_order: order.purchase_order || "",
+            bl_reference: order.bl_reference || "",
+            eta: order.eta || "",
+            duca: order.duca || "",
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.patch(
+                `/orders/service-orders/${selectedOrder.id}/`,
+                formData
+            );
+            toast.success("Orden de Servicio actualizada exitosamente");
+            fetchOrders();
+            setIsEditModalOpen(false);
+            resetForm();
+            setSelectedOrder(null);
+        } catch (error) {
+            const errorMsg =
+                error.response?.data?.duca?.[0] ||
+                error.response?.data?.message ||
+                "Error al actualizar orden";
+            toast.error(errorMsg);
+        }
+    };
+
     const resetForm = () => {
         setFormData({
             client: "",
             sub_client: null,
             shipment_type: "",
             provider: "",
-            customs_agent: "",
             purchase_order: "",
             bl_reference: "",
             eta: "",
@@ -235,6 +254,14 @@ const ServiceOrders = () => {
     const handleViewDetail = (order) => {
         setSelectedOrder(order);
         setIsDetailModalOpen(true);
+    };
+
+    const handleEditFromDetail = (order) => {
+        setIsDetailModalOpen(false);
+        // Small timeout to ensure smooth transition
+        setTimeout(() => {
+            handleEdit(order);
+        }, 100);
     };
 
     const handleCloseOrder = async (orderId) => {
@@ -352,7 +379,7 @@ const ServiceOrders = () => {
             header: "N° Orden",
             accessor: "order_number",
             cell: (row) => (
-                <div>
+                <div className="py-2">
                     <div className="text-sm font-medium text-blue-600 hover:text-blue-700">
                         {row.order_number}
                     </div>
@@ -366,7 +393,7 @@ const ServiceOrders = () => {
             header: "Cliente",
             accessor: "client_name",
             cell: (row) => (
-                <div>
+                <div className="py-2">
                     <div className="text-sm text-gray-900 font-medium">
                         {row.client_name}
                     </div>
@@ -382,7 +409,7 @@ const ServiceOrders = () => {
             header: "DUCA",
             accessor: "duca",
             cell: (row) => (
-                <div>
+                <div className="py-2">
                     <div className="text-sm text-gray-900 font-medium">
                         {row.duca}
                     </div>
@@ -398,7 +425,7 @@ const ServiceOrders = () => {
             header: "ETA",
             accessor: "eta",
             cell: (row) => (
-                <div className="text-sm text-gray-700">
+                <div className="text-sm text-gray-700 py-2">
                     {formatDate(row.eta + "T00:00:00", { format: "short" })}
                 </div>
             ),
@@ -411,7 +438,7 @@ const ServiceOrders = () => {
                     (row.total_direct_costs || 0) +
                     (row.total_admin_costs || 0);
                 return (
-                    <div className="text-right">
+                    <div className="text-right py-2">
                         <div className="flex items-center justify-end gap-1.5 mb-1">
                             <span className="text-xs text-gray-500">
                                 Ingresos:
@@ -436,7 +463,7 @@ const ServiceOrders = () => {
             header: "Estado",
             accessor: "status",
             cell: (row) => (
-                <div>
+                <div className="py-2">
                     <StatusBadge status={row.status} />
                     {row.facturado && (
                         <div className="flex items-center gap-1 text-xs text-emerald-600 mt-1">
@@ -463,16 +490,28 @@ const ServiceOrders = () => {
                         <Eye className="w-4 h-4" />
                     </button>
                     {row.status === "abierta" && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleCloseOrder(row.id);
-                            }}
-                            className="text-gray-400 hover:text-emerald-600 transition-colors"
-                            title="Cerrar Orden"
-                        >
-                            <Check className="w-4 h-4" />
-                        </button>
+                        <>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(row);
+                                }}
+                                className="text-gray-400 hover:text-blue-600 transition-colors"
+                                title="Editar Orden"
+                            >
+                                <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCloseOrder(row.id);
+                                }}
+                                className="text-gray-400 hover:text-emerald-600 transition-colors"
+                                title="Cerrar Orden"
+                            >
+                                <Check className="w-4 h-4" />
+                            </button>
+                        </>
                     )}
                 </div>
             ),
@@ -706,31 +745,168 @@ const ServiceOrders = () => {
                                 Información del Cliente
                             </h4>
                         </div>
+                        <div className="col-span-2">
+                            <SelectERP
+                                label="Cliente"
+                                value={formData.client}
+                                onChange={(val) =>
+                                    setFormData({ ...formData, client: val })
+                                }
+                                options={clients}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-100 my-4"></div>
+
+                    {/* Shipment Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                    2
+                                </span>
+                                Datos del Embarque
+                            </h4>
+                        </div>
                         <SelectERP
-                            label="Cliente"
-                            value={formData.client}
+                            label="Tipo de Embarque"
+                            value={formData.shipment_type}
                             onChange={(val) =>
-                                setFormData({ ...formData, client: val })
+                                setFormData({ ...formData, shipment_type: val })
                             }
-                            options={clients}
+                            options={shipmentTypes}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
-                            searchable
                             clearable
                             required
                         />
                         <SelectERP
-                            label="Aforador"
-                            value={formData.customs_agent}
+                            label="Proveedor Logístico"
+                            value={formData.provider}
                             onChange={(val) =>
-                                setFormData({ ...formData, customs_agent: val })
+                                setFormData({ ...formData, provider: val })
                             }
-                            options={customsAgents}
+                            options={providers}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
                             searchable
                             clearable
                         />
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input
+                                label="DUCA *"
+                                value={formData.duca}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        duca: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: 4-12345"
+                                required
+                                className="font-mono uppercase"
+                            />
+                            <Input
+                                label="BL / Guía"
+                                value={formData.bl_reference}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        bl_reference: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: MAEU123456789"
+                                className="font-mono uppercase"
+                            />
+                            <Input
+                                label="Fecha ETA *"
+                                type="date"
+                                value={formData.eta}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        eta: e.target.value,
+                                    })
+                                }
+                                required
+                            />
+                            <Input
+                                label="Orden de Compra (PO)"
+                                value={formData.purchase_order}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        purchase_order: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: PO-998877"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Edit Modal */}
+            <Modal
+                isOpen={isEditModalOpen}
+                onClose={() => {
+                    setIsEditModalOpen(false);
+                    setSelectedOrder(null);
+                    resetForm();
+                }}
+                title={`Editar Orden: ${selectedOrder?.order_number || ""}`}
+                size="2xl"
+                footer={
+                    <>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setIsEditModalOpen(false);
+                                setSelectedOrder(null);
+                                resetForm();
+                            }}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button onClick={handleUpdate}>Guardar Cambios</Button>
+                    </>
+                }
+            >
+                <div className="space-y-6">
+                    {/* Client Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                            <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                    1
+                                </span>
+                                Información del Cliente
+                            </h4>
+                        </div>
+                        <div className="col-span-2">
+                            <SelectERP
+                                label="Cliente"
+                                value={formData.client}
+                                onChange={(val) =>
+                                    setFormData({ ...formData, client: val })
+                                }
+                                options={clients}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
+                                required
+                            />
+                        </div>
                     </div>
 
                     <div className="border-t border-gray-100 my-4"></div>
@@ -837,6 +1013,7 @@ const ServiceOrders = () => {
                     <ServiceOrderDetail
                         orderId={selectedOrder.id}
                         onUpdate={() => fetchOrders()}
+                        onEdit={() => handleEditFromDetail(selectedOrder)}
                     />
                 )}
             </Modal>

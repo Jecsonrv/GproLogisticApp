@@ -11,14 +11,27 @@ from decimal import Decimal
 
 class ProviderSerializer(serializers.ModelSerializer):
     """Serializer para Proveedores"""
+    total_debt = serializers.SerializerMethodField()
 
     class Meta:
         model = Provider
         fields = [
             'id', 'name', 'nit', 'phone', 'email', 'address',
-            'is_active', 'created_at'
+            'is_active', 'created_at', 'total_debt'
         ]
         read_only_fields = ['id', 'created_at']
+    
+    def get_total_debt(self, obj):
+        """Calcula la deuda total pendiente del proveedor"""
+        from apps.transfers.models import Transfer
+        from django.db.models import Sum
+        
+        debt = Transfer.objects.filter(
+            provider=obj,
+            status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
+        ).aggregate(Sum('balance'))['balance__sum'] or 0
+        
+        return float(debt)
 
 
 class CustomsAgentSerializer(serializers.ModelSerializer):

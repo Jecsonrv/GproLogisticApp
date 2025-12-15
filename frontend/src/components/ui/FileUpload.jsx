@@ -1,10 +1,11 @@
-import React, { useRef, useState } from "react";
-import { Upload, File, X } from "lucide-react";
+import React, { useRef, useState, useEffect } from "react";
+import { Upload, File as FileIcon, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Button } from "./Button";
 
 export function FileUpload({
     onFileChange,
+    onChange, // Support both onChange and onFileChange
     accept = "*/*",
     maxSize = 5 * 1024 * 1024, // 5MB default
     multiple = false,
@@ -12,10 +13,25 @@ export function FileUpload({
     className,
     label = "Seleccionar archivo",
     helperText,
+    value, // Support controlled value
 }) {
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [error, setError] = useState("");
     const inputRef = useRef(null);
+
+    // Handle controlled value changes (for reset)
+    useEffect(() => {
+        if (value === null || value === undefined) {
+            setSelectedFiles([]);
+        } else if (value instanceof File) {
+            setSelectedFiles([value]);
+        } else if (Array.isArray(value)) {
+            setSelectedFiles(value);
+        }
+    }, [value]);
+
+    // Use either onChange or onFileChange (onChange takes priority)
+    const fileChangeCallback = onChange || onFileChange;
 
     const handleFileChange = (e) => {
         const files = Array.from(e.target.files || []);
@@ -33,16 +49,16 @@ export function FileUpload({
         }
 
         setSelectedFiles(files);
-        if (onFileChange) {
-            onFileChange(multiple ? files : files[0]);
+        if (fileChangeCallback) {
+            fileChangeCallback(multiple ? files : files[0]);
         }
     };
 
     const handleRemoveFile = (index) => {
         const newFiles = selectedFiles.filter((_, i) => i !== index);
         setSelectedFiles(newFiles);
-        if (onFileChange) {
-            onFileChange(multiple ? newFiles : null);
+        if (fileChangeCallback) {
+            fileChangeCallback(multiple ? newFiles : null);
         }
     };
 
@@ -101,7 +117,7 @@ export function FileUpload({
                             className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-2"
                         >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <File className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <FileIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm font-medium text-gray-700 truncate">
                                         {file.name}

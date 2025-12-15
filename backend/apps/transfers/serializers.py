@@ -6,10 +6,18 @@ class TransferSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='service_order.client.name', read_only=True, allow_null=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
+    invoice_file = serializers.FileField(required=False, allow_null=True)
     
     class Meta:
         model = Transfer
         fields = '__all__'
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+            return full_name if full_name else obj.created_by.username
+        return None
     
     def create(self, validated_data):
         # Asignar el usuario que crea la transferencia
@@ -24,13 +32,20 @@ class TransferListSerializer(serializers.ModelSerializer):
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
     bank_name = serializers.CharField(source='bank.name', read_only=True, allow_null=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    created_by_name = serializers.SerializerMethodField()
     transfer_type_display = serializers.CharField(source='get_transfer_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = Transfer
         fields = ['id', 'transfer_type', 'transfer_type_display', 'status', 'status_display',
-                  'amount', 'description', 'service_order', 'service_order_number',
+                  'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number',
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
-                  'transaction_date', 'payment_date', 'notes', 'created_at', 'created_by_username']
+                  'transaction_date', 'payment_date', 'notes', 'created_at', 'created_by', 'created_by_username', 'created_by_name']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+            return full_name if full_name else obj.created_by.username
+        return None

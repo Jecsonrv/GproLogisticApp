@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from .models import Client
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -26,7 +27,7 @@ class ClientSerializer(serializers.ModelSerializer):
             service_order__in=pending_orders,
             transfer_type='terceros',
             status='provisionada'
-        ).aggregate(serializers.models.Sum('amount'))['amount__sum'] or 0
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
         
         return float(credit_used)
 

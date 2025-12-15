@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import axios from "../lib/axios";
+import usePermissionStore from "./permissionStore";
 
 const useAuthStore = create((set) => ({
     user: null,
@@ -18,8 +19,20 @@ const useAuthStore = create((set) => ({
             localStorage.setItem("access_token", response.data.access);
             localStorage.setItem("refresh_token", response.data.refresh);
 
-            // Fetch full user profile immediately
+            // Fetch full user profile with permissions
             const userResponse = await axios.get("/users/me/");
+
+            // Sincronizar permisos RBAC
+            if (userResponse.data.permissions) {
+                usePermissionStore
+                    .getState()
+                    .setPermissions(userResponse.data.permissions);
+            } else {
+                // Fallback: usar rol para determinar permisos
+                usePermissionStore
+                    .getState()
+                    .setPermissionsByRole(userResponse.data.role);
+            }
 
             set({
                 user: userResponse.data,
@@ -39,6 +52,8 @@ const useAuthStore = create((set) => ({
     logout: () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
+        // Limpiar permisos al cerrar sesión
+        usePermissionStore.getState().clearPermissions();
         set({ user: null, isAuthenticated: false });
     },
 
@@ -48,8 +63,21 @@ const useAuthStore = create((set) => ({
 
         if (token) {
             try {
-                // Verify token and get user data
+                // Verify token and get user data with permissions
                 const response = await axios.get("/users/me/");
+
+                // Sincronizar permisos RBAC
+                if (response.data.permissions) {
+                    usePermissionStore
+                        .getState()
+                        .setPermissions(response.data.permissions);
+                } else {
+                    // Fallback: usar rol para determinar permisos
+                    usePermissionStore
+                        .getState()
+                        .setPermissionsByRole(response.data.role);
+                }
+
                 set({
                     user: response.data,
                     isAuthenticated: true,
@@ -59,6 +87,7 @@ const useAuthStore = create((set) => ({
                 // Token invalid or expired
                 localStorage.removeItem("access_token");
                 localStorage.removeItem("refresh_token");
+                usePermissionStore.getState().clearPermissions();
                 set({
                     user: null,
                     isAuthenticated: false,
@@ -66,6 +95,7 @@ const useAuthStore = create((set) => ({
                 });
             }
         } else {
+            usePermissionStore.getState().clearPermissions();
             set({
                 user: null,
                 isAuthenticated: false,

@@ -39,7 +39,7 @@ export function formatCurrency(value, options = {}) {
 }
 
 /**
- * Formatea una fecha en formato salvadoreño (dd/mm/yyyy)
+ * Formatea una fecha en formato "13 dic 2025"
  * @param {string|Date} date - La fecha a formatear
  * @param {object} options - Opciones de formateo
  * @returns {string} - Fecha formateada
@@ -54,12 +54,28 @@ export function formatDate(date, options = {}) {
 
     const dateObj = new Date(date);
 
-    // Para formato short y medium, usamos dd/mm/yyyy
+    // Nombres cortos de meses en español
+    const monthsShort = [
+        "ene",
+        "feb",
+        "mar",
+        "abr",
+        "may",
+        "jun",
+        "jul",
+        "ago",
+        "sep",
+        "oct",
+        "nov",
+        "dic",
+    ];
+
+    // Para formato short y medium, usamos "13 dic 2025"
     if (format === "short" || format === "medium") {
-        const day = String(dateObj.getDate()).padStart(2, "0");
-        const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+        const day = dateObj.getDate();
+        const month = monthsShort[dateObj.getMonth()];
         const year = dateObj.getFullYear();
-        return `${day}/${month}/${year}`;
+        return `${day} ${month} ${year}`;
     }
 
     // Para formato long, usamos el formato completo con nombre del día y mes

@@ -18,6 +18,10 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
+    
+    def perform_create(self, serializer):
+        """Assign current user as customs_agent when creating order"""
+        serializer.save(created_by=self.request.user, customs_agent=self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -154,10 +158,200 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename=documentos_ordenes.zip'
         return response
 
+    @action(detail=True, methods=['get'])
+    def all_documents(self, request, pk=None):
+        """
+        Endpoint unificado que retorna TODOS los documentos relacionados a una OS:
+        - Documentos directos (OrderDocument)
+        - Facturas emitidas (Invoice.pdf_file, Invoice.dte_file)
+        - Comprobantes de pago de clientes (InvoicePayment.receipt_file)
+        - Notas de crédito (CreditNote.pdf_file)
+        - Facturas de proveedores (Transfer.invoice_file)
+        - Comprobantes de pago a proveedores (TransferPayment.proof_file)
+        """
+        from .models import Invoice, InvoicePayment, CreditNote
+        from apps.transfers.models import Transfer, TransferPayment
+        
+        order = self.get_object()
+        documents = []
+        
+        # 1. Documentos directos de la OS (OrderDocument)
+        # IMPORTANTE: Solo mostrar documentos de tipo 'tramite' u 'otros' aquí
+        # Los documentos tipo 'factura_costo' se muestran desde Transfer model
+        for doc in order.documents.filter(document_type__in=['tramite', 'otros']):
+            if doc.file:
+                documents.append({
+                    'id': f'doc_{doc.id}',
+                    'category': doc.document_type,  # Respetar el tipo de documento real
+                    'category_label': doc.get_document_type_display(),
+                    'subcategory': doc.get_document_type_display(),
+                    'file_url': doc.file.url,
+                    'file_name': doc.file.name.split('/')[-1] if doc.file else None,
+                    'description': doc.description or doc.get_document_type_display(),
+                    'reference': None,
+                    'reference_label': None,
+                    'uploaded_by': doc.uploaded_by.get_full_name() if doc.uploaded_by else None,
+                    'uploaded_at': doc.uploaded_at.isoformat() if doc.uploaded_at else None,
+                    'amount': None,
+                    'deletable': True,
+                    'source_model': 'OrderDocument',
+                    'source_id': doc.id,
+                })
+        
+        # 2. Facturas emitidas al cliente (Invoice)
+        invoices = Invoice.objects.filter(service_order=order)
+        for inv in invoices:
+            if inv.pdf_file:
+                documents.append({
+                    'id': f'inv_pdf_{inv.id}',
+                    'category': 'factura_venta',
+                    'category_label': 'Facturas de Venta',
+                    'subcategory': 'PDF Factura',
+                    'file_url': inv.pdf_file.url,
+                    'file_name': inv.pdf_file.name.split('/')[-1] if inv.pdf_file else None,
+                    'description': f'Factura {inv.invoice_number}',
+                    'reference': inv.invoice_number,
+                    'reference_label': f'Factura #{inv.invoice_number}',
+                    'uploaded_by': inv.created_by.get_full_name() if inv.created_by else None,
+                    'uploaded_at': inv.created_at.isoformat() if inv.created_at else None,
+                    'amount': float(inv.total_amount),
+                    'deletable': False,
+                    'source_model': 'Invoice',
+                    'source_id': inv.id,
+                })
+            if inv.dte_file:
+                documents.append({
+                    'id': f'inv_dte_{inv.id}',
+                    'category': 'factura_venta',
+                    'category_label': 'Facturas de Venta',
+                    'subcategory': 'Archivo DTE',
+                    'file_url': inv.dte_file.url,
+                    'file_name': inv.dte_file.name.split('/')[-1] if inv.dte_file else None,
+                    'description': f'DTE Factura {inv.invoice_number}',
+                    'reference': inv.invoice_number,
+                    'reference_label': f'Factura #{inv.invoice_number}',
+                    'uploaded_by': inv.created_by.get_full_name() if inv.created_by else None,
+                    'uploaded_at': inv.created_at.isoformat() if inv.created_at else None,
+                    'amount': None,
+                    'deletable': False,
+                    'source_model': 'Invoice',
+                    'source_id': inv.id,
+                })
+            
+            # 3. Comprobantes de pago de clientes (InvoicePayment)
+            for payment in inv.payments.filter(is_deleted=False):
+                if payment.receipt_file:
+                    documents.append({
+                        'id': f'inv_pay_{payment.id}',
+                        'category': 'pago_cliente',
+                        'category_label': 'Pagos de Clientes',
+                        'subcategory': 'Comprobante de Pago',
+                        'file_url': payment.receipt_file.url,
+                        'file_name': payment.receipt_file.name.split('/')[-1] if payment.receipt_file else None,
+                        'description': f'Pago Factura {inv.invoice_number}',
+                        'reference': inv.invoice_number,
+                        'reference_label': f'Factura #{inv.invoice_number}',
+                        'uploaded_by': payment.created_by.get_full_name() if payment.created_by else None,
+                        'uploaded_at': payment.created_at.isoformat() if payment.created_at else None,
+                        'amount': float(payment.amount),
+                        'deletable': False,
+                        'source_model': 'InvoicePayment',
+                        'source_id': payment.id,
+                    })
+            
+            # 4. Notas de crédito (CreditNote)
+            for cn in inv.credit_notes.filter(is_deleted=False):
+                if cn.pdf_file:
+                    documents.append({
+                        'id': f'cn_{cn.id}',
+                        'category': 'nota_credito',
+                        'category_label': 'Notas de Crédito',
+                        'subcategory': 'Nota de Crédito',
+                        'file_url': cn.pdf_file.url,
+                        'file_name': cn.pdf_file.name.split('/')[-1] if cn.pdf_file else None,
+                        'description': f'NC {cn.note_number} - {cn.reason}',
+                        'reference': cn.note_number,
+                        'reference_label': f'NC #{cn.note_number} → Factura #{inv.invoice_number}',
+                        'uploaded_by': cn.created_by.get_full_name() if cn.created_by else None,
+                        'uploaded_at': cn.created_at.isoformat() if cn.created_at else None,
+                        'amount': float(cn.amount),
+                        'deletable': False,
+                        'source_model': 'CreditNote',
+                        'source_id': cn.id,
+                    })
+        
+        # 5. Facturas de proveedores / Gastos (Transfer)
+        transfers = Transfer.objects.filter(service_order=order, is_deleted=False)
+        for tr in transfers:
+            if tr.invoice_file:
+                documents.append({
+                    'id': f'tr_{tr.id}',
+                    'category': 'factura_costo',
+                    'category_label': 'Facturas de Costo / Proveedores',
+                    'subcategory': tr.get_transfer_type_display(),
+                    'file_url': tr.invoice_file.url,
+                    'file_name': tr.invoice_file.name.split('/')[-1] if tr.invoice_file else None,
+                    'description': tr.description[:100] if tr.description else f'Gasto {tr.get_transfer_type_display()}',
+                    'reference': tr.invoice_number or tr.ccf or f'ID:{tr.id}',
+                    'reference_label': f'{tr.get_transfer_type_display()} - {tr.provider.name if tr.provider else "Sin proveedor"}',
+                    'uploaded_by': tr.created_by.get_full_name() if tr.created_by else None,
+                    'uploaded_at': tr.created_at.isoformat() if tr.created_at else None,
+                    'amount': float(tr.amount),
+                    'deletable': False,
+                    'source_model': 'Transfer',
+                    'source_id': tr.id,
+                })
+            
+            # 6. Comprobantes de pago a proveedores (TransferPayment)
+            for tp in tr.payments.filter(is_deleted=False):
+                if tp.proof_file:
+                    documents.append({
+                        'id': f'tr_pay_{tp.id}',
+                        'category': 'pago_proveedor',
+                        'category_label': 'Pagos a Proveedores',
+                        'subcategory': 'Comprobante de Pago',
+                        'file_url': tp.proof_file.url,
+                        'file_name': tp.proof_file.name.split('/')[-1] if tp.proof_file else None,
+                        'description': f'Pago a {tr.provider.name if tr.provider else "proveedor"} - {tr.description[:50] if tr.description else ""}',
+                        'reference': tp.reference_number or f'ID:{tp.id}',
+                        'reference_label': f'Pago → {tr.get_transfer_type_display()}',
+                        'uploaded_by': tp.created_by.get_full_name() if tp.created_by else None,
+                        'uploaded_at': tp.created_at.isoformat() if tp.created_at else None,
+                        'amount': float(tp.amount),
+                        'deletable': False,
+                        'source_model': 'TransferPayment',
+                        'source_id': tp.id,
+                    })
+        
+        # Ordenar por fecha (más reciente primero)
+        documents.sort(key=lambda x: x['uploaded_at'] or '', reverse=True)
+        
+        # Generar resumen por categoría
+        categories_summary = {}
+        for doc in documents:
+            cat = doc['category']
+            if cat not in categories_summary:
+                categories_summary[cat] = {
+                    'label': doc['category_label'],
+                    'count': 0,
+                    'total_amount': 0
+                }
+            categories_summary[cat]['count'] += 1
+            if doc['amount']:
+                categories_summary[cat]['total_amount'] += doc['amount']
+        
+        return Response({
+            'order_number': order.order_number,
+            'total_documents': len(documents),
+            'categories_summary': categories_summary,
+            'documents': documents
+        })
+
 class OrderDocumentViewSet(viewsets.ModelViewSet):
     queryset = OrderDocument.objects.all()
     serializer_class = OrderDocumentSerializer
     permission_classes = [IsOperativo]
+    filterset_fields = ['order', 'document_type']
     
     def perform_destroy(self, instance):
         """Set current user before deletion for signal"""

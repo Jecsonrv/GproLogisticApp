@@ -1,16 +1,19 @@
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from apps.clients.models import Client
-from apps.catalogs.models import SubClient, ShipmentType, Provider, CustomsAgent, Bank
+from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank
 from apps.validators import validate_document_file
+from apps.core.models import SoftDeleteModel
 
-class ServiceOrder(models.Model):
+class ServiceOrder(SoftDeleteModel):
     order_number = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Orden")
     client = models.ForeignKey(Client, on_delete=models.PROTECT, verbose_name="Cliente")
     sub_client = models.ForeignKey(SubClient, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Subcliente")
+
     shipment_type = models.ForeignKey(ShipmentType, on_delete=models.PROTECT, verbose_name="Tipo de Embarque")
     provider = models.ForeignKey(Provider, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Proveedor")
-    customs_agent = models.ForeignKey(CustomsAgent, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Aforador")
+    customs_agent = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='orders_as_customs_agent', verbose_name="Aforador")
 
     # Información del embarque
     purchase_order = models.CharField(max_length=100, blank=True, verbose_name="PO (Purchase Order)")
@@ -157,7 +160,7 @@ from django.core.validators import MinValueValidator
 from datetime import timedelta
 
 
-class OrderCharge(models.Model):
+class OrderCharge(SoftDeleteModel):
     """Cobros/Servicios facturados en una Orden de Servicio"""
     service_order = models.ForeignKey(
         ServiceOrder,
@@ -194,6 +197,16 @@ class OrderCharge(models.Model):
 
     def save(self, *args, **kwargs):
         """Calcula automáticamente subtotal, IVA y total"""
+        # Validación: No permitir modificar cargos de órdenes cerradas o facturadas
+        # Excepción: Si se está marcando como eliminado (is_deleted=True) por un administrador (lógica a manejar en vista/serializer)
+        # Aquí validamos el estado de la orden
+        if self.service_order.status == 'cerrada' or self.service_order.facturado:
+            # Permitir solo si es un soft delete y la orden NO está facturada (una cerrada se puede reabrir, una facturada NO se debe tocar)
+            if self.is_deleted and not self.service_order.facturado:
+                pass # Permitir borrar cargo de orden cerrada (implica reapertura lógica)
+            elif not self.is_deleted:
+                 raise ValidationError("No se pueden modificar cargos de una orden cerrada o facturada.")
+
         self.subtotal = self.quantity * self.unit_price
         if self.service.applies_iva:
             self.iva_amount = self.subtotal * Decimal('0.13')
@@ -242,6 +255,7 @@ class Invoice(models.Model):
 
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Total Factura")
     paid_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto Pagado")
+    credited_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto Acreditado (NC)")
     balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo Pendiente")
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="Estado")
@@ -307,15 +321,20 @@ class Invoice(models.Model):
         else:
             self.retencion = Decimal('0.00')
 
-        # El saldo a pagar se reduce por la retención
-        self.balance = (self.total_amount - self.retencion) - self.paid_amount
+        # El saldo a pagar se reduce por la retención, los pagos y las notas de crédito
+        self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
 
         if self.balance <= 0 and self.status != 'cancelled':
             self.status = 'paid'
         elif self.paid_amount > 0 and self.balance > 0:
             self.status = 'partial'
+        elif self.credited_amount > 0 and self.balance > 0:
+            self.status = 'partial'
         elif self.due_date and self.due_date < timezone.now().date() and self.balance > 0:
             self.status = 'overdue'
+        elif self.status != 'cancelled':
+            # Si hay saldo, no hay pagos parciales ni creditos, y no esta vencida ni cancelada -> Pendiente
+            self.status = 'pending'
 
         if self.payment_condition == 'credito' and not self.due_date:
             credit_days = getattr(client, 'credit_days', 30)
@@ -346,7 +365,54 @@ class Invoice(models.Model):
         return 0
 
 
-class InvoicePayment(models.Model):
+class CreditNote(SoftDeleteModel):
+    """Nota de Crédito aplicada a una factura"""
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='credit_notes', verbose_name="Factura")
+    note_number = models.CharField(max_length=50, verbose_name="Número de NC")
+    issue_date = models.DateField(default=timezone.localdate, verbose_name="Fecha de Emisión")
+    amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto Acreditado")
+    reason = models.CharField(max_length=255, verbose_name="Motivo")
+    
+    pdf_file = models.FileField(
+        upload_to='invoices/credit_notes/',
+        null=True,
+        blank=True,
+        verbose_name="PDF Nota Crédito",
+        validators=[validate_document_file],
+        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
+    
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Nota de Crédito"
+        verbose_name_plural = "Notas de Crédito"
+        ordering = ['-issue_date', '-id']
+
+    def __str__(self):
+        return f"NC {self.note_number} - {self.invoice.invoice_number}"
+
+    def save(self, *args, **kwargs):
+        """Actualiza el monto acreditado de la factura"""
+        super().save(*args, **kwargs)
+        invoice = self.invoice
+        # Sumar solo NC activas (SoftDeleteModel filtra automáticamente, pero usaremos manager normal para seguridad)
+        notes = invoice.credit_notes.filter(is_deleted=False)
+        invoice.credited_amount = sum(n.amount for n in notes)
+        invoice.save()
+
+    def delete(self, *args, **kwargs):
+        """Al borrar (soft delete), recalcular saldo de factura"""
+        super().delete(*args, **kwargs)
+        invoice = self.invoice
+        notes = invoice.credit_notes.filter(is_deleted=False)
+        invoice.credited_amount = sum(n.amount for n in notes)
+        invoice.save()
+
+
+class InvoicePayment(SoftDeleteModel):
     """Abonos/Pagos realizados a una factura"""
     PAYMENT_METHOD_CHOICES = (
         ('transferencia', 'Transferencia Bancaria'),
@@ -387,7 +453,17 @@ class InvoicePayment(models.Model):
         """Actualiza el monto pagado de la factura"""
         super().save(*args, **kwargs)
         invoice = self.invoice
-        invoice.paid_amount = sum(payment.amount for payment in invoice.payments.all())
+        # Sumar solo pagos activos
+        payments = invoice.payments.filter(is_deleted=False)
+        invoice.paid_amount = sum(payment.amount for payment in payments)
+        invoice.save()
+    
+    def delete(self, *args, **kwargs):
+        """Al borrar (soft), recalcular saldo factura"""
+        super().delete(*args, **kwargs)
+        invoice = self.invoice
+        payments = invoice.payments.filter(is_deleted=False)
+        invoice.paid_amount = sum(payment.amount for payment in payments)
         invoice.save()
 
 

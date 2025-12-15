@@ -414,8 +414,6 @@ const ClientPricing = () => {
                                 opt.default_price
                             ).toFixed(2)})`
                         }
-                        searchable
-                        required
                         getOptionValue={(opt) => opt.id}
                         searchable
                         required

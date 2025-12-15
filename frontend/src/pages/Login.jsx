@@ -45,7 +45,7 @@ function Login() {
                             G-PRO LOGISTIC
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Sistema ERP
+                            Plataforma Integral de Gestión Logística
                         </p>
                     </div>
 
@@ -147,9 +147,6 @@ function Login() {
 
                         {/* Footer */}
                         <div className="text-center pt-4 border-t border-slate-100">
-                            <p className="text-xs text-slate-400">
-                                GPRO Logistic ERP &middot; v2.0
-                            </p>
                             <p className="text-xs text-slate-400 mt-1">
                                 © {new Date().getFullYear()} Todos los derechos
                                 reservados

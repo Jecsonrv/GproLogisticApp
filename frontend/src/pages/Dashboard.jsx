@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Users,
     Truck,
@@ -44,22 +45,11 @@ import { cn, formatCurrency } from "../lib/utils";
 /**
  * Dashboard - Panel de Control Ejecutivo
  * Design System Corporativo GPRO
+ * Muestra solo datos reales del sistema
  */
 
-// Mock data generator for development if API fails
-const generateMockData = () => {
-    return Array.from({ length: 6 }, (_, i) => {
-        const month = new Date();
-        month.setMonth(month.getMonth() - (5 - i));
-        return {
-            name: month.toLocaleDateString("es-SV", { month: "short" }),
-            value: Math.floor(Math.random() * 50) + 10,
-            revenue: Math.floor(Math.random() * 5000) + 1000,
-        };
-    });
-};
-
 function Dashboard() {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [stats, setStats] = useState({
@@ -88,121 +78,139 @@ function Dashboard() {
             setLoading(true);
             setError(null);
 
-            let data = {};
-            let isOfflineMode = false;
+            const response = await api.get("/dashboard/");
+            const data = response.data;
 
-            try {
-                const response = await api.get("/dashboard/");
-                data = response.data;
-            } catch (e) {
-                console.warn(
-                    "Conexión inestable con servidor de métricas:",
-                    e.message
-                );
-                isOfflineMode = true;
-                setError(
-                    "No se pudieron sincronizar las métricas en tiempo real. Se muestran datos locales/estimados."
-                );
-            }
-
-            const mockTrend = generateMockData();
-
+            // Establecer estadísticas reales - sin fallbacks ficticios
             setStats({
-                totalClients: data.overall?.total_clients || 12,
-                activeOrders: data.overall?.os_abiertas || 5,
-                monthlyRevenue: data.current_month?.billed_amount || 15400.0,
-                pendingInvoices: data.overall?.pending_invoices || 3,
-                ordersThisMonth: data.current_month?.total_os_month || 8,
-                ordersThisMonthTrend: data.current_month?.os_trend || 12.5,
-                profitability:
-                    data.current_month?.profitability ||
-                    (data.current_month?.billed_amount || 15400) * 0.35,
-                profitabilityTrend:
-                    data.current_month?.profitability_trend || 8.2,
+                totalClients: data.overall?.total_clients || 0,
+                activeOrders: data.overall?.os_abiertas || 0,
+                monthlyRevenue: data.current_month?.billed_amount || 0,
+                pendingInvoices: data.overall?.pending_invoices || 0,
+                ordersThisMonth: data.current_month?.total_os_month || 0,
+                ordersThisMonthTrend: data.trends?.os_trend || 0,
+                profitability: data.current_month?.billed_amount
+                    ? data.current_month.billed_amount -
+                      data.current_month.operating_costs -
+                      data.current_month.admin_costs
+                    : 0,
+                profitabilityTrend: data.trends?.billing_trend || 0,
                 averageOrderValue:
-                    data.current_month?.avg_order_value || 1250.0,
-                completionRate: data.current_month?.completion_rate || 95,
+                    data.current_month?.total_os_month > 0
+                        ? data.current_month.billed_amount /
+                          data.current_month.total_os_month
+                        : 0,
+                completionRate:
+                    data.overall?.os_abiertas + data.overall?.os_cerradas > 0
+                        ? Math.round(
+                              (data.overall.os_cerradas /
+                                  (data.overall.os_abiertas +
+                                      data.overall.os_cerradas)) *
+                                  100
+                          )
+                        : 0,
             });
 
+            // Órdenes recientes
             setRecentOrders(data.recent_orders || []);
-            setTopClients(
-                data.top_clients || [
-                    {
-                        id: 1,
-                        client_name: "Cliente A (Demo)",
-                        total_revenue: 45000,
-                        orders_count: 12,
-                    },
-                    {
-                        id: 2,
-                        client_name: "Cliente B (Demo)",
-                        total_revenue: 38000,
-                        orders_count: 9,
-                    },
-                    {
-                        id: 3,
-                        client_name: "Cliente C (Demo)",
-                        total_revenue: 32000,
-                        orders_count: 8,
-                    },
-                    {
-                        id: 4,
-                        client_name: "Cliente D (Demo)",
-                        total_revenue: 28000,
-                        orders_count: 7,
-                    },
-                    {
-                        id: 5,
-                        client_name: "Cliente E (Demo)",
-                        total_revenue: 22000,
-                        orders_count: 5,
-                    },
-                ]
-            );
-            setAlerts(
-                data.alerts || [
-                    {
-                        id: 1,
-                        type: "invoice_overdue",
-                        message: "Sistema: Visualizando datos demostrativos",
-                        severity: "medium",
-                        client: "Sistema",
-                    },
-                ]
-            );
+
+            // Top clientes - datos reales, mapeando correctamente los campos
+            const mappedTopClients = (data.top_clients || []).map((client) => ({
+                id: client.id,
+                client_name: client.name,
+                total_revenue: client.total_amount || 0,
+                orders_count: client.total_orders || 0,
+            }));
+            setTopClients(mappedTopClients);
+
+            // Alertas reales del sistema
+            setAlerts(data.alerts || []);
+
+            // Generar datos de gráficos solo con el mes actual si hay datos
+            // No inventamos historial que no existe
+            const currentMonthName = new Date().toLocaleDateString("es-SV", {
+                month: "short",
+            });
+            const prevMonthName = new Date(
+                Date.now() - 30 * 24 * 60 * 60 * 1000
+            ).toLocaleDateString("es-SV", { month: "short" });
+
+            // Construir chartData solo con datos reales disponibles
+            const chartDataPoints = [];
+
+            // Si hay datos del mes anterior, incluirlos
+            if (
+                data.previous_month?.billed_amount > 0 ||
+                data.previous_month?.operating_costs > 0
+            ) {
+                chartDataPoints.push({
+                    name: prevMonthName,
+                    ingresos: data.previous_month.billed_amount || 0,
+                    gastos: data.previous_month.operating_costs || 0,
+                    value: data.previous_month.total_os || 0,
+                });
+            }
+
+            // Siempre incluir el mes actual
+            chartDataPoints.push({
+                name: currentMonthName,
+                ingresos: data.current_month?.billed_amount || 0,
+                gastos:
+                    (data.current_month?.operating_costs || 0) +
+                    (data.current_month?.admin_costs || 0),
+                value: data.current_month?.total_os_month || 0,
+            });
 
             setChartData({
-                monthlyOrders:
-                    data.monthly_trends?.orders ||
-                    mockTrend.map((d) => ({ name: d.name, value: d.value })),
-                revenueVsExpenses:
-                    data.monthly_trends?.revenue_vs_expenses ||
-                    mockTrend.map((d) => ({
-                        name: d.name,
-                        ingresos: d.revenue,
-                        gastos: Math.floor(d.revenue * 0.65),
-                    })),
+                monthlyOrders: chartDataPoints.map((d) => ({
+                    name: d.name,
+                    value: d.value,
+                })),
+                revenueVsExpenses: chartDataPoints.map((d) => ({
+                    name: d.name,
+                    ingresos: d.ingresos,
+                    gastos: d.gastos,
+                })),
                 statusDistribution: [
                     {
                         name: "Abiertas",
-                        value: data.overall?.os_abiertas || 5,
+                        value: data.overall?.os_abiertas || 0,
                         color: "#0052cc",
                     },
                     {
                         name: "Cerradas",
-                        value: data.overall?.os_cerradas || 15,
+                        value: data.overall?.os_cerradas || 0,
                         color: "#16a34a",
-                    },
-                    {
-                        name: "Pendientes",
-                        value: data.overall?.os_pendientes || 2,
-                        color: "#d97706",
                     },
                 ].filter((i) => i.value > 0),
             });
-        } catch (fatalError) {
-            setError("Error crítico al inicializar el panel de control.");
-            console.error(fatalError);
+        } catch (err) {
+            console.error("Error al cargar el dashboard:", err);
+            setError(
+                "No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo."
+            );
+
+            // En caso de error, mostrar estados vacíos en lugar de datos ficticios
+            setStats({
+                totalClients: 0,
+                activeOrders: 0,
+                monthlyRevenue: 0,
+                pendingInvoices: 0,
+                ordersThisMonth: 0,
+                ordersThisMonthTrend: 0,
+                profitability: 0,
+                profitabilityTrend: 0,
+                averageOrderValue: 0,
+                completionRate: 0,
+            });
+            setRecentOrders([]);
+            setTopClients([]);
+            setAlerts([]);
+            setChartData({
+                monthlyOrders: [],
+                revenueVsExpenses: [],
+                statusDistribution: [],
+            });
         } finally {
             setLoading(false);
         }
@@ -378,84 +386,97 @@ function Dashboard() {
                 <Card className="lg:col-span-4">
                     <CardHeader>
                         <CardTitle>Ingresos vs Gastos</CardTitle>
-                        <CardDescription>
-                            Comparativa últimos 6 meses
-                        </CardDescription>
+                        <CardDescription>Comparativa mensual</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-[320px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={chartData.revenueVsExpenses}>
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        vertical={false}
-                                        stroke="#e2e8f0"
-                                    />
-                                    <XAxis
-                                        dataKey="name"
-                                        stroke="#94a3b8"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                    />
-                                    <YAxis
-                                        stroke="#94a3b8"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                        tickFormatter={(value) =>
-                                            `$${(value / 1000).toFixed(0)}k`
-                                        }
-                                    />
-                                    <Tooltip
-                                        contentStyle={{
-                                            borderRadius: "6px",
-                                            border: "1px solid #e2e8f0",
-                                            boxShadow:
-                                                "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                                            fontSize: "13px",
-                                        }}
-                                        formatter={(value) =>
-                                            formatCurrency(value)
-                                        }
-                                    />
-                                    <Legend
-                                        wrapperStyle={{
-                                            paddingTop: "16px",
-                                            fontSize: "13px",
-                                        }}
-                                        iconType="line"
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="ingresos"
-                                        stroke="#16a34a"
-                                        strokeWidth={2.5}
-                                        dot={{
-                                            fill: "#16a34a",
-                                            r: 3,
-                                            strokeWidth: 2,
-                                            stroke: "#fff",
-                                        }}
-                                        activeDot={{ r: 5 }}
-                                        name="Ingresos"
-                                    />
-                                    <Line
-                                        type="monotone"
-                                        dataKey="gastos"
-                                        stroke="#dc2626"
-                                        strokeWidth={2.5}
-                                        dot={{
-                                            fill: "#dc2626",
-                                            r: 3,
-                                            strokeWidth: 2,
-                                            stroke: "#fff",
-                                        }}
-                                        activeDot={{ r: 5 }}
-                                        name="Gastos"
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
+                            {chartData.revenueVsExpenses.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <BarChart3 className="h-12 w-12 mb-3 text-slate-300" />
+                                    <p className="text-sm font-medium">
+                                        Sin datos de facturación
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        Los datos aparecerán cuando haya
+                                        operaciones
+                                    </p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart
+                                        data={chartData.revenueVsExpenses}
+                                    >
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            vertical={false}
+                                            stroke="#e2e8f0"
+                                        />
+                                        <XAxis
+                                            dataKey="name"
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickFormatter={(value) =>
+                                                `$${(value / 1000).toFixed(0)}k`
+                                            }
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                borderRadius: "6px",
+                                                border: "1px solid #e2e8f0",
+                                                boxShadow:
+                                                    "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                                fontSize: "13px",
+                                            }}
+                                            formatter={(value) =>
+                                                formatCurrency(value)
+                                            }
+                                        />
+                                        <Legend
+                                            wrapperStyle={{
+                                                paddingTop: "16px",
+                                                fontSize: "13px",
+                                            }}
+                                            iconType="line"
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="ingresos"
+                                            stroke="#16a34a"
+                                            strokeWidth={2.5}
+                                            dot={{
+                                                fill: "#16a34a",
+                                                r: 3,
+                                                strokeWidth: 2,
+                                                stroke: "#fff",
+                                            }}
+                                            activeDot={{ r: 5 }}
+                                            name="Ingresos"
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="gastos"
+                                            stroke="#dc2626"
+                                            strokeWidth={2.5}
+                                            dot={{
+                                                fill: "#dc2626",
+                                                r: 3,
+                                                strokeWidth: 2,
+                                                stroke: "#fff",
+                                            }}
+                                            activeDot={{ r: 5 }}
+                                            name="Gastos"
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -468,44 +489,56 @@ function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="h-[320px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chartData.monthlyOrders}>
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        vertical={false}
-                                        stroke="#e2e8f0"
-                                    />
-                                    <XAxis
-                                        dataKey="name"
-                                        stroke="#94a3b8"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                    />
-                                    <YAxis
-                                        stroke="#94a3b8"
-                                        fontSize={12}
-                                        tickLine={false}
-                                        axisLine={false}
-                                    />
-                                    <Tooltip
-                                        cursor={{ fill: "#f1f5f9" }}
-                                        contentStyle={{
-                                            borderRadius: "6px",
-                                            border: "1px solid #e2e8f0",
-                                            boxShadow:
-                                                "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                                            fontSize: "13px",
-                                        }}
-                                    />
-                                    <Bar
-                                        dataKey="value"
-                                        fill="#0052cc"
-                                        radius={[4, 4, 0, 0]}
-                                        name="Órdenes"
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
+                            {chartData.monthlyOrders.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <FileText className="h-12 w-12 mb-3 text-slate-300" />
+                                    <p className="text-sm font-medium">
+                                        Sin órdenes registradas
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        Crea tu primera orden de servicio
+                                    </p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={chartData.monthlyOrders}>
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            vertical={false}
+                                            stroke="#e2e8f0"
+                                        />
+                                        <XAxis
+                                            dataKey="name"
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: "#f1f5f9" }}
+                                            contentStyle={{
+                                                borderRadius: "6px",
+                                                border: "1px solid #e2e8f0",
+                                                boxShadow:
+                                                    "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                                fontSize: "13px",
+                                            }}
+                                        />
+                                        <Bar
+                                            dataKey="value"
+                                            fill="#0052cc"
+                                            radius={[4, 4, 0, 0]}
+                                            name="Órdenes"
+                                        />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -704,7 +737,12 @@ function Dashboard() {
                                     recentOrders.slice(0, 8).map((order) => (
                                         <tr
                                             key={order.id}
-                                            className="hover:bg-slate-50/50 transition-colors"
+                                            onClick={() =>
+                                                navigate(
+                                                    `/service-orders/${order.id}`
+                                                )
+                                            }
+                                            className="hover:bg-slate-50/50 transition-colors cursor-pointer"
                                         >
                                             <td className="px-3 py-2.5 font-mono text-sm font-medium text-brand-600">
                                                 {order.order_number}

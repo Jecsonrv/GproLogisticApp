@@ -85,6 +85,36 @@ class ClientViewSet(viewsets.ModelViewSet):
             balance__gt=0
         ).exclude(status='paid').count()
 
+        # Aging Analysis (Antigüedad de Saldos)
+        aging = {
+            'current': 0.0,  # Corriente (No vencido)
+            '1-30': 0.0,     # 1 a 30 días de vencido
+            '31-60': 0.0,    # 31 a 60 días
+            '61-90': 0.0,    # 61 a 90 días
+            '90+': 0.0       # Más de 90 días
+        }
+
+        # Iterar sobre facturas con saldo pendiente para calcular aging
+        # Usamos unpaid_invoices que ya filtramos arriba (balance > 0, no pagadas/anuladas)
+        for inv in unpaid_invoices:
+            bal = float(inv.balance)
+            if not inv.due_date:
+                aging['current'] += bal
+                continue
+
+            days_overdue = (today - inv.due_date).days
+
+            if days_overdue <= 0:
+                aging['current'] += bal
+            elif days_overdue <= 30:
+                aging['1-30'] += bal
+            elif days_overdue <= 60:
+                aging['31-60'] += bal
+            elif days_overdue <= 90:
+                aging['61-90'] += bal
+            else:
+                aging['90+'] += bal
+
         # Historial de pagos recientes (últimos 10)
         recent_payments = InvoicePayment.objects.filter(
             invoice__service_order__client=client
@@ -99,6 +129,21 @@ class ClientViewSet(viewsets.ModelViewSet):
             'reference': payment.reference_number or '',
             'notes': payment.notes or ''
         } for payment in recent_payments]
+
+        # Órdenes de Servicio pendientes de facturar
+        pending_orders_qs = ServiceOrder.objects.filter(
+            client=client,
+            facturado=False
+        ).exclude(status='cancelada').order_by('created_at')
+
+        pending_orders_data = [{
+            'id': order.id,
+            'order_number': order.order_number,
+            'date': order.created_at.date(),
+            'eta': order.eta,
+            'duca': order.duca,
+            'amount': float(order.get_total_amount())
+        } for order in pending_orders_qs]
 
         data = {
             'client_id': client.id,
@@ -115,6 +160,10 @@ class ClientViewSet(viewsets.ModelViewSet):
             'total_invoiced': float(total_invoiced),
             'total_paid': float(total_paid),
             'total_pending': float(total_pending),
+            'total_pending_orders': pending_orders_qs.count(),
+
+            # Análisis de Antigüedad
+            'aging': aging,
 
             # Facturas por estado
             'invoices_by_status': invoices_by_status,
@@ -123,6 +172,7 @@ class ClientViewSet(viewsets.ModelViewSet):
 
             # Listas detalladas
             'invoices': invoices_data,
+            'pending_invoices': pending_orders_data,
             'recent_payments': payments_data,
 
             'year': year

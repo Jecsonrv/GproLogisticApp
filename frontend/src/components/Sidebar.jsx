@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
+import usePermissionStore from "../stores/permissionStore";
 import {
     LayoutDashboard,
     ClipboardList,
@@ -12,19 +13,27 @@ import {
     ShieldCheck,
     X,
     Boxes,
-    Ship,
 } from "lucide-react";
-import useAuthStore from "../stores/authStore";
 
 /**
  * Sidebar Navigation - Design System Corporativo GPRO
  * Estilo: Sobrio, Corporativo, Profesional
+ *
+ * RBAC: Los items se renderizan condicionalmente según los permisos del usuario
  */
 
+// Definición de menú con módulos RBAC asociados
 const menuSections = [
     {
         title: null,
-        items: [{ name: "Dashboard", path: "/", icon: LayoutDashboard }],
+        items: [
+            {
+                name: "Dashboard",
+                path: "/",
+                icon: LayoutDashboard,
+                module: "dashboard", // Accesible por todos
+            },
+        ],
     },
     {
         title: "OPERACIONES",
@@ -33,52 +42,116 @@ const menuSections = [
                 name: "Órdenes de Servicio",
                 path: "/service-orders",
                 icon: ClipboardList,
+                module: "service_orders", // Todos los operativos
             },
             {
                 name: "Pagos a Proveedores",
                 path: "/provider-payments",
                 icon: Banknote,
+                module: "provider_payments", // Todos los operativos
             },
         ],
     },
     {
         title: "FINANZAS",
         items: [
-            { name: "Facturación y CXC", path: "/invoicing", icon: Banknote },
+            {
+                name: "Facturación y CXC",
+                path: "/invoicing",
+                icon: Banknote,
+                module: "invoicing", // Solo admin y operativo2
+            },
             {
                 name: "Estados de Cuenta",
                 path: "/account-statements",
                 icon: FileText,
+                module: "account_statements", // Solo admin y operativo2
+            },
+            {
+                name: "Cuentas por Pagar",
+                path: "/provider-statements",
+                icon: ArrowRightLeft,
+                module: "provider_statements", // Solo admin y operativo2
             },
         ],
     },
     {
         title: "CATÁLOGOS",
         items: [
-            { name: "Clientes", path: "/clients", icon: Users },
-            { name: "Servicios y Tarifario", path: "/services", icon: Package },
-            { name: "Catálogos Generales", path: "/catalogs", icon: Boxes },
+            {
+                name: "Clientes",
+                path: "/clients",
+                icon: Users,
+                module: "clients", // Todos los operativos
+            },
+            {
+                name: "Servicios y Tarifario",
+                path: "/services",
+                icon: Package,
+                module: "services", // Todos los operativos
+            },
+            {
+                name: "Catálogos Generales",
+                path: "/catalogs",
+                icon: Boxes,
+                module: "catalogs", // Todos los operativos
+            },
         ],
     },
     {
         title: "ADMINISTRACIÓN",
-        items: [{ name: "Usuarios", path: "/users", icon: ShieldCheck }],
+        items: [
+            {
+                name: "Usuarios",
+                path: "/users",
+                icon: ShieldCheck,
+                module: "users", // Solo admin
+            },
+        ],
     },
 ];
 
 export function Sidebar({ isOpen, onClose }) {
     const location = useLocation();
-    const user = useAuthStore((state) => state.user);
+    const hasModuleAccess = usePermissionStore(
+        (state) => state.hasModuleAccess
+    );
+    const permissions = usePermissionStore((state) => state.permissions);
 
-    const getInitials = (name) => {
-        if (!name) return "U";
-        return name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2);
-    };
+    // Filtrar secciones y items según permisos RBAC
+    const filteredMenuSections = useMemo(() => {
+        if (!permissions) {
+            // Si no hay permisos cargados, mostrar menú básico
+            return menuSections
+                .map((section) => ({
+                    ...section,
+                    items: section.items.filter((item) =>
+                        [
+                            "dashboard",
+                            "service_orders",
+                            "provider_payments",
+                            "catalogs",
+                            "clients",
+                            "services",
+                        ].includes(item.module)
+                    ),
+                }))
+                .filter((section) => section.items.length > 0);
+        }
+
+        return (
+            menuSections
+                .map((section) => ({
+                    ...section,
+                    // Filtrar items según permisos del usuario
+                    items: section.items.filter((item) =>
+                        hasModuleAccess(item.module)
+                    ),
+                }))
+                // Eliminar secciones vacías
+                .filter((section) => section.items.length > 0)
+        );
+    }, [permissions, hasModuleAccess]);
 
     return (
         <>
@@ -102,14 +175,11 @@ export function Sidebar({ isOpen, onClose }) {
                         <img
                             src="/logo/logo.png"
                             alt="G-PRO LOGISTIC"
-                            className="h-8 w-auto"
+                            className="h-10 w-auto"
                         />
                         <div className="flex flex-col">
                             <span className="text-sm font-bold text-slate-900 leading-tight">
                                 G-PRO LOGISTIC
-                            </span>
-                            <span className="text-2xs text-slate-500 leading-tight">
-                                Sistema ERP
                             </span>
                         </div>
                     </div>
@@ -121,10 +191,10 @@ export function Sidebar({ isOpen, onClose }) {
                     </button>
                 </div>
 
-                {/* Navigation */}
+                {/* Navigation - Renderizado condicional RBAC */}
                 <nav className="flex-1 overflow-y-auto py-3 px-2.5 scrollbar-hide">
                     <div className="space-y-5">
-                        {menuSections.map((section, sectionIndex) => (
+                        {filteredMenuSections.map((section, sectionIndex) => (
                             <div key={sectionIndex}>
                                 {/* Section Title */}
                                 {section.title && (
@@ -175,20 +245,12 @@ export function Sidebar({ isOpen, onClose }) {
                     </div>
                 </nav>
 
-                {/* User Profile */}
+                {/* Footer con versión */}
                 <div className="p-3 border-t border-slate-200 bg-slate-50/50 flex-shrink-0">
-                    <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-xs flex-shrink-0">
-                            {getInitials(user?.first_name)}
-                        </div>
-                        <div className="flex flex-col min-w-0 flex-1">
-                            <span className="text-sm font-medium text-slate-900 truncate">
-                                {user?.first_name || "Usuario"}
-                            </span>
-                            <span className="text-2xs text-slate-500 truncate">
-                                {user?.email || "usuario@gpro.com"}
-                            </span>
-                        </div>
+                    <div className="flex items-center justify-center">
+                        <span className="text-2xs text-slate-400">
+                            GPRO Logistic ERP v1.0
+                        </span>
                     </div>
                 </div>
             </aside>

@@ -16,21 +16,34 @@ def log_service_order_events(sender, instance, created, **kwargs):
     """
     Log creación, actualización y cambios de estado de OS
     """
+    user = getattr(instance, '_current_user', None)
+
     # No crear historial si estamos en el proceso de creación inicial
     if created:
         OrderHistory.objects.create(
             service_order=instance,
-            user=getattr(instance, '_current_user', None),
+            user=user,
             event_type='created',
             description=f'Orden de servicio {instance.order_number} creada',
             metadata={
                 'order_number': instance.order_number,
                 'duca': instance.duca,
-                'client': instance.client.business_name if instance.client else None
+                'client': instance.client.name if instance.client else None
             }
         )
     else:
-        # Verificar si hubo cambio de estado
+        # 1. Detectar Soft Delete
+        if instance.is_deleted and not getattr(instance, '_was_deleted', False):
+             OrderHistory.objects.create(
+                service_order=instance,
+                user=user,
+                event_type='status_changed', # O crear uno nuevo 'order_deleted'
+                description=f'Orden de servicio {instance.order_number} eliminada (papelera)',
+                metadata={'status': 'deleted'}
+            )
+             return
+
+        # 2. Verificar si hubo cambio de estado
         if hasattr(instance, '_previous_status') and instance._previous_status != instance.status:
             if instance.status == 'cerrada':
                 event_type = 'closed'
@@ -44,7 +57,7 @@ def log_service_order_events(sender, instance, created, **kwargs):
             
             OrderHistory.objects.create(
                 service_order=instance,
-                user=getattr(instance, '_current_user', None),
+                user=user,
                 event_type=event_type,
                 description=description,
                 metadata={
@@ -53,14 +66,15 @@ def log_service_order_events(sender, instance, created, **kwargs):
                 }
             )
         else:
-            # Actualización general
-            OrderHistory.objects.create(
-                service_order=instance,
-                user=getattr(instance, '_current_user', None),
-                event_type='updated',
-                description=f'Orden de servicio {instance.order_number} actualizada',
-                metadata={}
-            )
+            # Actualización general (si no fue borrado ni cambio de estado)
+            if not instance.is_deleted:
+                OrderHistory.objects.create(
+                    service_order=instance,
+                    user=user,
+                    event_type='updated',
+                    description=f'Orden de servicio {instance.order_number} actualizada',
+                    metadata={}
+                )
 
 
 @receiver(pre_save, sender=ServiceOrder)
@@ -72,19 +86,33 @@ def capture_previous_status(sender, instance, **kwargs):
         try:
             previous = ServiceOrder.objects.get(pk=instance.pk)
             instance._previous_status = previous.status
+            instance._was_deleted = previous.is_deleted # Para detectar transición a deleted
         except ServiceOrder.DoesNotExist:
             instance._previous_status = None
+            instance._was_deleted = False
+
+
+@receiver(pre_save, sender=OrderCharge)
+def capture_previous_charge_state(sender, instance, **kwargs):
+    if instance.pk:
+        try:
+            previous = OrderCharge.all_objects.get(pk=instance.pk) # Usar all_objects para encontrarlo aunque esté borrado
+            instance._was_deleted = previous.is_deleted
+        except OrderCharge.DoesNotExist:
+            instance._was_deleted = False
 
 
 @receiver(post_save, sender=OrderCharge)
 def log_charge_events(sender, instance, created, **kwargs):
     """
-    Log cuando se agregan o actualizan cargos
+    Log cuando se agregan, actualizan o eliminan (soft delete) cargos
     """
+    user = getattr(instance, '_current_user', None)
+
     if created:
         OrderHistory.objects.create(
             service_order=instance.service_order,
-            user=getattr(instance, '_current_user', None),
+            user=user,
             event_type='charge_added',
             description=f'Cargo agregado: {instance.service.name if instance.service else "N/A"}',
             metadata={
@@ -94,25 +122,43 @@ def log_charge_events(sender, instance, created, **kwargs):
                 'total': float(instance.total)
             }
         )
+    else:
+        # Detectar Soft Delete (transición de False a True)
+        if instance.is_deleted and not getattr(instance, '_was_deleted', False):
+            OrderHistory.objects.create(
+                service_order=instance.service_order,
+                user=user,
+                event_type='charge_deleted',
+                description=f'Cargo eliminado: {instance.service.name if instance.service else "N/A"}',
+                metadata={
+                    'service': instance.service.name if instance.service else None,
+                    'quantity': float(instance.quantity),
+                    'unit_price': float(instance.unit_price),
+                    'total': float(instance.total)
+                }
+            )
 
 
+# Mantenemos post_delete para hard deletes eventuales o cleanup
 @receiver(post_delete, sender=OrderCharge)
 def log_charge_deletion(sender, instance, **kwargs):
     """
-    Log cuando se eliminan cargos
+    Log cuando se eliminan cargos (Hard Delete)
     """
-    OrderHistory.objects.create(
-        service_order=instance.service_order,
-        user=getattr(instance, '_current_user', None),
-        event_type='charge_deleted',
-        description=f'Cargo eliminado: {instance.service.name if instance.service else "N/A"}',
-        metadata={
-            'service': instance.service.name if instance.service else None,
-            'quantity': float(instance.quantity),
-            'unit_price': float(instance.unit_price),
-            'total': float(instance.total)
-        }
-    )
+    # Evitar duplicar log si ya se hizo por soft delete (aunque post_delete no se llama en soft delete)
+    if not instance.is_deleted: 
+        OrderHistory.objects.create(
+            service_order=instance.service_order,
+            user=getattr(instance, '_current_user', None),
+            event_type='charge_deleted',
+            description=f'Cargo eliminado permanentemente: {instance.service.name if instance.service else "N/A"}',
+            metadata={
+                'service': instance.service.name if instance.service else None,
+                'quantity': float(instance.quantity),
+                'unit_price': float(instance.unit_price),
+                'total': float(instance.total)
+            }
+        )
 
 
 @receiver(post_save, sender=Transfer)

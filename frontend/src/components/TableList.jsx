@@ -61,7 +61,7 @@ function TableList({ data, columns, title, onRowClick, actions }) {
                                 {columns.map((col) => (
                                     <td
                                         key={`${row.id || rowIndex}-${col.key}`}
-                                        className="px-6 py-4 whitespace-nowrap text-sm text-secondary-900"
+                                        className="px-6 py-2 whitespace-nowrap text-sm text-secondary-900"
                                     >
                                         {col.render
                                             ? col.render(row[col.key], row)

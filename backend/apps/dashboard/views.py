@@ -189,6 +189,26 @@ class DashboardView(APIView):
                         'credit_percentage': round(credit_percentage, 1)
                     })
 
+        # Órdenes recientes (últimas 10)
+        recent_orders = ServiceOrder.objects.select_related('client').order_by('-created_at')[:10]
+        recent_orders_data = []
+        for order in recent_orders:
+            # Calcular monto total de la orden
+            total_amount = Transfer.objects.filter(
+                service_order=order,
+                transfer_type__in=['terceros', 'cargos']
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            recent_orders_data.append({
+                'id': order.id,
+                'order_number': order.order_number,
+                'client_name': order.client.name if order.client else 'N/A',
+                'created_at': order.created_at.isoformat(),
+                'status': order.status,
+                'total_amount': float(total_amount),
+                'eta': order.eta.isoformat() if order.eta else None,
+            })
+
         data = {
             'current_month': {
                 'total_os_month': total_os_month,
@@ -225,6 +245,7 @@ class DashboardView(APIView):
                 }
                 for client in top_clients
             ],
-            'alerts': alerts
+            'alerts': alerts,
+            'recent_orders': recent_orders_data
         }
         return Response(data)

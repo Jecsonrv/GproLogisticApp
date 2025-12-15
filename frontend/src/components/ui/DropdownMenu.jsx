@@ -2,7 +2,9 @@ import React, { Fragment } from 'react'
 import { Menu, Transition } from '@headlessui/react'
 import { cn } from '../../lib/utils'
 
-const DropdownMenu = Menu
+const DropdownMenu = ({ className, ...props }) => (
+  <Menu as="div" className={cn("relative", className)} {...props} />
+)
 
 const DropdownMenuTrigger = Menu.Button
 

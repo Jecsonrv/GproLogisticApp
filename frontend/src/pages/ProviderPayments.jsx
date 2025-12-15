@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Plus,
     Eye,
@@ -22,6 +23,8 @@ import {
     Banknote,
     AlertCircle,
     MoreVertical,
+    Landmark,
+    User,
 } from "lucide-react";
 import {
     Button,
@@ -167,16 +170,10 @@ const EDIT_TYPE_OPTIONS = [
     { id: "admin", name: "Gastos de Operación" },
 ];
 
-const CREATE_STATUS_OPTIONS = [
-    { id: "pendiente", name: "Pendiente" },
-    { id: "aprobado", name: "Aprobado" },
-    { id: "pagado", name: "Pagado" },
-];
-
+// Estados solo para edición (no para creación inicial)
 const EDIT_STATUS_OPTIONS = [
     { id: "pendiente", name: "Pendiente" },
     { id: "aprobado", name: "Aprobado" },
-    { id: "pagado", name: "Pagado" },
 ];
 
 // ============================================
@@ -225,39 +222,26 @@ const KPICard = ({
     icon: Icon,
     variant = "default",
 }) => {
-    const variants = {
-        default: "text-slate-900",
-        primary: "text-blue-600",
-        success: "text-emerald-600",
-        warning: "text-amber-600",
-        danger: "text-red-600",
-    };
-
     return (
         <Card>
-            <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-medium text-gray-500">
+            <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
                             {label}
                         </p>
-                        <p
-                            className={cn(
-                                "text-2xl font-bold mt-1",
-                                variants[variant]
-                            )}
-                        >
+                        <p className="text-2xl font-semibold text-slate-900 tabular-nums">
                             {value}
                         </p>
                         {subtext && (
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-slate-500 mt-1.5">
                                 {subtext}
                             </p>
                         )}
                     </div>
                     {Icon && (
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <Icon className="w-5 h-5 text-gray-400" />
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                            <Icon className="w-5 h-5 text-slate-400" />
                         </div>
                     )}
                 </div>
@@ -270,6 +254,7 @@ const KPICard = ({
 // MAIN COMPONENT
 // ============================================
 function ProviderPayments() {
+    const navigate = useNavigate();
     // Data state
     const [payments, setPayments] = useState([]);
     const [serviceOrders, setServiceOrders] = useState([]);
@@ -302,19 +287,16 @@ function ProviderPayments() {
         dateTo: "",
     });
 
-    // Form state
+    // Form state - Nota: payment_method y status se definen al EJECUTAR el pago, no al registrar
     const initialFormData = {
         service_order: "",
         transfer_type: "costos",
         provider: "",
         description: "",
         amount: "",
-        bank: "",
-        payment_method: "transferencia",
         invoice_number: "",
         ccf: "",
         beneficiary_name: "",
-        status: "pendiente",
         transaction_date: getTodayDate(),
         notes: "",
         invoice_file: null,
@@ -365,11 +347,12 @@ function ProviderPayments() {
     const fetchPayments = async () => {
         try {
             setLoading(true);
-            const response = await axios.get("/transfers/");
-            setPayments(response.data);
+            const response = await axios.get("/transfers/transfers/");
+            setPayments(response.data || []);
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar pagos a proveedores");
+            setPayments([]);
         } finally {
             setLoading(false);
         }
@@ -402,13 +385,21 @@ function ProviderPayments() {
             const formDataToSend = new FormData();
 
             Object.keys(formData).forEach((key) => {
-                if (formData[key] !== null && formData[key] !== "") {
+                if (
+                    key !== "invoice_file" &&
+                    formData[key] !== null &&
+                    formData[key] !== ""
+                ) {
                     formDataToSend.append(key, formData[key]);
                 }
             });
 
-            await axios.post("/transfers/", formDataToSend, {
-                headers: { "Content-Type": "multipart/form-data" },
+            if (formData.invoice_file instanceof File) {
+                formDataToSend.append("invoice_file", formData.invoice_file);
+            }
+
+            await axios.post("/transfers/transfers/", formDataToSend, {
+                headers: { "Content-Type": undefined },
             });
 
             toast.success("Pago registrado exitosamente");
@@ -435,16 +426,24 @@ function ProviderPayments() {
             const formDataToSend = new FormData();
 
             Object.keys(formData).forEach((key) => {
-                if (formData[key] !== null && formData[key] !== "") {
+                if (
+                    key !== "invoice_file" &&
+                    formData[key] !== null &&
+                    formData[key] !== ""
+                ) {
                     formDataToSend.append(key, formData[key]);
                 }
             });
 
+            if (formData.invoice_file instanceof File) {
+                formDataToSend.append("invoice_file", formData.invoice_file);
+            }
+
             await axios.patch(
-                `/transfers/${selectedPayment.id}/`,
+                `/transfers/transfers/${selectedPayment.id}/`,
                 formDataToSend,
                 {
-                    headers: { "Content-Type": "multipart/form-data" },
+                    headers: { "Content-Type": undefined },
                 }
             );
 
@@ -463,7 +462,7 @@ function ProviderPayments() {
         if (!deleteConfirm.id) return;
 
         try {
-            await axios.delete(`/transfers/${deleteConfirm.id}/`);
+            await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`);
             toast.success("Pago eliminado correctamente");
             setDeleteConfirm({ open: false, id: null });
             fetchPayments();
@@ -533,10 +532,13 @@ function ProviderPayments() {
 
         try {
             setIsExporting(true);
-            const response = await axios.get("/transfers/export_excel/", {
-                responseType: "blob",
-                params: filters,
-            });
+            const response = await axios.get(
+                "/transfers/transfers/export_excel/",
+                {
+                    responseType: "blob",
+                    params: filters,
+                }
+            );
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
@@ -659,23 +661,23 @@ function ProviderPayments() {
     // Table columns
     const columns = [
         {
-            header: "OS / Fecha",
+            header: "Orden de Servicio",
             accessor: "service_order_number",
             cell: (row) => (
                 <div>
                     <div className="font-mono text-sm font-semibold">
                         {row.service_order_number ? (
-                            <a
-                                href={`/orders/${row.service_order}`}
-                                className="text-brand-600 hover:text-brand-700 hover:underline"
+                            <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    e.preventDefault();
-                                    window.location.href = `/orders/${row.service_order}`;
+                                    navigate(
+                                        `/service-orders/${row.service_order}`
+                                    );
                                 }}
+                                className="text-brand-600 hover:text-brand-700 hover:underline"
                             >
                                 {row.service_order_number}
-                            </a>
+                            </button>
                         ) : (
                             <span className="text-gray-400 italic">Sin OS</span>
                         )}
@@ -711,32 +713,18 @@ function ProviderPayments() {
             ),
         },
         {
-            header: "Monto/Tipo",
+            header: "Monto",
             accessor: "amount",
             cell: (row) => (
                 <div className="text-right">
                     <div className="text-sm font-bold text-gray-900 tabular-nums">
                         {formatCurrency(row.amount)}
                     </div>
-                    {row.payment_method && (
-                        <div className="text-xs text-gray-500 mt-0.5">
-                            {PAYMENT_METHODS[row.payment_method]}
-                        </div>
-                    )}
                 </div>
             ),
         },
         {
-            header: "Banco",
-            accessor: "bank_name",
-            cell: (row) => (
-                <div className="text-sm text-gray-700">
-                    {row.bank_name || <span className="text-gray-400">—</span>}
-                </div>
-            ),
-        },
-        {
-            header: "CCF",
+            header: "Factura Prov.",
             accessor: "invoice_number",
             cell: (row) => (
                 <div>
@@ -751,12 +739,41 @@ function ProviderPayments() {
             ),
         },
         {
+            header: "Método de Pago",
+            accessor: "payment_method",
+            cell: (row) => (
+                <div className="text-sm text-gray-700">
+                    {row.payment_method ? (
+                        <div className="flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                            <span>{PAYMENT_METHODS[row.payment_method]}</span>
+                        </div>
+                    ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                    )}
+                </div>
+            ),
+        },
+        {
+            header: "Banco",
+            accessor: "bank_name",
+            cell: (row) => (
+                <div className="text-sm text-gray-700">
+                    {row.bank_name ? (
+                        <span>{row.bank_name}</span>
+                    ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                    )}
+                </div>
+            ),
+        },
+        {
             header: "Estado",
             accessor: "status",
             cell: (row) => <StatusBadge status={row.status} />,
         },
         {
-            header: "Comp.",
+            header: "Doc.",
             accessor: "invoice_file",
             className: "w-16 text-center",
             cell: (row) =>
@@ -777,7 +794,7 @@ function ProviderPayments() {
                                 // Descargar usando axios
                                 axios
                                     .get(
-                                        `/transfers/${row.id}/download_invoice/`,
+                                        `/transfers/transfers/${row.id}/download_invoice/`,
                                         {
                                             responseType: "blob",
                                         }
@@ -1034,7 +1051,6 @@ function ProviderPayments() {
                                 clearable
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
-                                searchable
                             />
                             <Input
                                 label="Desde"
@@ -1238,56 +1254,13 @@ function ProviderPayments() {
                             <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
                                 3
                             </span>
-                            Información de Pago y Facturación
+                            Datos de Factura del Proveedor
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div className="grid grid-cols-1 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                             <div>
-                                <SelectERP
-                                    label="Método de Pago"
-                                    value={formData.payment_method}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            payment_method: val,
-                                        })
-                                    }
-                                    options={PAYMENT_METHOD_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    clearable
-                                />
-                            </div>
-                            <div>
-                                <SelectERP
-                                    label="Banco"
-                                    value={formData.bank}
-                                    onChange={(val) =>
-                                        setFormData({ ...formData, bank: val })
-                                    }
-                                    options={bankOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                />
-                            </div>
-                            <div>
-                                <SelectERP
-                                    label="Estado"
-                                    value={formData.status}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            status: val,
-                                        })
-                                    }
-                                    options={CREATE_STATUS_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <Label>Número de Factura/CCF</Label>
+                                <Label>
+                                    Número de Factura/CCF del Proveedor
+                                </Label>
                                 <Input
                                     value={formData.invoice_number}
                                     onChange={(e) =>
@@ -1300,12 +1273,11 @@ function ProviderPayments() {
                                     className="font-mono"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Comprobante de Crédito Fiscal o número de
-                                    factura
+                                    Número del documento fiscal del proveedor
                                 </p>
                             </div>
-                            <div>
-                                <Label>Archivo Factura</Label>
+                            <div className="sm:col-span-2">
+                                <Label>Adjuntar Factura (Opcional)</Label>
                                 <FileUpload
                                     accept=".pdf,.jpg,.jpeg,.png"
                                     onFileChange={(file) =>
@@ -1314,9 +1286,15 @@ function ProviderPayments() {
                                             invoice_file: file,
                                         })
                                     }
+                                    helperText="El método de pago se define al ejecutar el pago desde Cuentas por Pagar"
                                 />
                             </div>
                         </div>
+                        <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            El estado inicial será "Pendiente". El método de
+                            pago se registra al ejecutar el pago.
+                        </p>
                     </div>
 
                     {/* Notes */}
@@ -1499,45 +1477,15 @@ function ProviderPayments() {
 
                     <div className="border-t border-gray-100" />
 
-                    {/* Section 3: Pago y Facturación */}
+                    {/* Section 3: Datos de Factura (Edición) */}
                     <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
                                 3
                             </span>
-                            Información de Pago y Facturación
+                            Datos de Factura y Estado
                         </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <div>
-                                <SelectERP
-                                    label="Método de Pago"
-                                    value={formData.payment_method}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            payment_method: val,
-                                        })
-                                    }
-                                    options={PAYMENT_METHOD_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    clearable
-                                />
-                            </div>
-                            <div>
-                                <SelectERP
-                                    label="Banco"
-                                    value={formData.bank}
-                                    onChange={(val) =>
-                                        setFormData({ ...formData, bank: val })
-                                    }
-                                    options={bankOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                />
-                            </div>
+                        <div className="grid grid-cols-1 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
                             <div>
                                 <SelectERP
                                     label="Estado"
@@ -1551,6 +1499,7 @@ function ProviderPayments() {
                                     options={EDIT_STATUS_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    helperText="Para marcar como pagado, use Cuentas por Pagar"
                                 />
                             </div>
                             <div className="sm:col-span-2">
@@ -1641,16 +1590,6 @@ function ProviderPayments() {
                                 <div className="text-3xl font-bold text-slate-900 tabular-nums">
                                     {formatCurrency(selectedPayment.amount)}
                                 </div>
-                                {selectedPayment.payment_method && (
-                                    <div className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
-                                        <CreditCard className="w-4 h-4" />
-                                        {
-                                            PAYMENT_METHODS[
-                                                selectedPayment.payment_method
-                                            ]
-                                        }
-                                    </div>
-                                )}
                             </div>
                             <div className="text-right space-y-2">
                                 <StatusBadge status={selectedPayment.status} />
@@ -1680,22 +1619,46 @@ function ProviderPayments() {
                                     </div>
                                     <div className="text-sm font-medium text-slate-900">
                                         {selectedPayment.service_order_number ? (
-                                            <a
-                                                href={`/orders/${selectedPayment.service_order}`}
+                                            <button
+                                                onClick={() =>
+                                                    navigate(
+                                                        `/service-orders/${selectedPayment.service_order}`
+                                                    )
+                                                }
                                                 className="text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 font-mono"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    window.location.href = `/orders/${selectedPayment.service_order}`;
-                                                }}
                                             >
                                                 {
                                                     selectedPayment.service_order_number
                                                 }
                                                 <Eye className="w-3.5 h-3.5" />
-                                            </a>
+                                            </button>
                                         ) : (
                                             <span className="text-slate-400 italic">
                                                 Sin OS vinculada
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                        Método de Pago
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                        {selectedPayment.payment_method ? (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200 w-fit">
+                                                <CreditCard className="w-4 h-4 text-slate-500" />
+                                                <span>
+                                                    {
+                                                        PAYMENT_METHODS[
+                                                            selectedPayment
+                                                                .payment_method
+                                                        ]
+                                                    }
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400 italic">
+                                                No especificado
                                             </span>
                                         )}
                                     </div>
@@ -1717,10 +1680,33 @@ function ProviderPayments() {
                                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                         Banco
                                     </div>
-                                    <div className="text-sm text-slate-700">
+                                    <div className="text-sm font-medium text-slate-900">
                                         {selectedPayment.bank?.name ||
-                                            selectedPayment.bank_name ||
-                                            "No especificado"}
+                                        selectedPayment.bank_name ? (
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 w-fit">
+                                                <Landmark className="w-4 h-4 text-blue-600" />
+                                                <span>
+                                                    {selectedPayment.bank
+                                                        ?.name ||
+                                                        selectedPayment.bank_name}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-slate-400 italic">
+                                                No especificado
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                        Solicitado por
+                                    </div>
+                                    <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
+                                        <User className="w-4 h-4 text-slate-400" />
+                                        {selectedPayment.created_by_name ||
+                                            selectedPayment.created_by_username ||
+                                            "Sistema"}
                                     </div>
                                 </div>
                             </div>
@@ -1773,7 +1759,7 @@ function ProviderPayments() {
                                             try {
                                                 const response =
                                                     await axios.get(
-                                                        `/transfers/${selectedPayment.id}/download_invoice/`,
+                                                        `/transfers/transfers/${selectedPayment.id}/download_invoice/`,
                                                         { responseType: "blob" }
                                                     );
                                                 const url =

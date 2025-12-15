@@ -28,6 +28,86 @@ class ProviderViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=True)
         return queryset.order_by('name')
 
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
+    def account_statement(self, request, pk=None):
+        from apps.transfers.models import Transfer
+        from django.db.models import Sum
+        from datetime import datetime
+
+        provider = self.get_object()
+        
+        # Filtros
+        year = request.query_params.get('year', datetime.now().year)
+        
+        # Transfers pendientes de pago (deuda total)
+        unpaid_transfers = Transfer.objects.filter(
+            provider=provider,
+            status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
+        ).order_by('transaction_date')
+        
+        total_debt = unpaid_transfers.aggregate(Sum('balance'))['balance__sum'] or 0
+        
+        # Historial del año seleccionado (pagados y pendientes)
+        history = Transfer.objects.filter(
+            provider=provider,
+            transaction_date__year=year
+        ).select_related('service_order').order_by('-transaction_date')
+        
+        # Aging Analysis
+        aging = {
+            'current': 0.0,  # 0-30 días
+            '1-30': 0.0,     # 31-60 días (1-30 vencido)
+            '31-60': 0.0,    # 61-90 días
+            '61-90': 0.0,    # 91-120 días
+            '90+': 0.0       # > 120 días
+        }
+        
+        today = datetime.now().date()
+        
+        for transfer in unpaid_transfers:
+            # Antigüedad desde la fecha de factura/transacción
+            age_days = (today - transfer.transaction_date).days
+            amount = float(transfer.balance)
+            
+            if age_days <= 30:
+                aging['current'] += amount
+            elif age_days <= 60:
+                aging['1-30'] += amount
+            elif age_days <= 90:
+                aging['31-60'] += amount
+            elif age_days <= 120:
+                aging['61-90'] += amount
+            else:
+                aging['90+'] += amount
+                
+        transfers_data = [{
+            'id': t.id,
+            'transaction_date': t.transaction_date,
+            'service_order': t.service_order.order_number if t.service_order else 'Gastos Admin',
+            'service_order_id': t.service_order.id if t.service_order else None,
+            'type': t.get_transfer_type_display(),
+            'amount': float(t.amount),
+            'balance': float(t.balance),
+            'paid_amount': float(t.paid_amount),
+            'status': t.status,
+            'status_display': t.get_status_display(),
+            'description': t.description,
+            'invoice_number': t.invoice_number or 'S/N',
+            'invoice_file': t.invoice_file.url if t.invoice_file else None
+        } for t in history]
+        
+        return Response({
+            'provider': {
+                'id': provider.id,
+                'name': provider.name,
+                'nit': provider.nit
+            },
+            'total_debt': float(total_debt),
+            'aging': aging,
+            'transfers': transfers_data,
+            'year': year
+        })
+
 class CustomsAgentViewSet(viewsets.ModelViewSet):
     queryset = CustomsAgent.objects.all()
     serializer_class = CustomsAgentSerializer

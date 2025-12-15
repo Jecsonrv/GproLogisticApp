@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Plus, Shield, UserCircle, Mail, Eye, EyeOff } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Plus, Shield, UserCircle, Mail, Eye, EyeOff, Search } from "lucide-react";
 import {
     Button,
     Card,
@@ -33,6 +33,7 @@ function Users() {
         useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
     const [formData, setFormData] = useState({
         username: "",
@@ -57,6 +58,18 @@ function Users() {
         }
         fetchUsers();
     }, [currentUser]);
+
+    const filteredUsers = useMemo(() => {
+        if (!searchTerm) return users;
+        const lowerTerm = searchTerm.toLowerCase();
+        return users.filter(
+            (user) =>
+                user.username.toLowerCase().includes(lowerTerm) ||
+                user.email.toLowerCase().includes(lowerTerm) ||
+                (user.first_name && user.first_name.toLowerCase().includes(lowerTerm)) ||
+                (user.last_name && user.last_name.toLowerCase().includes(lowerTerm))
+        );
+    }, [users, searchTerm]);
 
     const fetchUsers = async () => {
         try {
@@ -187,10 +200,10 @@ function Users() {
 
     const columns = [
         {
-            key: "username",
-            label: "Usuario",
+            accessor: "username",
+            header: "Usuario",
             render: (row) => (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 py-2">
                     <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold">
                         {row.first_name?.[0] || row.username[0].toUpperCase()}
                     </div>
@@ -198,29 +211,37 @@ function Users() {
                 </div>
             ),
         },
-        { key: "email", label: "Email" },
         {
-            key: "full_name",
-            label: "Nombre Completo",
-            render: (row) => `${row.first_name} ${row.last_name}`,
+            accessor: "email",
+            header: "Email",
+            render: (row) => <div className="py-2 text-sm text-gray-700">{row.email}</div>,
         },
         {
-            key: "role",
-            label: "Rol",
-            render: (row) => getRoleBadge(row.role),
-        },
-        {
-            key: "is_active",
-            label: "Estado",
+            header: "Nombre Completo",
             render: (row) => (
-                <Badge variant={row.is_active ? "success" : "default"}>
-                    {row.is_active ? "Activo" : "Inactivo"}
-                </Badge>
+                <div className="py-2 text-sm text-gray-900">
+                    {row.first_name} {row.last_name}
+                </div>
             ),
         },
         {
-            key: "actions",
-            label: "Acciones",
+            accessor: "role",
+            header: "Rol",
+            render: (row) => <div className="py-2">{getRoleBadge(row.role)}</div>,
+        },
+        {
+            accessor: "is_active",
+            header: "Estado",
+            render: (row) => (
+                <div className="py-2">
+                    <Badge variant={row.is_active ? "success" : "default"}>
+                        {row.is_active ? "Activo" : "Inactivo"}
+                    </Badge>
+                </div>
+            ),
+        },
+        {
+            header: "Acciones",
             render: (row) => (
                 <div className="flex gap-2">
                     <Button
@@ -350,11 +371,24 @@ function Users() {
 
             {/* Table */}
             <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                    <div className="flex items-center gap-2 flex-1 max-w-lg">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input
+                                placeholder="Buscar usuario por nombre, email..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-9"
+                            />
+                        </div>
+                    </div>
+                </CardHeader>
                 <CardContent className="px-5 pb-5 pt-0">
                     <DataTable
                         columns={columns}
-                        data={users}
-                        searchable
+                        data={filteredUsers}
+                        searchable={false}
                         pagination
                     />
                 </CardContent>
@@ -461,23 +495,27 @@ function Users() {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label>Rol *</Label>
-                                <Select
+                                <SelectERP
+                                    label="Rol"
                                     value={formData.role}
-                                    onChange={(e) =>
+                                    onChange={(value) =>
                                         setFormData({
                                             ...formData,
-                                            role: e.target.value,
+                                            role: value,
                                         })
                                     }
+                                    options={[
+                                        { id: "operativo", name: "Operativo" },
+                                        {
+                                            id: "operativo2",
+                                            name: "Operativo 2",
+                                        },
+                                        { id: "admin", name: "Administrador" },
+                                    ]}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
                                     required
-                                >
-                                    <option value="operativo">Operativo</option>
-                                    <option value="operativo2">
-                                        Operativo 2
-                                    </option>
-                                    <option value="admin">Administrador</option>
-                                </Select>
+                                />
                             </div>
                             <div className="flex items-center gap-2 pt-8">
                                 <input

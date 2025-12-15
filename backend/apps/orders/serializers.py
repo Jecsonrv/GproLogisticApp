@@ -1,19 +1,77 @@
 from rest_framework import serializers
 from django.db.models import Sum
-from .models import ServiceOrder, OrderDocument, Invoice, InvoicePayment, OrderCharge
+from .models import ServiceOrder, OrderDocument, Invoice, InvoicePayment, OrderCharge, CreditNote
 from apps.transfers.models import Transfer
 
 class OrderDocumentSerializer(serializers.ModelSerializer):
+    file_size = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
+    
     class Meta:
         model = OrderDocument
         fields = '__all__'
+    
+    def get_file_size(self, obj):
+        """Retornar tamaño del archivo en bytes"""
+        try:
+            if obj.file:
+                return obj.file.size
+        except Exception:
+            pass
+        return None
+    
+    def get_file_name(self, obj):
+        """Retornar nombre del archivo"""
+        try:
+            if obj.file:
+                return obj.file.name.split('/')[-1]
+        except Exception:
+            pass
+        return None
+    
+    def get_file_url(self, obj):
+        """Retornar URL relativa del archivo"""
+        if obj.file:
+            return obj.file.url
+        return None
+
+class CreditNoteSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True)
+    invoice_id = serializers.IntegerField(source='invoice.id', read_only=True)
+    client_name = serializers.CharField(source='invoice.service_order.client.name', read_only=True)
+
+    class Meta:
+        model = CreditNote
+        fields = '__all__'
+        read_only_fields = ('created_at', 'created_by')
+
+    def validate(self, data):
+        """Validate amount on update"""
+        if self.instance and 'amount' in data:
+            new_amount = data['amount']
+            old_amount = self.instance.amount
+            invoice = self.instance.invoice
+            
+            # Saldo disponible = Saldo Actual + Monto Viejo (que se va a reemplazar)
+            max_allowed = invoice.balance + old_amount
+            
+            if new_amount > max_allowed:
+                raise serializers.ValidationError({
+                    'amount': f"El monto no puede superar el saldo pendiente ajustable ({max_allowed})"
+                })
+        return data
 
 class ServiceOrderSerializer(serializers.ModelSerializer):
     documents = OrderDocumentSerializer(many=True, read_only=True)
+
     client_name = serializers.CharField(source='client.name', read_only=True)
     sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
     shipment_type_name = serializers.CharField(source='shipment_type.name', read_only=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
+    customs_agent_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     # Información de costos
@@ -31,8 +89,14 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceOrder
         fields = '__all__'
-        read_only_fields = ('order_number', 'created_at', 'updated_at')
+        read_only_fields = ('order_number', 'customs_agent', 'created_at', 'updated_at')
 
+    def get_customs_agent_name(self, obj):
+        """Nombre completo del aforador"""
+        if obj.customs_agent:
+            return obj.customs_agent.get_full_name() or obj.customs_agent.username
+        return None
+    
     def get_total_transfers(self, obj):
         """Total de todas las transferencias de esta OS"""
         return obj.transfers.aggregate(Sum('amount'))['amount__sum'] or 0
@@ -115,6 +179,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
+    credit_notes = CreditNoteSerializer(many=True, read_only=True)
     days_overdue = serializers.SerializerMethodField()
     # Campos de fecha explícitos para evitar problemas con datetime
     issue_date = serializers.DateField()
@@ -126,12 +191,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'invoice_type', 'service_order', 'service_order_number',
             'client_id', 'client_name', 'issue_date', 'due_date',
             'subtotal_services', 'iva_services', 'total_services',
-            'subtotal_third_party', 'total_amount', 'paid_amount', 'balance',
+            'subtotal_third_party', 'total_amount', 'paid_amount', 'credited_amount', 'balance',
             'status', 'status_display', 'payment_condition',
-            'notes', 'payments', 'days_overdue', 'ccf', 'pdf_file', 'dte_file',
+            'notes', 'payments', 'credit_notes', 'days_overdue', 'ccf', 'pdf_file', 'dte_file',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ('paid_amount', 'balance', 'created_at', 'updated_at')
+        read_only_fields = ('paid_amount', 'credited_amount', 'balance', 'created_at', 'updated_at')
 
     def get_client_name(self, obj):
         if obj.service_order and obj.service_order.client:
@@ -155,6 +220,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     """Simplified serializer for invoice lists"""
     client_name = serializers.SerializerMethodField()
     client_id = serializers.SerializerMethodField()
+    service_order = serializers.IntegerField(source='service_order.id', read_only=True)
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
@@ -163,9 +229,9 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'invoice_type', 'service_order_number',
+            'id', 'invoice_number', 'invoice_type', 'service_order', 'service_order_number',
             'client_id', 'client_name', 'issue_date', 'due_date',
-            'total_amount', 'paid_amount', 'balance', 'status',
+            'total_amount', 'paid_amount', 'credited_amount', 'balance', 'status',
             'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes'
         ]
 

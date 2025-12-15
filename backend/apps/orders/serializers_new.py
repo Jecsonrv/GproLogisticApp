@@ -37,9 +37,7 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
         return None
 
     def get_file_name(self, obj):
@@ -74,8 +72,13 @@ class OrderChargeSerializer(serializers.ModelSerializer):
 class ServiceOrderListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listados de OS"""
     client_name = serializers.CharField(source='client.name', read_only=True)
-    customs_agent_name = serializers.CharField(source='customs_agent.name', read_only=True, allow_null=True)
+    customs_agent_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    def get_customs_agent_name(self, obj):
+        if obj.customs_agent:
+            return obj.customs_agent.get_full_name() or obj.customs_agent.username
+        return None
     total_amount = serializers.SerializerMethodField()
     total_services = serializers.SerializerMethodField()
     total_third_party = serializers.SerializerMethodField()
@@ -111,8 +114,13 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
     shipment_type_name = serializers.CharField(source='shipment_type.name', read_only=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
-    customs_agent_name = serializers.CharField(source='customs_agent.name', read_only=True, allow_null=True)
+    customs_agent_name = serializers.SerializerMethodField()
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    
+    def get_customs_agent_name(self, obj):
+        if obj.customs_agent:
+            return obj.customs_agent.get_full_name() or obj.customs_agent.username
+        return None
     closed_by_username = serializers.CharField(source='closed_by.username', read_only=True, allow_null=True)
 
     # Displays

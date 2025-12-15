@@ -1,10 +1,13 @@
 from django.db import models
 from django.utils import timezone
+from decimal import Decimal
+from django.core.validators import MinValueValidator
 from apps.orders.models import ServiceOrder
 from apps.catalogs.models import Provider, Bank
 from apps.validators import validate_document_file
+from apps.core.models import SoftDeleteModel
 
-class Transfer(models.Model):
+class Transfer(SoftDeleteModel):
     """Pagos a Proveedores - Registro de gastos y costos"""
     TYPE_CHOICES = (
         ('costos', 'Costos Directos'),  # Pagos para ejecutar servicio de cliente
@@ -19,6 +22,7 @@ class Transfer(models.Model):
     STATUS_CHOICES = (
         ('pendiente', 'Pendiente'),  # Registrado, esperando aprobación
         ('aprobado', 'Aprobado'),  # Validado, listo para pagar
+        ('parcial', 'Pago Parcial'),
         ('pagado', 'Pagado'),  # Pago ejecutado
         # Mantener compatibilidad
         ('provisionada', 'Provisionada (Legacy)'),
@@ -30,10 +34,14 @@ class Transfer(models.Model):
         ('transferencia', 'Transferencia Bancaria'),
         ('cheque', 'Cheque'),
         ('tarjeta', 'Tarjeta'),
+        ('nota_credito', 'Nota de Crédito'),
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, verbose_name="Método de Pago")
 
-    amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Monto")
+    amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Monto Total")
+    paid_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto Pagado")
+    balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo Pendiente")
+    
     description = models.TextField(verbose_name="Descripción")
 
     # Relaciones
@@ -41,7 +49,7 @@ class Transfer(models.Model):
     client = models.ForeignKey('clients.Client', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cliente")
     provider = models.ForeignKey(Provider, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Proveedor")
 
-    # Información de pago
+    # Información de pago (Datos de la factura del proveedor)
     beneficiary_name = models.CharField(max_length=255, blank=True, verbose_name="A Nombre De (Beneficiario)")
     bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     ccf = models.CharField(max_length=100, blank=True, verbose_name="CCF (Número de Factura)")
@@ -57,7 +65,7 @@ class Transfer(models.Model):
 
     # Fechas
     transaction_date = models.DateField(default=timezone.now, verbose_name="Fecha de Transacción")
-    payment_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Pago")
+    payment_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Pago (Ultimo)")
     mes = models.CharField(max_length=20, blank=True, verbose_name="Mes")
 
     # Auditoría
@@ -90,8 +98,62 @@ class Transfer(models.Model):
             month_num = self.transaction_date.month if self.transaction_date else timezone.now().month
             self.mes = months[month_num]
 
-        # Si se marca como pagada, registrar fecha de pago
-        if self.status == 'pagada' and not self.payment_date:
-            self.payment_date = timezone.now().date()
+        # Calcular balance
+        self.balance = self.amount - self.paid_amount
+        
+        # Actualizar estado basado en saldo
+        if self.balance <= 0 and self.amount > 0:
+            self.status = 'pagado'
+            if not self.payment_date:
+                self.payment_date = timezone.now().date()
+        elif self.paid_amount > 0 and self.balance > 0:
+            self.status = 'parcial'
+        elif self.status == 'pagado' and self.balance > 0:
+            self.status = 'aprobado' # Revertir a aprobado si el saldo vuelve a ser positivo
 
         super().save(*args, **kwargs)
+        
+    def delete(self, *args, **kwargs):
+        self.payments.all().delete()
+        super().delete(*args, **kwargs)
+
+
+class TransferPayment(SoftDeleteModel):
+    """Pagos parciales realizados a una transferencia (gasto)"""
+    transfer = models.ForeignKey(Transfer, on_delete=models.CASCADE, related_name='payments', verbose_name="Transferencia/Gasto")
+    amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto Pagado")
+    payment_date = models.DateField(default=timezone.now, verbose_name="Fecha de Pago")
+    payment_method = models.CharField(max_length=20, choices=Transfer.PAYMENT_METHOD_CHOICES, verbose_name="Método de Pago")
+    reference_number = models.CharField(max_length=100, blank=True, verbose_name="Referencia")
+    notes = models.TextField(blank=True, verbose_name="Notas")
+    
+    proof_file = models.FileField(
+        upload_to='transfers/payments/',
+        null=True,
+        blank=True,
+        verbose_name="Comprobante de Pago",
+        validators=[validate_document_file]
+    )
+    
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Pago a Proveedor"
+        verbose_name_plural = "Pagos a Proveedores"
+        ordering = ['-payment_date']
+        
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Actualizar total pagado en la transferencia
+        transfer = self.transfer
+        payments = transfer.payments.filter(is_deleted=False)
+        transfer.paid_amount = sum(p.amount for p in payments)
+        transfer.save()
+        
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        transfer = self.transfer
+        payments = transfer.payments.filter(is_deleted=False)
+        transfer.paid_amount = sum(p.amount for p in payments)
+        transfer.save()

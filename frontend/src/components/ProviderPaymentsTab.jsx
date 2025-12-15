@@ -11,6 +11,7 @@ import {
     DollarSign,
     Edit,
     FileText,
+    Lock,
 } from "lucide-react";
 import {
     Button,
@@ -24,16 +25,23 @@ import {
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, getTodayDate } from "../lib/utils";
+import usePermissionStore from "../stores/permissionStore";
 
 /**
  * ProviderPaymentsTab - Gestión completa de Pagos a Proveedores
  * Incluye: Costos Directos, Cargos a Clientes, Gastos de Operación
+ *
+ * RBAC: Operativo básico NO puede aprobar pagos (botón deshabilitado + validación backend)
  */
 const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
     const [payments, setPayments] = useState([]);
     const [providers, setProviders] = useState([]);
-    const [banks, setBanks] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // RBAC: Verificar si el usuario puede aprobar pagos
+    const canApprovePayments = usePermissionStore(
+        (state) => state.canApprovePayments
+    );
     const [isAddingPayment, setIsAddingPayment] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingPaymentId, setEditingPaymentId] = useState(null);
@@ -44,14 +52,13 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         action: null,
     });
 
+    // Form state - Nota: payment_method y bank se definen al EJECUTAR el pago desde CXP
     const [paymentForm, setPaymentForm] = useState({
         transfer_type: "costos",
         amount: "",
         description: "",
         provider: "",
-        payment_method: "",
         beneficiary_name: "",
-        bank: "",
         ccf: "",
         invoice_number: "",
         invoice_file: null,
@@ -66,14 +73,6 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         { id: "admin", name: "Gasto de Operación" },
     ];
 
-    const paymentMethodOptions = [
-        { id: "", name: "Seleccionar..." },
-        { id: "transferencia", name: "Transferencia Bancaria" },
-        { id: "efectivo", name: "Efectivo" },
-        { id: "cheque", name: "Cheque" },
-        { id: "tarjeta", name: "Tarjeta" },
-    ];
-
     const providerOptions = [
         { id: "", name: "Seleccionar proveedor..." },
         ...providers
@@ -85,15 +84,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             .map((p) => ({ id: String(p.id), name: p.name })),
     ];
 
-    const bankOptions = [
-        { id: "", name: "Seleccionar banco..." },
-        ...banks.map((b) => ({ id: String(b.id), name: b.name })),
-    ];
-
     useEffect(() => {
         fetchPayments();
         fetchProviders();
-        fetchBanks();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderId]);
 
@@ -101,11 +94,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         try {
             setLoading(true);
             const response = await axios.get(
-                `/transfers/?service_order=${orderId}`
+                `/transfers/transfers/?service_order=${orderId}`
             );
-            setPayments(response.data);
+            setPayments(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             console.error("Error loading payments:", error);
+            setPayments([]);
         } finally {
             setLoading(false);
         }
@@ -120,19 +114,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         }
     };
 
-    const fetchBanks = async () => {
-        try {
-            const response = await axios.get("/catalogs/banks/");
-            setBanks(response.data);
-        } catch (_error) {
-            console.error("Error loading banks");
-        }
-    };
-
     const handleEditPayment = (payment) => {
         console.log("=== DATOS DEL PAGO PARA EDITAR ===", payment);
         console.log("provider:", payment.provider);
-        console.log("bank:", payment.bank);
         console.log("service_order:", payment.service_order);
 
         setPaymentForm({
@@ -140,9 +124,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             amount: payment.amount || "",
             description: payment.description || "",
             provider: payment.provider ? String(payment.provider) : "",
-            payment_method: payment.payment_method || "",
             beneficiary_name: payment.beneficiary_name || "",
-            bank: payment.bank ? String(payment.bank) : "",
             ccf: payment.ccf || "",
             invoice_number: payment.invoice_number || "",
             invoice_file: null, // No cargamos el archivo existente
@@ -171,14 +153,11 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
 
             if (paymentForm.provider)
                 formData.append("provider", paymentForm.provider);
-            if (paymentForm.payment_method)
-                formData.append("payment_method", paymentForm.payment_method);
             if (paymentForm.beneficiary_name)
                 formData.append(
                     "beneficiary_name",
                     paymentForm.beneficiary_name
                 );
-            if (paymentForm.bank) formData.append("bank", paymentForm.bank);
             if (paymentForm.ccf) formData.append("ccf", paymentForm.ccf);
             if (paymentForm.invoice_number)
                 formData.append("invoice_number", paymentForm.invoice_number);
@@ -187,13 +166,17 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
 
             if (isEditing) {
                 // Actualizar pago existente
-                await axios.patch(`/transfers/${editingPaymentId}/`, formData, {
-                    headers: { "Content-Type": "multipart/form-data" },
-                });
+                await axios.patch(
+                    `/transfers/transfers/${editingPaymentId}/`,
+                    formData,
+                    {
+                        headers: { "Content-Type": "multipart/form-data" },
+                    }
+                );
                 toast.success("Pago actualizado exitosamente");
             } else {
                 // Crear nuevo pago
-                await axios.post("/transfers/", formData, {
+                await axios.post("/transfers/transfers/", formData, {
                     headers: { "Content-Type": "multipart/form-data" },
                 });
                 toast.success("Pago a proveedor registrado exitosamente");
@@ -225,7 +208,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         setConfirmDialog({ open: false, id: null, action: null });
 
         try {
-            await axios.patch(`/transfers/${id}/`, { status: "aprobado" });
+            await axios.patch(`/transfers/transfers/${id}/`, {
+                status: "aprobado",
+            });
             toast.success("Pago aprobado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
@@ -243,7 +228,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         setConfirmDialog({ open: false, id: null, action: null });
 
         try {
-            await axios.patch(`/transfers/${id}/`, {
+            await axios.patch(`/transfers/transfers/${id}/`, {
                 status: "pagado",
                 payment_date: getTodayDate(),
             });
@@ -264,7 +249,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         setConfirmDialog({ open: false, id: null, action: null });
 
         try {
-            await axios.delete(`/transfers/${id}/`);
+            await axios.delete(`/transfers/transfers/${id}/`);
             toast.success("Pago eliminado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
@@ -302,9 +287,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             amount: "",
             description: "",
             provider: "",
-            payment_method: "",
             beneficiary_name: "",
-            bank: "",
             ccf: "",
             invoice_number: "",
             invoice_file: null,
@@ -420,10 +403,13 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         {
             header: "Comp.",
             accessor: "invoice_file",
-            className: "w-20 text-center",
+            className: "w-16 text-center",
+            headerClassName: "text-center",
             cell: (row) =>
                 row.invoice_file ? (
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
                         onClick={(e) => {
                             e.stopPropagation();
                             window.open(row.invoice_file, "_blank");
@@ -431,11 +417,13 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                         onContextMenu={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            // Descargar usando axios
                             axios
-                                .get(`/transfers/${row.id}/download_invoice/`, {
-                                    responseType: "blob",
-                                })
+                                .get(
+                                    `/transfers/transfers/${row.id}/download_invoice/`,
+                                    {
+                                        responseType: "blob",
+                                    }
+                                )
                                 .then((response) => {
                                     const url = window.URL.createObjectURL(
                                         new Blob([response.data])
@@ -460,71 +448,93 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                     );
                                 });
                         }}
-                        className="inline-flex items-center justify-center p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
                         title="Click: Ver | Click derecho: Descargar"
                     >
-                        <FileText className="w-4 h-4" />
-                    </button>
+                        <FileText className="h-4 w-4" />
+                    </Button>
                 ) : (
-                    <span className="text-slate-400 text-xs">—</span>
+                    <span className="text-slate-300 text-xs">—</span>
                 ),
         },
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-44",
+            className: "w-40 text-right",
             cell: (row) => (
-                <div className="flex items-center gap-1">
-                    <button
+                <div className="flex items-center justify-end gap-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleEditPayment(row)}
-                        className="p-1.5 text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
+                        className="text-slate-500 hover:text-blue-600 hover:bg-blue-50"
                         title="Editar"
                     >
-                        <Edit className="w-4 h-4" />
-                    </button>
-                    {row.status === "pendiente" && (
-                        <button
+                        <Edit className="h-4 w-4" />
+                    </Button>
+                    {/* RBAC: Botón de aprobar - Solo visible si tiene permiso */}
+                    {row.status === "pendiente" && canApprovePayments() && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleApprove(row.id)}
-                            className="p-1.5 text-success-600 hover:text-success-700 hover:bg-success-50 rounded transition-colors"
+                            className="text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
                             title="Aprobar"
                         >
-                            <Check className="w-4 h-4" />
-                        </button>
+                            <Check className="h-4 w-4" />
+                        </Button>
+                    )}
+                    {/* RBAC: Mostrar icono de bloqueo si no puede aprobar */}
+                    {row.status === "pendiente" && !canApprovePayments() && (
+                        <span
+                            className="p-2 text-slate-300 cursor-not-allowed"
+                            title="No tiene permisos para aprobar pagos"
+                        >
+                            <Lock className="h-4 w-4" />
+                        </span>
                     )}
                     {row.status === "aprobado" && (
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleMarkAsPaid(row.id)}
-                            className="p-1.5 text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded transition-colors"
+                            className="text-slate-500 hover:text-amber-600 hover:bg-amber-50"
                             title="Marcar como pagado"
                         >
-                            <DollarSign className="w-4 h-4" />
-                        </button>
+                            <DollarSign className="h-4 w-4" />
+                        </Button>
                     )}
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDelete(row.id)}
-                        className="p-1.5 text-danger-600 hover:text-danger-700 hover:bg-danger-50 rounded transition-colors"
+                        className="text-slate-400 hover:text-red-600 hover:bg-red-50"
                         title="Eliminar"
                         disabled={row.status === "pagado"}
                     >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
                 </div>
             ),
         },
     ];
 
     // Calcular totales por tipo
+    const safePayments = Array.isArray(payments) ? payments : [];
     const totals = {
-        costos: payments
+        costos: safePayments
             .filter((p) => p.transfer_type === "costos")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0),
-        cargos: payments
+        cargos: safePayments
             .filter((p) => p.transfer_type === "cargos")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0),
-        admin: payments
+        admin: safePayments
             .filter((p) => p.transfer_type === "admin")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0),
-        total: payments.reduce((sum, p) => sum + parseFloat(p.amount || 0), 0),
+        total: safePayments.reduce(
+            (sum, p) => sum + parseFloat(p.amount || 0),
+            0
+        ),
     };
 
     return (
@@ -734,68 +744,27 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             />
                         </div>
 
-                        <div className="grid grid-cols-3 gap-4">
-                            {/* Método de Pago */}
-                            <div>
-                                <Label className="label-corporate">
-                                    Método de Pago
-                                </Label>
-                                <Select
-                                    value={paymentForm.payment_method}
-                                    onChange={(val) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            payment_method: val,
-                                        })
-                                    }
-                                    options={paymentMethodOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    placeholder="Seleccionar..."
-                                />
-                            </div>
-
-                            {/* Banco */}
-                            <div>
-                                <Label className="label-corporate">Banco</Label>
-                                <Select
-                                    value={paymentForm.bank}
-                                    onChange={(val) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            bank: val,
-                                        })
-                                    }
-                                    options={bankOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    placeholder="Seleccionar banco..."
-                                />
-                            </div>
-
-                            {/* Número de Factura/CCF */}
-                            <div>
-                                <Label className="label-corporate">
-                                    Número de Factura/CCF
-                                </Label>
-                                <Input
-                                    type="text"
-                                    value={paymentForm.invoice_number}
-                                    onChange={(e) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            invoice_number: e.target.value,
-                                        })
-                                    }
-                                    className="input-corporate"
-                                    placeholder="Ej: F-2025-001 o CCF-123456"
-                                />
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Comprobante de Crédito Fiscal o número de
-                                    factura
-                                </p>
-                            </div>
+                        {/* Número de Factura/CCF */}
+                        <div>
+                            <Label className="label-corporate">
+                                Número de Factura/CCF
+                            </Label>
+                            <Input
+                                type="text"
+                                value={paymentForm.invoice_number}
+                                onChange={(e) =>
+                                    setPaymentForm({
+                                        ...paymentForm,
+                                        invoice_number: e.target.value,
+                                    })
+                                }
+                                className="input-corporate"
+                                placeholder="Ej: F-2025-001 o CCF-123456"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                Comprobante de Crédito Fiscal o número de
+                                factura
+                            </p>
                         </div>
 
                         {/* Comprobante */}

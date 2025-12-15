@@ -7,8 +7,8 @@ from decimal import Decimal
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from .models import Invoice, InvoicePayment, ServiceOrder
-from .serializers import InvoiceSerializer, InvoiceListSerializer, InvoicePaymentSerializer
+from .models import Invoice, InvoicePayment, ServiceOrder, CreditNote
+from .serializers import InvoiceSerializer, InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
 
 
@@ -174,7 +174,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         overdue_count = overdue_queryset.count()
 
         # Status counts
-        pending_count = queryset.filter(status='pending', balance__gt=0).count()
+        # pending_count ahora refleja TODAS las facturas con saldo pendiente (incluyendo parciales y vencidas)
+        # para ser consistente con total_pending
+        pending_count = queryset.filter(balance__gt=0).count()
+        
         paid_count = queryset.filter(status='paid').count()
         partial_count = queryset.filter(status='partial').count()
         cancelled_count = queryset.filter(status='cancelled').count()
@@ -374,65 +377,44 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=['post'])
-    def generate_from_orders(self, request, pk=None):
-        """Generate invoice from selected service orders"""
+    def add_credit_note(self, request, pk=None):
+        """Register a credit note for an invoice"""
+        invoice = self.get_object()
+        
+        if invoice.status == 'cancelled':
+             return Response({'error': 'No se pueden aplicar NC a facturas anuladas'}, status=status.HTTP_400_BAD_REQUEST)
+             
         try:
-            client_id = request.data.get('client')
-            order_ids = request.data.get('order_ids', [])
+            amount = Decimal(str(request.data.get('amount', 0)))
+            if amount <= 0:
+                 return Response({'error': 'El monto debe ser mayor a cero'}, status=status.HTTP_400_BAD_REQUEST)
+                 
+            # Validar contra saldo pendiente para evitar saldos negativos
+            # Nota: Si se requiere permitir saldos a favor, cambiar a invoice.total_amount
+            if amount > invoice.balance:
+                return Response({
+                    'error': f'El monto de la NC no puede superar el saldo pendiente de la factura (${invoice.balance})'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-            if not client_id or not order_ids:
-                return Response(
-                    {'error': 'Debe proporcionar cliente y órdenes'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Validate orders
-            orders = ServiceOrder.objects.filter(
-                id__in=order_ids,
-                client_id=client_id,
-                status='cerrada',
-                facturado=False
-            )
-
-            if orders.count() != len(order_ids):
-                return Response(
-                    {'error': 'Algunas órdenes no son válidas para facturar'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Calculate totals
-            total = sum(order.total_amount for order in orders)
-
-            # Create invoice
-            from django.utils import timezone
-            invoice = Invoice.objects.create(
-                client_id=client_id,
-                sub_client_id=request.data.get('sub_client'),
-                invoice_date=request.data.get('invoice_date', timezone.now().date()),
-                due_date=request.data.get('due_date'),
-                ccf=request.data.get('ccf', ''),
-                total_amount=total,
-                balance=total,
+            credit_note = CreditNote.objects.create(
+                invoice=invoice,
+                note_number=request.data.get('note_number'),
+                amount=amount,
+                reason=request.data.get('reason', ''),
+                issue_date=request.data.get('issue_date'),
+                pdf_file=request.FILES.get('pdf_file'),
                 created_by=request.user
             )
-
-            # Link orders to invoice
-            for order in orders:
-                order.facturado = True
-                order.save()
-            invoice.service_orders.set(orders)
-
+            
+            # Recalculate invoice happens in CreditNote.save()
+            
             return Response({
-                'message': 'Factura generada exitosamente',
-                'invoice_id': invoice.id,
-                'invoice_number': invoice.invoice_number
+                'message': 'Nota de Crédito registrada exitosamente',
+                'credit_note_id': credit_note.id
             }, status=status.HTTP_201_CREATED)
-
+            
         except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InvoicePaymentViewSet(viewsets.ModelViewSet):
@@ -476,3 +458,14 @@ class InvoicePaymentViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+class CreditNoteViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing credit notes"""
+    queryset = CreditNote.objects.all()
+    serializer_class = CreditNoteSerializer
+    permission_classes = [IsOperativo]
+    filterset_fields = ['invoice']
+    
+    def perform_destroy(self, instance):
+        instance.delete() # Trigger soft delete and recalculation

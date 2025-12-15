@@ -124,7 +124,7 @@ const DataTable = ({
                                         column.accessor &&
                                         handleSort(column.accessor)
                                     }
-                                    className={`px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${
+                                    className={`px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] ${
                                         column.sortable !== false &&
                                         column.accessor
                                             ? "cursor-pointer hover:bg-gray-50 transition-colors"

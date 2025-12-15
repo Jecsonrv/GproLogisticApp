@@ -28,7 +28,7 @@ export const useServiceOrder = (id) => {
             const { data } = await axios.get(`/orders/service-orders/${id}/`);
             return data;
         },
-        enabled: !!id,
+        enabled: !!id && id !== "undefined",
     });
 };
 

@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'import_export',
 
     # Local apps
+    'apps.core',
     'apps.users',
     'apps.clients',
     'apps.catalogs',

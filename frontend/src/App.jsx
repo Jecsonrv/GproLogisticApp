@@ -6,8 +6,9 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import useAuthStore from "./stores/authStore";
 
-// Login se carga inmediatamente (página crítica)
+// Login y páginas de error se cargan inmediatamente
 import Login from "./pages/Login";
+import Forbidden from "./pages/Forbidden";
 
 // Lazy loading para todas las demás páginas (code splitting)
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -21,7 +22,9 @@ const Invoicing = lazy(() => import("./pages/Invoicing"));
 const ProviderPayments = lazy(() => import("./pages/ProviderPayments"));
 const Users = lazy(() => import("./pages/Users"));
 const AccountStatements = lazy(() => import("./pages/AccountStatements"));
+const ProviderStatements = lazy(() => import("./pages/ProviderStatements"));
 const Catalogs = lazy(() => import("./pages/Catalogs"));
+const Profile = lazy(() => import("./pages/Profile"));
 
 // Loading fallback component
 function LoadingFallback() {
@@ -51,7 +54,11 @@ function App() {
         <ErrorBoundary>
             <Suspense fallback={<LoadingFallback />}>
                 <Routes>
+                    {/* Rutas públicas */}
                     <Route path="/login" element={<Login />} />
+                    <Route path="/403" element={<Forbidden />} />
+
+                    {/* Rutas protegidas con RBAC */}
                     <Route
                         path="/"
                         element={
@@ -63,7 +70,10 @@ function App() {
                         <Route index element={<Dashboard />} />
                         <Route path="clients" element={<Clients />} />
                         <Route path="clients/new" element={<ClientForm />} />
-                        <Route path="clients/:id/edit" element={<ClientForm />} />
+                        <Route
+                            path="clients/:id/edit"
+                            element={<ClientForm />}
+                        />
                         <Route
                             path="service-orders"
                             element={<ServiceOrders />}
@@ -78,13 +88,21 @@ function App() {
                             element={<ClientPricing />}
                         />
                         <Route path="invoicing" element={<Invoicing />} />
-                        <Route path="provider-payments" element={<ProviderPayments />} />
+                        <Route
+                            path="provider-payments"
+                            element={<ProviderPayments />}
+                        />
                         <Route path="catalogs" element={<Catalogs />} />
                         <Route path="users" element={<Users />} />
                         <Route
                             path="account-statements"
                             element={<AccountStatements />}
                         />
+                        <Route
+                            path="provider-statements"
+                            element={<ProviderStatements />}
+                        />
+                        <Route path="profile" element={<Profile />} />
                     </Route>
                 </Routes>
             </Suspense>
