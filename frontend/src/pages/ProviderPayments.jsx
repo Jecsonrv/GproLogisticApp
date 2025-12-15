@@ -452,7 +452,12 @@ function ProviderPayments() {
             resetForm();
             fetchPayments();
         } catch (error) {
-            toast.error("Error al actualizar pago");
+            const errorMsg =
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                Object.values(error.response?.data || {})[0]?.[0] ||
+                "Error al actualizar pago";
+            toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
         }
@@ -467,7 +472,12 @@ function ProviderPayments() {
             setDeleteConfirm({ open: false, id: null });
             fetchPayments();
         } catch (error) {
-            toast.error("Error al eliminar pago");
+            const errorMsg =
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                Object.values(error.response?.data || {})[0]?.[0] ||
+                "Error al eliminar pago";
+            toast.error(errorMsg);
         }
     };
 

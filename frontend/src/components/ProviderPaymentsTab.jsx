@@ -214,8 +214,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             toast.success("Pago aprobado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch (_error) {
-            toast.error("Error al aprobar pago");
+        } catch (error) {
+            const errorMessage =
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Error al aprobar pago";
+            toast.error(errorMessage);
         }
     };
 
@@ -236,7 +240,11 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             fetchPayments();
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error("Error al marcar como pagado");
+            const errorMessage =
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Error al marcar como pagado";
+            toast.error(errorMessage);
         }
     };
 

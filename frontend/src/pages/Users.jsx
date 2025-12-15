@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Shield, UserCircle, Mail, Eye, EyeOff, Search } from "lucide-react";
+import {
+    Plus,
+    Shield,
+    UserCircle,
+    Mail,
+    Eye,
+    EyeOff,
+    Search,
+} from "lucide-react";
 import {
     Button,
     Card,
@@ -41,6 +49,7 @@ function Users() {
         first_name: "",
         last_name: "",
         password: "",
+        password_confirm: "",
         role: "operativo",
         is_active: true,
     });
@@ -66,8 +75,10 @@ function Users() {
             (user) =>
                 user.username.toLowerCase().includes(lowerTerm) ||
                 user.email.toLowerCase().includes(lowerTerm) ||
-                (user.first_name && user.first_name.toLowerCase().includes(lowerTerm)) ||
-                (user.last_name && user.last_name.toLowerCase().includes(lowerTerm))
+                (user.first_name &&
+                    user.first_name.toLowerCase().includes(lowerTerm)) ||
+                (user.last_name &&
+                    user.last_name.toLowerCase().includes(lowerTerm))
         );
     }, [users, searchTerm]);
 
@@ -85,6 +96,13 @@ function Users() {
 
     const handleCreate = async (e) => {
         e.preventDefault();
+
+        // Validar que las contraseñas coincidan
+        if (formData.password !== formData.password_confirm) {
+            toast.error("Las contraseñas no coinciden");
+            return;
+        }
+
         try {
             await axios.post("/users/", formData);
             toast.success("Usuario creado exitosamente");
@@ -176,6 +194,7 @@ function Users() {
             first_name: "",
             last_name: "",
             password: "",
+            password_confirm: "",
             role: "operativo",
             is_active: true,
         });
@@ -214,7 +233,9 @@ function Users() {
         {
             accessor: "email",
             header: "Email",
-            render: (row) => <div className="py-2 text-sm text-gray-700">{row.email}</div>,
+            render: (row) => (
+                <div className="py-2 text-sm text-gray-700">{row.email}</div>
+            ),
         },
         {
             header: "Nombre Completo",
@@ -227,7 +248,9 @@ function Users() {
         {
             accessor: "role",
             header: "Rol",
-            render: (row) => <div className="py-2">{getRoleBadge(row.role)}</div>,
+            render: (row) => (
+                <div className="py-2">{getRoleBadge(row.role)}</div>
+            ),
         },
         {
             accessor: "is_active",
@@ -463,33 +486,69 @@ function Users() {
                             </div>
                         </div>
 
-                        <div>
-                            <Label>Contraseña *</Label>
-                            <div className="relative">
-                                <Input
-                                    type={showPassword ? "text" : "password"}
-                                    value={formData.password}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            password: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setShowPassword(!showPassword)
-                                    }
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                >
-                                    {showPassword ? (
-                                        <EyeOff className="h-4 w-4" />
-                                    ) : (
-                                        <Eye className="h-4 w-4" />
-                                    )}
-                                </button>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Contraseña *</Label>
+                                <div className="relative">
+                                    <Input
+                                        type={
+                                            showPassword ? "text" : "password"
+                                        }
+                                        value={formData.password}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                password: e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowPassword(!showPassword)
+                                        }
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="h-4 w-4" />
+                                        ) : (
+                                            <Eye className="h-4 w-4" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <Label>Confirmar Contraseña *</Label>
+                                <div className="relative">
+                                    <Input
+                                        type={
+                                            showPassword ? "text" : "password"
+                                        }
+                                        value={formData.password_confirm}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                password_confirm:
+                                                    e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowPassword(!showPassword)
+                                        }
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="h-4 w-4" />
+                                        ) : (
+                                            <Eye className="h-4 w-4" />
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
