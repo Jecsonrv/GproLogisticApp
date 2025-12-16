@@ -12,6 +12,11 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# ============================================
+# ENVIRONMENT DETECTION
+# ============================================
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')  # development, staging, production
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -67,25 +72,127 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database - SQLite para desarrollo
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# ============================================
+# DATABASE CONFIGURATION
+# ============================================
+# Detectar automáticamente qué base de datos usar
+DATABASE_ENGINE = os.getenv('DATABASE_ENGINE', 'sqlite')  # sqlite o postgresql
+
+if DATABASE_ENGINE == 'postgresql' or ENVIRONMENT in ['staging', 'production']:
+    # PostgreSQL - Producción/Staging
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'gpro_logistic'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'gpro_secure_2024'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'CONN_MAX_AGE': 60,  # Conexiones persistentes (60 segundos)
+            'CONN_HEALTH_CHECKS': True,  # Django 4.1+
+            'OPTIONS': {
+                'connect_timeout': 10,
+                'client_encoding': 'UTF8',  # Fix para Windows con caracteres especiales
+                # Pool de conexiones y configuración de rendimiento
+                'options': '-c statement_timeout=30000 -c client_encoding=UTF8',
+            },
+            # Configuración para transacciones ACID en operaciones financieras
+            'ATOMIC_REQUESTS': False,  # Manejamos transacciones manualmente donde sea crítico
+        }
     }
+else:
+    # SQLite - Desarrollo local
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# ============================================
+# REDIS CONFIGURATION (Cache, Sessions, Locks)
+# ============================================
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'False') == 'True' or ENVIRONMENT in ['staging', 'production']
+
+if REDIS_ENABLED:
+    # Cache con Redis
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': f'{REDIS_URL}/0',
+            'TIMEOUT': 300,  # 5 minutos default
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 5,
+                'SOCKET_TIMEOUT': 5,
+                'RETRY_ON_TIMEOUT': True,
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 50,
+                    'retry_on_timeout': True,
+                },
+                # Serialización eficiente
+                'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+            },
+            'KEY_PREFIX': 'gpro',
+        },
+        # Cache separado para locks distribuidos (sin timeout)
+        'locks': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': f'{REDIS_URL}/1',
+            'TIMEOUT': None,  # Sin timeout para locks
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 5,
+                'SOCKET_TIMEOUT': 5,
+            },
+            'KEY_PREFIX': 'gpro_lock',
+        },
+        # Cache para sesiones
+        'sessions': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': f'{REDIS_URL}/2',
+            'TIMEOUT': 86400,  # 24 horas
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'gpro_session',
+        },
+    }
+    
+    # Sesiones en Redis (más rápido y escalable)
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'sessions'
+else:
+    # Cache en memoria para desarrollo
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'gpro-cache',
+        },
+        'locks': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'gpro-locks',
+        },
+    }
+
+# ============================================
+# CACHE TIMEOUTS (Configuración centralizada)
+# ============================================
+CACHE_TIMEOUTS = {
+    'dashboard_metrics': 60 * 5,      # 5 minutos - métricas del dashboard
+    'client_list': 60 * 10,           # 10 minutos - lista de clientes
+    'service_list': 60 * 15,          # 15 minutos - catálogo de servicios
+    'user_permissions': 60 * 30,      # 30 minutos - permisos de usuario
+    'exchange_rate': 60 * 60,         # 1 hora - tasa de cambio
+    'reports': 60 * 60 * 2,           # 2 horas - reportes pesados
 }
 
-# PostgreSQL Configuration (para producción - descomentar cuando tengas PostgreSQL)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('DB_NAME', 'gpro_logistic'),
-#         'USER': os.getenv('DB_USER', 'postgres'),
-#         'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-#         'HOST': os.getenv('DB_HOST', 'localhost'),
-#         'PORT': os.getenv('DB_PORT', '5432'),
-#     }
-# }
+# ============================================
+# LOCK CONFIGURATION (Operaciones críticas)
+# ============================================
+DISTRIBUTED_LOCK_TIMEOUT = 30  # Segundos máximos que un lock puede existir
+LOCK_RETRY_INTERVAL = 0.1     # Segundos entre reintentos para obtener lock
 
 AUTH_USER_MODEL = 'users.User'
 

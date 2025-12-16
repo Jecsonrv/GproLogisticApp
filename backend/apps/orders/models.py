@@ -91,32 +91,48 @@ class ServiceOrder(SoftDeleteModel):
         super().save(*args, **kwargs)
 
     def get_total_services(self):
-        """Calcula el total de servicios cobrados"""
-        return sum(charge.total for charge in self.charges.all())
+        """Calcula el total de servicios cobrados (en moneda base GTQ)"""
+        total = Decimal('0.00')
+        for charge in self.charges.all():
+            amount = charge.total
+            # Normalizar a moneda base si tiene tipo de cambio
+            if hasattr(charge, 'exchange_rate') and charge.exchange_rate:
+                amount = amount * charge.exchange_rate
+            total += amount
+        return total
 
     def get_total_third_party(self):
-        """Calcula el total de gastos facturables al cliente (cargos + terceros legacy)"""
-        return sum(
-            transfer.amount for transfer in self.transfers.filter(
-                transfer_type__in=['cargos', 'terceros']
-            )
-        )
+        """Calcula el total de gastos facturables al cliente (cargos + terceros legacy) en GTQ"""
+        total = Decimal('0.00')
+        transfers = self.transfers.filter(transfer_type__in=['cargos', 'terceros'])
+        for transfer in transfers:
+            amount = transfer.amount
+            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
+                amount = amount * transfer.exchange_rate
+            total += amount
+        return total
     
     def get_total_direct_costs(self):
-        """Calcula el total de costos directos (costos + propios legacy)"""
-        return sum(
-            transfer.amount for transfer in self.transfers.filter(
-                transfer_type__in=['costos', 'propios']
-            )
-        )
+        """Calcula el total de costos directos (costos + propios legacy) en GTQ"""
+        total = Decimal('0.00')
+        transfers = self.transfers.filter(transfer_type__in=['costos', 'propios'])
+        for transfer in transfers:
+            amount = transfer.amount
+            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
+                amount = amount * transfer.exchange_rate
+            total += amount
+        return total
     
     def get_total_admin_costs(self):
-        """Calcula el total de gastos administrativos/operación"""
-        return sum(
-            transfer.amount for transfer in self.transfers.filter(
-                transfer_type='admin'
-            )
-        )
+        """Calcula el total de gastos administrativos/operación en GTQ"""
+        total = Decimal('0.00')
+        transfers = self.transfers.filter(transfer_type='admin')
+        for transfer in transfers:
+            amount = transfer.amount
+            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
+                amount = amount * transfer.exchange_rate
+            total += amount
+        return total
 
     def get_total_amount(self):
         """Calcula el monto total de la OS (servicios + terceros)"""
@@ -183,6 +199,21 @@ class OrderCharge(SoftDeleteModel):
         verbose_name="Servicio"
     )
     description = models.CharField(max_length=255, blank=True, verbose_name="Descripción")
+    
+    # Moneda
+    CURRENCY_CHOICES = (
+        ('GTQ', 'Quetzales (GTQ)'),
+        ('USD', 'Dólares (USD)'),
+    )
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='GTQ', verbose_name="Moneda")
+    exchange_rate = models.DecimalField(
+        max_digits=10, 
+        decimal_places=4, 
+        default=Decimal('1.0000'), 
+        validators=[MinValueValidator(Decimal('0.0001'))],
+        verbose_name="Tipo de Cambio"
+    )
+
     quantity = models.IntegerField(default=1, validators=[MinValueValidator(1)], verbose_name="Cantidad")
     unit_price = models.DecimalField(
         max_digits=10,

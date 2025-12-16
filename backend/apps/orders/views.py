@@ -19,6 +19,35 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
     
+    def get_queryset(self):
+        """
+        Optimized queryset with select_related to prevent N+1 queries.
+        Implements Row-Level Security (IDOR protection):
+        - Admins/Operativo2: See all orders.
+        - Operativo: See only orders assigned to them (customs_agent) or created by them.
+        """
+        user = self.request.user
+        queryset = ServiceOrder.objects.select_related(
+            'client', 
+            'sub_client', 
+            'shipment_type', 
+            'provider', 
+            'customs_agent', 
+            'created_by'
+        )
+
+        if user.is_authenticated:
+            # Si es admin o operativo2, ver todo
+            if user.role in ['admin', 'operativo2']:
+                return queryset
+            # Si es operativo básico, filtrar
+            if user.role == 'operativo':
+                from django.db.models import Q
+                return queryset.filter(Q(customs_agent=user) | Q(created_by=user))
+        
+        # Fallback (no debería ocurrir si permission_classes funciona, pero por seguridad)
+        return queryset.none()
+
     def perform_create(self, serializer):
         """Assign current user as customs_agent when creating order"""
         serializer.save(created_by=self.request.user, customs_agent=self.request.user)

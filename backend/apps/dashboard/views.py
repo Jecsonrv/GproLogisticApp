@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
+from django.conf import settings
 from apps.orders.models import ServiceOrder, Invoice
 from apps.transfers.models import Transfer
 from apps.clients.models import Client
@@ -8,10 +9,38 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from apps.users.permissions import IsOperativo
 
+# Import caching utilities (only active when Redis is configured)
+try:
+    from apps.core.cache import CacheManager
+    CACHE_ENABLED = True
+except ImportError:
+    CACHE_ENABLED = False
+    CacheManager = None
+
+
 class DashboardView(APIView):
     permission_classes = [IsOperativo]
 
     def get(self, request):
+        # Check if caching is available and use it
+        if CACHE_ENABLED and CacheManager:
+            cache_manager = CacheManager()
+            cache_key = 'dashboard_main_metrics'
+            
+            # Try to get from cache first
+            cached_data = cache_manager.get(cache_key)
+            if cached_data:
+                return Response(cached_data)
+            
+            # Generate data and cache it
+            data = self._generate_dashboard_data()
+            cache_manager.set(cache_key, data, timeout=60)  # Cache for 1 minute
+            return Response(data)
+        else:
+            return Response(self._generate_dashboard_data())
+    
+    def _generate_dashboard_data(self):
+        """Generate all dashboard metrics"""
         today = datetime.now()
         current_month = today.month
         current_year = today.year
@@ -248,4 +277,4 @@ class DashboardView(APIView):
             'alerts': alerts,
             'recent_orders': recent_orders_data
         }
-        return Response(data)
+        return data
