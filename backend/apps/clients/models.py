@@ -37,18 +37,33 @@ class Client(models.Model):
         return self.name
     
     def get_credit_available(self):
-        """Calcula el crédito disponible del cliente"""
-        from apps.transfers.models import Transfer
-        from apps.orders.models import ServiceOrder
-        
+        """Calcula el crédito disponible del cliente basado en facturas pendientes"""
+        from apps.orders.models import Invoice
+        from decimal import Decimal
+
         if self.payment_condition != 'credito':
-            return 0
-        
-        pending_orders = ServiceOrder.objects.filter(client=self, status='abierta')
-        credit_used = Transfer.objects.filter(
-            service_order__in=pending_orders,
-            transfer_type='terceros',
-            status='provisionada'
-        ).aggregate(models.Sum('amount'))['amount__sum'] or 0
-        
-        return self.credit_limit - credit_used
+            return Decimal('0.00')
+
+        # El crédito usado es la suma de saldos pendientes de facturas no pagadas
+        pending_invoices = Invoice.objects.filter(
+            service_order__client=self,
+            status__in=['pending', 'partial', 'overdue']
+        )
+        credit_used = pending_invoices.aggregate(
+            total=models.Sum('balance')
+        )['total'] or Decimal('0.00')
+
+        return max(Decimal('0.00'), self.credit_limit - credit_used)
+
+    def get_credit_used(self):
+        """Retorna el crédito actualmente utilizado"""
+        from apps.orders.models import Invoice
+        from decimal import Decimal
+
+        pending_invoices = Invoice.objects.filter(
+            service_order__client=self,
+            status__in=['pending', 'partial', 'overdue']
+        )
+        return pending_invoices.aggregate(
+            total=models.Sum('balance')
+        )['total'] or Decimal('0.00')

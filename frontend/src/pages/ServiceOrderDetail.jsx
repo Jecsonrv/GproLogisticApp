@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import {
     Button,
-    Modal, // Usaremos Modal genérico si Dialog da problemas, o el Dialog existente
+    Modal,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -16,12 +17,14 @@ import {
 import ServiceOrderDetailComponent from "../components/ServiceOrderDetail";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { useServiceOrder } from "../hooks/useServiceOrders";
+import { useServiceOrder, useUpdateServiceOrder } from "../hooks/useServiceOrders";
 
 function ServiceOrderDetailPage() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { data: order } = useServiceOrder(id);
+    const queryClient = useQueryClient();
+    const { data: order, refetch: refetchOrder } = useServiceOrder(id);
+    const updateOrderMutation = useUpdateServiceOrder();
 
     // Catalogs for Edit Form
     const [clients, setClients] = useState([]);
@@ -78,14 +81,13 @@ function ServiceOrderDetailPage() {
     const handleUpdateOrder = async (e) => {
         e.preventDefault();
         try {
-            await axios.patch(`/orders/service-orders/${id}/`, editFormData);
+            await updateOrderMutation.mutateAsync({ id, ...editFormData });
             toast.success("Orden actualizada exitosamente");
             setIsEditModalOpen(false);
-            // El componente hijo debería refrescarse si detecta cambios, 
-            // pero como no compartimos estado de 'refetch', podemos forzar recarga o pasar un trigger.
-            // ServiceOrderDetailComponent tiene su propio fetch en useEffect[orderId].
-            // Una recarga de página es lo más seguro y rápido aquí.
-            window.location.reload();
+            // Invalidar el cache para refrescar los datos sin recargar la página
+            queryClient.invalidateQueries({ queryKey: ["service-orders", id] });
+            queryClient.invalidateQueries({ queryKey: ["service-orders"] });
+            refetchOrder();
         } catch (error) {
             const errorMsg = error.response?.data?.message || "Error al actualizar orden";
             toast.error(errorMsg);

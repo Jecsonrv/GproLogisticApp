@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 from django.core.validators import MinValueValidator
 from apps.orders.models import ServiceOrder
@@ -87,7 +88,25 @@ class Transfer(SoftDeleteModel):
     def __str__(self):
         return f"{self.get_transfer_type_display()} - ${self.amount} - {self.service_order.order_number if self.service_order else 'Sin OS'}"
 
+    def clean(self):
+        """Validación de integridad referencial"""
+        super().clean()
+
+        # Los cargos a clientes y costos directos DEBEN tener una orden de servicio
+        tipos_requieren_os = ['cargos', 'costos', 'terceros', 'propios']
+        if self.transfer_type in tipos_requieren_os and not self.service_order:
+            raise ValidationError({
+                'service_order': f'Los gastos de tipo "{self.get_transfer_type_display()}" requieren una Orden de Servicio asociada.'
+            })
+
+        # Validar que el monto sea positivo
+        if self.amount and self.amount <= 0:
+            raise ValidationError({
+                'amount': 'El monto debe ser mayor a cero.'
+            })
+
     def save(self, *args, **kwargs):
+        self.full_clean()
         # Establecer el mes automáticamente
         if not self.mes:
             months = {

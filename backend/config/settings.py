@@ -118,6 +118,16 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # Seguridad: No revelar detalles de errores internos
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    # Rate limiting para prevenir ataques de fuerza bruta
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',      # Usuarios anónimos: 100 requests/hora
+        'user': '1000/hour',     # Usuarios autenticados: 1000 requests/hora
+        'login': '5/minute',     # Login: máximo 5 intentos por minuto
+    },
 }
 
 # Configuración de JWT Segura

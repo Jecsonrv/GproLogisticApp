@@ -6,18 +6,49 @@ import os
 from django.core.exceptions import ValidationError
 
 
+# Mapeo de extensiones a MIME types permitidos
+ALLOWED_MIME_TYPES = {
+    '.pdf': ['application/pdf'],
+    '.jpg': ['image/jpeg'],
+    '.jpeg': ['image/jpeg'],
+    '.png': ['image/png'],
+}
+
+ALLOWED_EXTENSIONS = list(ALLOWED_MIME_TYPES.keys())
+
+
 def validate_file_extension(value):
     """
     Valida que el archivo sea solo PDF, JPG o PNG
     Bloquea archivos potencialmente peligrosos (.exe, .sh, .php, etc.)
     """
-    ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png']
-
     ext = os.path.splitext(value.name)[1].lower()
 
-    if not ext in ALLOWED_EXTENSIONS:
+    if ext not in ALLOWED_EXTENSIONS:
         raise ValidationError(
             f'Tipo de archivo no permitido. Solo se aceptan: {", ".join(ALLOWED_EXTENSIONS)}'
+        )
+
+
+def validate_file_mime_type(value):
+    """
+    Valida el MIME type real del archivo usando magic bytes
+    Previene ataques de suplantación de extensión
+    """
+    import magic
+
+    ext = os.path.splitext(value.name)[1].lower()
+    allowed_mimes = ALLOWED_MIME_TYPES.get(ext, [])
+
+    # Leer los primeros bytes para detectar el tipo real
+    value.seek(0)
+    file_mime = magic.from_buffer(value.read(2048), mime=True)
+    value.seek(0)  # Resetear el cursor del archivo
+
+    if file_mime not in allowed_mimes:
+        raise ValidationError(
+            f'El contenido del archivo no coincide con su extensión. '
+            f'Extensión: {ext}, Tipo detectado: {file_mime}'
         )
 
 
@@ -42,3 +73,4 @@ def validate_document_file(value):
     """
     validate_file_extension(value)
     validate_file_size(value)
+    validate_file_mime_type(value)

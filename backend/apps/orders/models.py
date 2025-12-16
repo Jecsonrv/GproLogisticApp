@@ -49,22 +49,31 @@ class ServiceOrder(SoftDeleteModel):
     def save(self, *args, **kwargs):
         # Generar número de orden con formato XXX-YYYY
         if not self.order_number:
+            from django.db import transaction
+            from django.db.models import Max
+            import re
+
             current_year = timezone.now().year
-            # Buscar la última OS del año actual
-            last = ServiceOrder.objects.filter(
-                order_number__endswith=f'-{current_year}'
-            ).order_by('-id').first()
 
-            if last and '-' in last.order_number:
-                try:
-                    last_num = int(last.order_number.split('-')[0])
-                    new_num = last_num + 1
-                except:
+            # Usar select_for_update con transacción para evitar race conditions
+            with transaction.atomic():
+                # Buscar el máximo número del año actual con bloqueo
+                result = ServiceOrder.all_objects.select_for_update().filter(
+                    order_number__regex=rf'^\d{{3}}-{current_year}$'
+                ).aggregate(
+                    max_num=Max('order_number')
+                )
+
+                if result['max_num']:
+                    try:
+                        last_num = int(result['max_num'].split('-')[0])
+                        new_num = last_num + 1
+                    except (ValueError, IndexError):
+                        new_num = 1
+                else:
                     new_num = 1
-            else:
-                new_num = 1
 
-            self.order_number = f'{new_num:03d}-{current_year}'
+                self.order_number = f'{new_num:03d}-{current_year}'
 
         # Establecer el mes automáticamente
         if not self.mes:
@@ -301,17 +310,27 @@ class Invoice(models.Model):
     def save(self, *args, **kwargs):
         """Genera número de factura automático y calcula saldos"""
         if not self.invoice_number:
+            from django.db import transaction
+            from django.db.models import Max
+
             year = timezone.now().year
-            last = Invoice.objects.filter(invoice_number__contains=f"-{year}").order_by('-id').first()
-            if last and '-' in last.invoice_number:
-                try:
-                    last_num = int(last.invoice_number.split('-')[0])
-                    new_num = last_num + 1
-                except:
+
+            # Usar transacción atómica para evitar race conditions
+            with transaction.atomic():
+                result = Invoice.objects.select_for_update().filter(
+                    invoice_number__regex=rf'^\d{{5}}-{year}$'
+                ).aggregate(max_num=Max('invoice_number'))
+
+                if result['max_num']:
+                    try:
+                        last_num = int(result['max_num'].split('-')[0])
+                        new_num = last_num + 1
+                    except (ValueError, IndexError):
+                        new_num = 1
+                else:
                     new_num = 1
-            else:
-                new_num = 1
-            self.invoice_number = f"{new_num:05d}-{year}"
+
+                self.invoice_number = f"{new_num:05d}-{year}"
 
         # Calcular retención del 1% para Grandes Contribuyentes con CCF
         client = self.service_order.client
