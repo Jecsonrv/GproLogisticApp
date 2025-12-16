@@ -12,3 +12,4 @@ whitenoise
 drf-spectacular
 python-dateutil
 reportlab==4.0.7
+python-magic

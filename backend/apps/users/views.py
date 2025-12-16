@@ -1,7 +1,9 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import update_session_auth_hash
 from django.utils import timezone
 from .models import User, Notification
@@ -14,6 +16,20 @@ from .serializers import (
     NotificationListSerializer
 )
 from .permissions import IsAdminUser
+
+
+class LoginRateThrottle(ScopedRateThrottle):
+    """Rate limiting específico para el endpoint de login"""
+    scope = 'login'
+
+
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    """
+    Vista de login con rate limiting para prevenir ataques de fuerza bruta.
+    Límite: 5 intentos por minuto por IP.
+    """
+    throttle_classes = [LoginRateThrottle]
+    permission_classes = [AllowAny]
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
