@@ -2,8 +2,31 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 
+class ProviderCategory(models.Model):
+    """Categorías de proveedores (Naviera, Agencia de Carga, etc.)"""
+    name = models.CharField(max_length=100, unique=True, verbose_name="Nombre")
+    description = models.TextField(blank=True, verbose_name="Descripción")
+    is_active = models.BooleanField(default=True, verbose_name="Activo")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+
+    class Meta:
+        verbose_name = "Categoría de Proveedor"
+        verbose_name_plural = "Categorías de Proveedores"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
 class Provider(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nombre")
+    category = models.ForeignKey(
+        ProviderCategory,
+        on_delete=models.PROTECT,
+        related_name='providers',
+        null=True,
+        blank=True,
+        verbose_name="Categoría"
+    )
     nit = models.CharField(max_length=50, blank=True, verbose_name="NIT")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono")
     email = models.EmailField(blank=True, verbose_name="Email")

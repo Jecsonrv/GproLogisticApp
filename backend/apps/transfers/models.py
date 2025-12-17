@@ -84,10 +84,18 @@ class Transfer(SoftDeleteModel):
     mes = models.CharField(max_length=20, blank=True, verbose_name="Mes")
 
     # Auditoría
-    notes = models.TextField(blank=True, verbose_name="Notas Adicionales")
-    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Creado por")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Registro")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última Actualización")
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_transfers', verbose_name="Registrado por")
+    updated_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_transfers', verbose_name="Actualizado por")
+    
+    # Configuración de Cobro al Cliente (para Calculadora de Gastos)
+    customer_markup_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal('0.00'), 
+        verbose_name="Margen Cobro Cliente %"
+    )
+    customer_applies_iva = models.BooleanField(default=False, verbose_name="Aplica IVA Cliente")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Transferencia / Gasto"

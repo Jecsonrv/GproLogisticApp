@@ -11,7 +11,19 @@ class TransferSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Transfer
-        fields = '__all__'
+        fields = [
+            'id', 'service_order', 'service_order_number', 'client_name',
+            'provider', 'provider_name',
+            'transfer_type', 'transfer_type_display',
+            'amount', 'currency', 'exchange_rate',
+            'description', 'status', 'status_display',
+            'bank', 'bank_name', 'transaction_date',
+            'reference_number', 'invoice_number', 'ccf',
+            'invoice_file', 'due_date', 'balance',
+            'customer_markup_percentage', 'customer_applies_iva',
+            'created_by', 'created_by_username', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
     
     def get_created_by_name(self, obj):
         if obj.created_by:
@@ -42,7 +54,8 @@ class TransferListSerializer(serializers.ModelSerializer):
                   'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number',
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
-                  'transaction_date', 'payment_date', 'notes', 'created_at', 'created_by', 'created_by_username', 'created_by_name']
+                  'customer_markup_percentage', 'customer_applies_iva',
+                  'transaction_date', 'payment_date', 'created_at', 'created_by', 'created_by_username', 'created_by_name']
     
     def get_created_by_name(self, obj):
         if obj.created_by:

@@ -16,6 +16,13 @@ ALLOWED_MIME_TYPES = {
 
 ALLOWED_EXTENSIONS = list(ALLOWED_MIME_TYPES.keys())
 
+# Magic bytes para validación de tipos de archivo
+MAGIC_BYTES = {
+    b'%PDF': 'application/pdf',
+    b'\xff\xd8\xff': 'image/jpeg',
+    b'\x89PNG': 'image/png',
+}
+
 
 def validate_file_extension(value):
     """
@@ -34,21 +41,33 @@ def validate_file_mime_type(value):
     """
     Valida el MIME type real del archivo usando magic bytes
     Previene ataques de suplantación de extensión
+    Funciona sin dependencias externas (libmagic)
     """
-    import magic
-
     ext = os.path.splitext(value.name)[1].lower()
     allowed_mimes = ALLOWED_MIME_TYPES.get(ext, [])
 
     # Leer los primeros bytes para detectar el tipo real
     value.seek(0)
-    file_mime = magic.from_buffer(value.read(2048), mime=True)
+    header = value.read(16)
     value.seek(0)  # Resetear el cursor del archivo
 
-    if file_mime not in allowed_mimes:
+    # Detectar el tipo real basado en magic bytes
+    detected_mime = None
+    for magic_header, mime_type in MAGIC_BYTES.items():
+        if header.startswith(magic_header):
+            detected_mime = mime_type
+            break
+
+    if detected_mime is None:
+        raise ValidationError(
+            f'No se pudo verificar el tipo de archivo. '
+            f'Asegúrese de que sea un archivo PDF, JPG o PNG válido.'
+        )
+
+    if detected_mime not in allowed_mimes:
         raise ValidationError(
             f'El contenido del archivo no coincide con su extensión. '
-            f'Extensión: {ext}, Tipo detectado: {file_mime}'
+            f'Extensión: {ext}, Tipo detectado: {detected_mime}'
         )
 
 

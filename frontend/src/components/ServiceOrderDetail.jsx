@@ -24,6 +24,8 @@ import {
 import ProviderPaymentsTab from "./ProviderPaymentsTab";
 import DocumentsTabUnified from "./DocumentsTabUnified";
 import HistoryTab from "./HistoryTab";
+import ExpenseCalculatorTab from "./ExpenseCalculatorTab";
+import BillingWizard from "./BillingWizard";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency } from "../lib/utils";
@@ -35,6 +37,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const [activeTab, setActiveTab] = useState("info");
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [showBillingWizard, setShowBillingWizard] = useState(false);
 
     // Data for dropdowns
     const [services, setServices] = useState([]);
@@ -76,9 +79,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         }
     }, [order?.client]);
 
-    const fetchOrderDetail = async () => {
+    const fetchOrderDetail = async (showLoader = true) => {
         try {
-            setLoading(true);
+            if (showLoader) setLoading(true);
             const response = await axios.get(
                 `/orders/service-orders/${orderId}/`
             );
@@ -86,11 +89,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             setCharges(response.data.charges || []);
             setExpenses(response.data.third_party_expenses || []);
         } catch (error) {
-            const errorMsg = error.response?.data?.detail || error.response?.data?.error || "Error al cargar detalle de la orden";
+            const errorMsg =
+                error.response?.data?.detail ||
+                error.response?.data?.error ||
+                "Error al cargar detalle de la orden";
             toast.error(errorMsg);
             console.error("Error fetching order detail:", error);
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
     };
 
@@ -127,20 +133,27 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     };
 
     const handleAddCharge = async () => {
+        if (!chargeForm.service) {
+            toast.error("Por favor seleccione un servicio de la lista");
+            return;
+        }
+
         try {
             await axios.post(`/orders/service-orders/${orderId}/add_charge/`, {
                 ...chargeForm,
                 discount: parseFloat(chargeForm.discount || 0),
             });
             toast.success("Cargo agregado exitosamente");
-            fetchOrderDetail();
+            fetchOrderDetail(false);
             setIsAddingCharge(false);
             resetChargeForm();
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            toast.error(
-                error.response?.data?.error || "Error al agregar cargo"
-            );
+            const errorMsg =
+                error.response?.data?.error ||
+                error.response?.data?.detail ||
+                "Error al procesar el cargo";
+            toast.error(errorMsg);
         }
     };
 
@@ -155,7 +168,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         try {
             await axios.delete(`/orders/charges/${id}/`);
             toast.success("Cargo eliminado exitosamente");
-            fetchOrderDetail();
+            fetchOrderDetail(false);
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
             const errorMessage =
@@ -176,25 +189,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         });
     };
 
-    const calculateChargeTotal = (charge) => {
-        const quantity = parseFloat(charge.quantity) || 0;
-        const unitPrice = parseFloat(charge.unit_price) || 0;
-        const exchangeRate = parseFloat(charge.exchange_rate) || 1;
-
-        const subtotal = quantity * unitPrice;
-        const discount = subtotal * (parseFloat(charge.discount || 0) / 100);
-        const base = subtotal - discount;
-
-        // Calcular IVA sobre el monto base (en moneda original)
-        const iva = charge.applies_iva ? base * 0.13 : 0;
-
-        // Total en moneda original
-        const totalOriginal = base + iva;
-
-        // Retornar total convertido a moneda base (GTQ)
-        return totalOriginal * exchangeRate;
-    };
-
     const getServicePrice = (serviceId) => {
         // 1. Check if there is a custom price for this client
         const customPrice = clientPrices.find(
@@ -211,7 +205,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const tabs = [
         { id: "info", name: "Info General", icon: FileText },
-        { id: "charges", name: "Cobros/Servicios", icon: DollarSign },
+        { id: "charges", name: "Calculadora de Servicios", icon: DollarSign },
         { id: "expenses", name: "Costos de la Orden", icon: Truck },
         { id: "documents", name: "Documentos", icon: Folder },
         { id: "history", name: "Historial", icon: Clock },
@@ -269,18 +263,38 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         </div>
                     </div>
                     {onEdit && order.status === "abierta" && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEdit(order)}
-                            className="mt-1"
-                        >
-                            <Edit className="w-4 h-4 mr-2" />
-                            Editar Orden
-                        </Button>
+                        <div className="flex gap-2 mt-1">
+                            <Button
+                                size="sm"
+                                onClick={() => setShowBillingWizard(true)}
+                                className="bg-brand-600 hover:bg-brand-700 text-white"
+                            >
+                                <DollarSign className="w-4 h-4 mr-2" />
+                                Generar Factura
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onEdit(order)}
+                            >
+                                <Edit className="w-4 h-4 mr-2" />
+                                Editar Orden
+                            </Button>
+                        </div>
                     )}
                 </div>
             </div>
+
+            {/* Billing Wizard */}
+            <BillingWizard 
+                isOpen={showBillingWizard}
+                onClose={() => setShowBillingWizard(false)}
+                serviceOrder={order}
+                onInvoiceCreated={() => {
+                    fetchOrderDetail();
+                    if (onUpdate) onUpdate();
+                }}
+            />
 
             {/* Tabs */}
             <div className="border-b border-gray-200">
@@ -470,7 +484,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                             <CardContent className="pt-6">
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="text-lg font-semibold text-gray-900">
-                                        Calculadora de Cobros
+                                        Calculadora de Servicios
                                     </h3>
                                     {order.status === "abierta" &&
                                         !isAddingCharge && (
@@ -681,8 +695,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
                                                             Desc.
                                                         </th>
-                                                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-14">
-                                                            IVA
+                                                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">
+                                                            IVA (13%)
                                                         </th>
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
                                                             Total
@@ -737,14 +751,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     ? `${charge.discount}%`
                                                                     : "-"}
                                                             </td>
-                                                            <td className="px-3 py-2.5 text-center">
-                                                                {charge.applies_iva ? (
-                                                                    <Badge
-                                                                        variant="secondary"
-                                                                        size="sm"
-                                                                    >
-                                                                        IVA
-                                                                    </Badge>
+                                                            <td className="px-3 py-2.5 text-center text-sm text-slate-700 tabular-nums">
+                                                                {parseFloat(
+                                                                    charge.iva_amount
+                                                                ) > 0 ? (
+                                                                    formatCurrency(
+                                                                        charge.iva_amount
+                                                                    )
                                                                 ) : (
                                                                     <span className="text-slate-300">
                                                                         -
@@ -753,9 +766,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             </td>
                                                             <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
                                                                 {formatCurrency(
-                                                                    calculateChargeTotal(
-                                                                        charge
-                                                                    )
+                                                                    charge.total
                                                                 )}
                                                             </td>
                                                             {order.status ===
@@ -803,6 +814,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* Calculadora de Gastos - Integrada en la misma pestaña */}
+                        <ExpenseCalculatorTab
+                            orderId={orderId}
+                            orderStatus={order.status}
+                            onUpdate={() => {
+                                fetchOrderDetail();
+                                if (onUpdate) onUpdate();
+                            }}
+                        />
                     </div>
                 )}
 

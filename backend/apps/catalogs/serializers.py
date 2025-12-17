@@ -3,34 +3,44 @@ Serializers para Catálogos (Proveedores, Aforadores, Servicios, etc.)
 """
 from rest_framework import serializers
 from .models import (
-    Provider, CustomsAgent, Bank, ShipmentType, SubClient,
+    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, SubClient,
     Service, ClientServicePrice
 )
 from decimal import Decimal
 
 
+class ProviderCategorySerializer(serializers.ModelSerializer):
+    """Serializer para Categorías de Proveedores"""
+
+    class Meta:
+        model = ProviderCategory
+        fields = ['id', 'name', 'description', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
 class ProviderSerializer(serializers.ModelSerializer):
     """Serializer para Proveedores"""
     total_debt = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source='category.name', read_only=True, allow_null=True)
 
     class Meta:
         model = Provider
         fields = [
-            'id', 'name', 'nit', 'phone', 'email', 'address',
-            'is_active', 'created_at', 'total_debt'
+            'id', 'name', 'category', 'category_name', 'nit', 'phone',
+            'email', 'address', 'is_active', 'created_at', 'total_debt'
         ]
-        read_only_fields = ['id', 'created_at']
-    
+        read_only_fields = ['id', 'created_at', 'category_name']
+
     def get_total_debt(self, obj):
         """Calcula la deuda total pendiente del proveedor"""
         from apps.transfers.models import Transfer
         from django.db.models import Sum
-        
+
         debt = Transfer.objects.filter(
             provider=obj,
             status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
         ).aggregate(Sum('balance'))['balance__sum'] or 0
-        
+
         return float(debt)
 
 

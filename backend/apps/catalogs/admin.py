@@ -1,10 +1,16 @@
 from django.contrib import admin
-from .models import Provider, CustomsAgent, Bank, ShipmentType, SubClient, Service, ClientServicePrice
+from .models import ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, SubClient, Service, ClientServicePrice
+
+@admin.register(ProviderCategory)
+class ProviderCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'description']
 
 @admin.register(Provider)
 class ProviderAdmin(admin.ModelAdmin):
-    list_display = ['name', 'nit', 'phone', 'email', 'is_active']
-    list_filter = ['is_active']
+    list_display = ['name', 'category', 'nit', 'phone', 'email', 'is_active']
+    list_filter = ['is_active', 'category']
     search_fields = ['name', 'nit', 'email']
 
 @admin.register(CustomsAgent)

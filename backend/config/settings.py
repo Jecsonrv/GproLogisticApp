@@ -1,6 +1,19 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Fix para Windows - Forzar UTF-8 en todo el sistema
+if sys.platform == 'win32':
+    import locale
+    # Intentar configurar locale UTF-8
+    try:
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    except:
+        try:
+            locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+        except:
+            pass  # Usar locale por defecto
 
 load_dotenv()
 

@@ -63,9 +63,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             except ServiceOrder.DoesNotExist:
                 raise ValueError("Orden de servicio no encontrada")
 
-            # Double-check if already invoiced (inside lock)
-            if service_order.facturado:
-                raise ValueError("Esta orden de servicio ya fue facturada")
+            # Remove single invoice restriction to allow partial billing
+            # if service_order.facturado:
+            #    raise ValueError("Esta orden de servicio ya fue facturada")
 
             # Get file if provided
             pdf_file = self.request.FILES.get('pdf_file')
@@ -90,7 +90,69 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
             invoice = serializer.save(**invoice_data)
 
-            # Mark service order as invoiced
+            # 1. Link selected MANUAL charges to this invoice
+            charge_ids = self.request.data.get('charge_ids', [])
+            if charge_ids:
+                from .models import OrderCharge
+                OrderCharge.objects.filter(
+                    id__in=charge_ids, 
+                    service_order=service_order,
+                    invoice__isnull=True 
+                ).update(invoice=invoice)
+            
+            # 2. Convert selected TRANSFERS (Expenses) to OrderCharges and link to invoice
+            transfer_ids = self.request.data.get('transfer_ids', [])
+            if transfer_ids:
+                from apps.transfers.models import Transfer
+                from apps.catalogs.models import Service
+                from .models import OrderCharge
+                
+                # Find generic service
+                service, _ = Service.objects.get_or_create(
+                    name='Gasto Reembolsable',
+                    defaults={
+                        'description': 'Cargo generado automáticamente desde calculadora de gastos',
+                        'default_price': 0, 
+                        'applies_iva': False, 
+                        'is_active': True
+                    }
+                )
+                
+                transfers = Transfer.objects.filter(id__in=transfer_ids)
+                
+                for t in transfers:
+                    markup = t.customer_markup_percentage or Decimal('0.00')
+                    applies_iva = t.customer_applies_iva
+                    
+                    cost = t.amount
+                    base_price = cost * (1 + markup / Decimal('100.00'))
+                    
+                    if applies_iva:
+                        iva = base_price * Decimal('0.13')
+                        total = base_price + iva
+                    else:
+                        iva = Decimal('0.00')
+                        total = base_price
+                        
+                    # Create charge linked to invoice
+                    OrderCharge.objects.create(
+                        service_order=service_order,
+                        service=service,
+                        invoice=invoice, # Direct link!
+                        description=f"{t.description} (Ref: {t.provider.name if t.provider else ''})",
+                        quantity=1,
+                        unit_price=base_price,
+                        discount=Decimal('0.00'),
+                        subtotal=base_price,
+                        iva_amount=iva,
+                        total=total,
+                        _current_user=self.request.user
+                    )
+
+            # Recalculate totals based on all linked charges
+            invoice.calculate_totals()
+
+            # Mark service order as invoiced (billing started)
             service_order.facturado = True
             service_order.save()
 

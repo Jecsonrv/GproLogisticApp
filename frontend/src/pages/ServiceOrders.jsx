@@ -172,14 +172,25 @@ const ServiceOrders = () => {
 
     const fetchCatalogs = async () => {
         try {
-            const [clientsRes, typesRes, providersRes] = await Promise.all([
+            const [clientsRes, typesRes, providersRes, categoriesRes] = await Promise.all([
                 axios.get("/clients/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/providers/"),
+                axios.get("/catalogs/provider-categories/"),
             ]);
             setClients(clientsRes.data);
             setShipmentTypes(typesRes.data);
-            setProviders(providersRes.data);
+
+            // Filtrar proveedores para mostrar solo Naviera y Agencia de Carga
+            const navieraAgenciaCategories = categoriesRes.data.filter(
+                cat => cat.name === 'Naviera' || cat.name === 'Agencia de Carga'
+            );
+            const categoryIds = navieraAgenciaCategories.map(cat => cat.id);
+            const filteredProviders = providersRes.data.filter(
+                prov => prov.category && categoryIds.includes(prov.category)
+            );
+
+            setProviders(filteredProviders);
         } catch (error) {
             console.error("Error cargando catálogos", error);
         }
@@ -787,7 +798,7 @@ const ServiceOrders = () => {
                             required
                         />
                         <SelectERP
-                            label="Proveedor Logístico"
+                            label="Naviera"
                             value={formData.provider}
                             onChange={(val) =>
                                 setFormData({ ...formData, provider: val })
@@ -934,7 +945,7 @@ const ServiceOrders = () => {
                             required
                         />
                         <SelectERP
-                            label="Proveedor Logístico"
+                            label="Naviera"
                             value={formData.provider}
                             onChange={(val) =>
                                 setFormData({ ...formData, provider: val })

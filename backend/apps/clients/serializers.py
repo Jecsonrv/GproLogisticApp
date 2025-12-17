@@ -32,12 +32,18 @@ class ClientSerializer(serializers.ModelSerializer):
         return float(credit_used)
 
 class ClientListSerializer(serializers.ModelSerializer):
-    """Serializer simplificado para listados"""
+    """Serializer para listados con todos los campos necesarios"""
     credit_available = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Client
-        fields = ['id', 'name', 'nit', 'phone', 'email', 'payment_condition', 'credit_limit', 'credit_available', 'is_active']
-    
+        fields = [
+            'id', 'name', 'legal_name', 'nit', 'iva_registration',
+            'address', 'phone', 'secondary_phone', 'email', 'contact_person',
+            'payment_condition', 'credit_days', 'credit_limit', 'credit_available',
+            'is_gran_contribuyente', 'is_active', 'notes',
+            'created_at', 'updated_at'
+        ]
+
     def get_credit_available(self, obj):
         return obj.get_credit_available()

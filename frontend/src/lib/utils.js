@@ -188,3 +188,44 @@ export function getTodayDate() {
     const day = String(today.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
 }
+
+/**
+ * Formatea una fecha/hora proveniente del backend (ISO UTC)
+ * Maneja correctamente la zona horaria local para evitar cambios de día
+ * @param {string|Date} dateString - La fecha en formato ISO
+ * @param {object} options - Opciones de formateo
+ * @returns {string} - Fecha formateada
+ */
+export function formatDateTime(dateString, options = {}) {
+    if (!dateString) return "N/A";
+
+    const {
+        includeTime = false,
+        locale = "es-SV",
+    } = options;
+
+    try {
+        const date = new Date(dateString);
+
+        // Verificar si la fecha es válida
+        if (isNaN(date.getTime())) {
+            return "Fecha inválida";
+        }
+
+        const formatOptions = {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        };
+
+        if (includeTime) {
+            formatOptions.hour = "2-digit";
+            formatOptions.minute = "2-digit";
+        }
+
+        return date.toLocaleDateString(locale, formatOptions);
+    } catch (error) {
+        console.error("Error formateando fecha:", error);
+        return "Error en fecha";
+    }
+}

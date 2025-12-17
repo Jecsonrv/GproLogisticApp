@@ -3,24 +3,37 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
-    Provider, CustomsAgent, Bank, ShipmentType, SubClient,
+    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, SubClient,
     Service, ClientServicePrice
 )
 from .serializers import (
-    ProviderSerializer, CustomsAgentSerializer, BankSerializer,
+    ProviderCategorySerializer, ProviderSerializer, CustomsAgentSerializer, BankSerializer,
     ShipmentTypeSerializer, SubClientSerializer,
     ServiceSerializer, ClientServicePriceSerializer
 )
 from .permissions import IsAdminOrReadOnly
 from apps.users.permissions import IsAdminUser, IsOperativo
 
+class ProviderCategoryViewSet(viewsets.ModelViewSet):
+    queryset = ProviderCategory.objects.all()
+    serializer_class = ProviderCategorySerializer
+    permission_classes = [IsAdminOrReadOnly]
+    search_fields = ['name']
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == 'list' and self.request.query_params.get('is_active') is None:
+            queryset = queryset.filter(is_active=True)
+        return queryset.order_by('name')
+
 class ProviderViewSet(viewsets.ModelViewSet):
-    queryset = Provider.objects.all()
+    queryset = Provider.objects.select_related('category').all()
     serializer_class = ProviderSerializer
     permission_classes = [IsAdminOrReadOnly]
     search_fields = ['name', 'nit', 'email']
-    filterset_fields = ['is_active']
-    
+    filterset_fields = ['is_active', 'category']
+
     def get_queryset(self):
         queryset = super().get_queryset()
         # Por defecto mostrar solo activos en listados

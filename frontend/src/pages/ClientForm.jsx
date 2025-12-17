@@ -212,8 +212,8 @@ function ClientForm() {
                 <Card>
                     <CardHeader>
                         <div className="flex items-center gap-2">
-                            <div className="p-2 bg-brand-100 rounded-lg">
-                                <Building2 className="h-5 w-5 text-brand-600" />
+                            <div className="p-2 bg-slate-100 rounded-lg">
+                                <Building2 className="h-5 w-5 text-slate-600" />
                             </div>
                             <div>
                                 <CardTitle>Información de la Empresa</CardTitle>
@@ -295,7 +295,7 @@ function ClientForm() {
                         </div>
 
                         {/* Gran Contribuyente */}
-                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
                             <div className="flex items-start gap-3">
                                 <input
                                     type="checkbox"
@@ -312,11 +312,11 @@ function ClientForm() {
                                 <div>
                                     <label
                                         htmlFor="is_gran_contribuyente"
-                                        className="text-sm font-medium text-amber-900 cursor-pointer"
+                                        className="text-sm font-medium text-slate-900 cursor-pointer"
                                     >
                                         Gran Contribuyente
                                     </label>
-                                    <p className="text-xs text-amber-700 mt-0.5">
+                                    <p className="text-xs text-slate-600 mt-0.5">
                                         Si está marcado, se aplicará retención
                                         del 1% en facturas CCF (El Salvador).
                                     </p>
@@ -330,8 +330,8 @@ function ClientForm() {
                 <Card>
                     <CardHeader>
                         <div className="flex items-center gap-2">
-                            <div className="p-2 bg-emerald-100 rounded-lg">
-                                <User className="h-5 w-5 text-emerald-600" />
+                            <div className="p-2 bg-slate-100 rounded-lg">
+                                <User className="h-5 w-5 text-slate-600" />
                             </div>
                             <div>
                                 <CardTitle>Información de Contacto</CardTitle>
@@ -435,8 +435,8 @@ function ClientForm() {
                 <Card>
                     <CardHeader>
                         <div className="flex items-center gap-2">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <CreditCard className="h-5 w-5 text-blue-600" />
+                            <div className="p-2 bg-slate-100 rounded-lg">
+                                <CreditCard className="h-5 w-5 text-slate-600" />
                             </div>
                             <div>
                                 <CardTitle>
@@ -541,8 +541,8 @@ function ClientForm() {
 
                         {/* Campos de Crédito */}
                         {formData.payment_condition === "credito" && (
-                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
-                                <div className="flex items-center gap-2 text-blue-800">
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-4">
+                                <div className="flex items-center gap-2 text-slate-700">
                                     <Info className="h-4 w-4" />
                                     <span className="text-sm font-medium">
                                         Configuración de Crédito
@@ -566,8 +566,9 @@ function ClientForm() {
                                                 }
                                                 placeholder="30"
                                                 error={errors.credit_days}
+                                                className="pr-14 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                             />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 pointer-events-none">
                                                 días
                                             </span>
                                         </div>
@@ -576,7 +577,7 @@ function ClientForm() {
                                                 {errors.credit_days}
                                             </p>
                                         )}
-                                        <p className="text-xs text-blue-700 mt-1 flex items-center gap-1">
+                                        <p className="text-xs text-slate-600 mt-1 flex items-center gap-1">
                                             <Calendar className="h-3 w-3" />
                                             Las facturas vencerán
                                             automáticamente después de este
@@ -613,7 +614,7 @@ function ClientForm() {
                                                 {errors.credit_limit}
                                             </p>
                                         )}
-                                        <p className="text-xs text-blue-700 mt-1 flex items-center gap-1">
+                                        <p className="text-xs text-slate-600 mt-1 flex items-center gap-1">
                                             <DollarSign className="h-3 w-3" />
                                             Monto máximo de crédito permitido
                                         </p>
@@ -622,8 +623,8 @@ function ClientForm() {
 
                                 {/* Preview de vencimiento */}
                                 {formData.credit_days > 0 && (
-                                    <div className="p-3 bg-white rounded-lg border border-blue-200">
-                                        <p className="text-sm text-blue-900">
+                                    <div className="p-3 bg-white rounded-lg border border-slate-200">
+                                        <p className="text-sm text-slate-700">
                                             <span className="font-medium">
                                                 Ejemplo:
                                             </span>{" "}

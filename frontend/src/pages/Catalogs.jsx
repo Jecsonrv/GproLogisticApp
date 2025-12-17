@@ -20,6 +20,7 @@ import {
     Badge,
     Skeleton,
     ConfirmDialog,
+    SelectERP,
 } from "../components/ui";
 import {
     Plus,
@@ -29,16 +30,17 @@ import {
     Ship,
     UserCircle,
     Search,
+    Tags,
 } from "lucide-react";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 
 function Catalogs() {
     // Estado del tab activo
-    const [activeTab, setActiveTab] = useState("providers");
+    const [activeTab, setActiveTab] = useState("providerCategories");
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    const [currentCatalog, setCurrentCatalog] = useState("providers");
+    const [currentCatalog, setCurrentCatalog] = useState("providerCategories");
     const [confirmDialog, setConfirmDialog] = useState({
         open: false,
         catalog: null,
@@ -47,6 +49,7 @@ function Catalogs() {
 
     // Estados para cada catálogo
     const [providers, setProviders] = useState([]);
+    const [providerCategories, setProviderCategories] = useState([]);
     const [banks, setBanks] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [subClients, setSubClients] = useState([]);
@@ -67,12 +70,14 @@ function Catalogs() {
     const fetchAllCatalogs = async () => {
         setLoading(true);
         try {
-            const [prov, bnk, ship, sub] = await Promise.all([
+            const [provCat, prov, bnk, ship, sub] = await Promise.all([
+                axios.get("/catalogs/provider-categories/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/banks/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/sub-clients/"),
             ]);
+            setProviderCategories(provCat.data);
             setProviders(prov.data);
             setBanks(bnk.data);
             setShipmentTypes(ship.data);
@@ -96,8 +101,14 @@ function Catalogs() {
 
     const getInitialFormData = (catalog) => {
         const defaults = {
+            providerCategories: {
+                name: "",
+                description: "",
+                is_active: true,
+            },
             providers: {
                 name: "",
+                category: null,
                 nit: "",
                 phone: "",
                 email: "",
@@ -124,6 +135,7 @@ function Catalogs() {
         e.preventDefault();
         try {
             const endpoints = {
+                providerCategories: "/catalogs/provider-categories/",
                 providers: "/catalogs/providers/",
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
@@ -188,6 +200,7 @@ function Catalogs() {
 
         try {
             const endpoints = {
+                providerCategories: "/catalogs/provider-categories/",
                 providers: "/catalogs/providers/",
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
@@ -228,8 +241,31 @@ function Catalogs() {
         };
 
         const specific = {
+            providerCategories: [
+                { accessor: "name", header: "Nombre" },
+                { accessor: "description", header: "Descripción" },
+                {
+                    accessor: "is_active",
+                    header: "Estado",
+                    cell: (row) => (
+                        <Badge variant={row.is_active ? "success" : "default"}>
+                            {row.is_active ? "Activo" : "Inactivo"}
+                        </Badge>
+                    ),
+                },
+                actionsColumn,
+            ],
             providers: [
                 { accessor: "name", header: "Nombre" },
+                {
+                    accessor: "category_name",
+                    header: "Categoría",
+                    cell: (row) => (
+                        <span className="text-sm text-slate-600">
+                            {row.category_name || "—"}
+                        </span>
+                    ),
+                },
                 { accessor: "nit", header: "NIT" },
                 { accessor: "phone", header: "Teléfono" },
                 {
@@ -292,6 +328,7 @@ function Catalogs() {
 
     const getData = (catalog) => {
         const data = {
+            providerCategories,
             providers,
             banks,
             shipmentTypes,
@@ -314,6 +351,41 @@ function Catalogs() {
 
     const renderForm = () => {
         switch (currentCatalog) {
+            case "providerCategories":
+                return (
+                    <>
+                        <div>
+                            <Label>Nombre *</Label>
+                            <Input
+                                value={formData.name || ""}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        name: e.target.value,
+                                    })
+                                }
+                                required
+                                placeholder="Ej: Naviera, Agencia de Carga, etc."
+                            />
+                        </div>
+                        <div>
+                            <Label>Descripción</Label>
+                            <textarea
+                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                rows={3}
+                                value={formData.description || ""}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        description: e.target.value,
+                                    })
+                                }
+                                placeholder="Descripción de la categoría de proveedor"
+                            />
+                        </div>
+                    </>
+                );
+
             case "providers":
                 return (
                     <>
@@ -328,6 +400,23 @@ function Catalogs() {
                                     })
                                 }
                                 required
+                            />
+                        </div>
+                        <div>
+                            <Label>Categoría</Label>
+                            <SelectERP
+                                value={formData.category}
+                                onChange={(value) =>
+                                    setFormData({
+                                        ...formData,
+                                        category: value,
+                                    })
+                                }
+                                options={providerCategories}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                placeholder="Seleccionar categoría..."
+                                clearable
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -488,6 +577,7 @@ function Catalogs() {
 
     const getModalTitle = () => {
         const titles = {
+            providerCategories: "Categoría de Proveedor",
             providers: "Proveedor",
             banks: "Banco",
             shipmentTypes: "Tipo de Embarque",
@@ -523,6 +613,10 @@ function Catalogs() {
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="w-full justify-start overflow-x-auto">
+                    <TabsTrigger value="providerCategories">
+                        <Tags className="h-4 w-4 mr-2" />
+                        Categorías de Proveedores
+                    </TabsTrigger>
                     <TabsTrigger value="providers">
                         <Building2 className="h-4 w-4 mr-2" />
                         Proveedores
@@ -540,6 +634,38 @@ function Catalogs() {
                         Subclientes
                     </TabsTrigger>
                 </TabsList>
+
+                {/* Categorías de Proveedores */}
+                <TabsContent value="providerCategories" key="providerCategories">
+                    <Card>
+                        <CardHeader className="flex flex-col gap-4 pb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Categorías de Proveedores</CardTitle>
+                                <Button onClick={() => openModal("providerCategories")}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nueva Categoría
+                                </Button>
+                            </div>
+                            <div className="relative flex-1 max-w-lg">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar categorías..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
+                        </CardHeader>
+                        <CardContent className="px-5 pb-5 pt-0">
+                            <DataTable
+                                columns={getColumns("providerCategories")}
+                                data={getFilteredData("providerCategories")}
+                                searchable={false}
+                                pagination
+                            />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 {/* Proveedores */}
                 <TabsContent value="providers" key="providers">

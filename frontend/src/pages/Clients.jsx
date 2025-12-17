@@ -39,7 +39,7 @@ import {
 } from "../components/ui/DropdownMenu";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency, cn } from "../lib/utils";
+import { formatCurrency, cn, formatDateTime } from "../lib/utils";
 
 /**
  * Clients - Gestión de Clientes
@@ -177,45 +177,31 @@ function Clients() {
         setIsDetailModalOpen(true);
     };
 
-    // Export to CSV
-    const exportToCSV = () => {
-        const headers = [
-            "Nombre",
-            "NIT",
-            "Registro IVA",
-            "Teléfono",
-            "Email",
-            "Contacto",
-            "Condición Pago",
-            "Días Crédito",
-            "Límite Crédito",
-            "Gran Contribuyente",
-            "Estado",
-        ];
-        const rows = filteredClients.map((c) => [
-            c.name,
-            c.nit,
-            c.iva_registration,
-            c.phone,
-            c.email,
-            c.contact_person,
-            c.payment_condition === "credito" ? "Crédito" : "Contado",
-            c.credit_days,
-            c.credit_limit,
-            c.is_gran_contribuyente ? "Sí" : "No",
-            c.is_active ? "Activo" : "Inactivo",
-        ]);
+    // Export to Excel
+    const exportToExcel = async () => {
+        try {
+            const params = new URLSearchParams();
+            if (searchTerm) params.append('search', searchTerm);
+            if (statusFilter) params.append('is_active', statusFilter === 'active' ? 'True' : 'False');
+            if (paymentFilter) params.append('payment_condition', paymentFilter);
 
-        const csvContent = [headers, ...rows]
-            .map((row) => row.join(","))
-            .join("\n");
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `clientes_${new Date().toISOString().split("T")[0]}.csv`;
-        a.click();
-        toast.success("Archivo exportado");
+            const response = await axios.get('/clients/export_clients_excel/', {
+                params,
+                responseType: 'blob',
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `clientes_gpro_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success("Listado de clientes exportado correctamente");
+        } catch (error) {
+            console.error("Error exporting clients:", error);
+            toast.error("Error al exportar clientes");
+        }
     };
 
     // Status filter options
@@ -468,11 +454,11 @@ function Clients() {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={exportToCSV}
+                        onClick={exportToExcel}
                         disabled={filteredClients.length === 0}
                     >
                         <Download className="h-4 w-4 mr-2" />
-                        Exportar
+                        Exportar Excel
                     </Button>
                     <Button onClick={() => navigate("/clients/new")}>
                         <Plus className="h-4 w-4 mr-2" />
@@ -771,15 +757,11 @@ function Clients() {
                         <div className="pt-4 border-t border-slate-200 flex gap-6 text-xs text-slate-500">
                             <span>
                                 Creado:{" "}
-                                {new Date(
-                                    selectedClient.created_at
-                                ).toLocaleDateString("es-SV")}
+                                {formatDateTime(selectedClient.created_at, { includeTime: true })}
                             </span>
                             <span>
                                 Actualizado:{" "}
-                                {new Date(
-                                    selectedClient.updated_at
-                                ).toLocaleDateString("es-SV")}
+                                {formatDateTime(selectedClient.updated_at, { includeTime: true })}
                             </span>
                         </div>
 

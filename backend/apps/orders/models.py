@@ -222,6 +222,14 @@ class OrderCharge(SoftDeleteModel):
         related_name='charges',
         verbose_name="Orden de Servicio"
     )
+    invoice = models.ForeignKey(
+        'Invoice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='charges',
+        verbose_name="Factura Asignada"
+    )
     service = models.ForeignKey(
         'catalogs.Service',
         on_delete=models.PROTECT,
@@ -250,6 +258,13 @@ class OrderCharge(SoftDeleteModel):
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name="Precio Unitario (Sin IVA)"
     )
+    discount = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Descuento (%)"
+    )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Subtotal")
     iva_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto IVA")
     total = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Total")
@@ -276,7 +291,11 @@ class OrderCharge(SoftDeleteModel):
             elif not self.is_deleted:
                  raise ValidationError("No se pueden modificar cargos de una orden cerrada o facturada.")
 
-        self.subtotal = self.quantity * self.unit_price
+        # Calcular subtotal con descuento
+        base_subtotal = self.quantity * self.unit_price
+        discount_amount = base_subtotal * (self.discount / Decimal('100.00'))
+        self.subtotal = base_subtotal - discount_amount
+
         if self.service.applies_iva:
             self.iva_amount = self.subtotal * Decimal('0.13')
         else:
@@ -377,20 +396,27 @@ class Invoice(models.Model):
 
             # Usar transacción atómica para evitar race conditions
             with transaction.atomic():
+                # Buscar el máximo número del año actual que sea PRE-FACTURA (o DTE si ya se editó, pero el auto es PRE)
+                # El formato automático será: PRE-XXXXX-YYYY
                 result = Invoice.objects.select_for_update().filter(
-                    invoice_number__regex=rf'^\d{{5}}-{year}$'
+                    invoice_number__regex=rf'^PRE-\d{{5}}-{year}$'
                 ).aggregate(max_num=Max('invoice_number'))
 
                 if result['max_num']:
                     try:
-                        last_num = int(result['max_num'].split('-')[0])
-                        new_num = last_num + 1
+                        # Extraer el número de en medio: PRE-00001-2025 -> 00001
+                        parts = result['max_num'].split('-')
+                        if len(parts) >= 2:
+                            last_num = int(parts[1])
+                            new_num = last_num + 1
+                        else:
+                            new_num = 1
                     except (ValueError, IndexError):
                         new_num = 1
                 else:
                     new_num = 1
 
-                self.invoice_number = f"{new_num:05d}-{year}"
+                self.invoice_number = f"PRE-{new_num:05d}-{year}"
 
         # Calcular retención del 1% para Grandes Contribuyentes con CCF
         client = self.service_order.client
@@ -423,13 +449,26 @@ class Invoice(models.Model):
 
     def calculate_totals(self):
         """Calcula los totales de servicios y gastos a terceros"""
-        charges = self.service_order.charges.all()
+        # Sumar solo los cargos asignados a esta factura
+        charges = self.charges.all()
         self.subtotal_services = sum(c.subtotal for c in charges)
         self.iva_services = sum(c.iva_amount for c in charges)
         self.total_services = sum(c.total for c in charges)
 
-        third_party_transfers = self.service_order.transfers.filter(transfer_type='terceros')
-        self.subtotal_third_party = sum(t.amount for t in third_party_transfers)
+        # TODO: Manejar gastos a terceros si se vinculan directamente (por ahora usa lógica legacy o requiere link)
+        # Si los 'transfers' (gastos terceros) no tienen FK a Invoice, este cálculo podría ser incorrecto para parciales.
+        # Por ahora, asumimos que los 'charges' cubren todo lo facturable.
+        # Si se usa el modelo híbrido donde 'transfers' se facturan directamente, necesitaríamos FK en Transfer también.
+        # Pero el nuevo flujo convierte gastos -> charges, así que usar 'charges' es lo correcto.
+        
+        # Retrocompatibilidad: Si no hay cargos asignados explícitamente, intentar tomar todos los de la OS?
+        # No, para parciales esto rompería. Asumimos que el proceso de facturación ASIGNA los cargos.
+        
+        # Pero para facturas viejas? 
+        # Si charges es vacío y la factura ya existe, tal vez deberíamos mantener el comportamiento anterior?
+        # O mejor, migrar datos. Asumiremos que el flujo "nuevo" es el mandatorio.
+        
+        self.subtotal_third_party = Decimal('0.00') # Los terceros ahora se convierten en charges tipo "Reembolso"
 
         self.total_amount = self.total_services + self.subtotal_third_party
         self.save()

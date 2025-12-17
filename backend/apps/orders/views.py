@@ -68,6 +68,88 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         return ServiceOrderSerializer
 
     @action(detail=True, methods=['get'])
+    def billable_items(self, request, pk=None):
+        """
+        Get all billable items for the billing wizard.
+        Combines:
+        1. Unbilled OrderCharges (Manual services)
+        2. Unbilled Transfers (Expenses configured to be billed)
+        """
+        order = self.get_object()
+        
+        items = []
+        
+        # 1. Manual Charges (Service Calculator)
+        # Exclude charges already linked to an invoice
+        charges = order.charges.filter(invoice__isnull=True).select_related('service')
+        for charge in charges:
+            items.append({
+                'id': f'charge_{charge.id}',
+                'original_id': charge.id,
+                'type': 'service',
+                'description': f"{charge.service.name} - {charge.description or ''}",
+                'amount': float(charge.subtotal), # Base amount without IVA
+                'iva': float(charge.iva_amount),
+                'total': float(charge.total),
+                'notes': charge.description,
+                'source_model': 'OrderCharge'
+            })
+            
+        # 2. Billable Expenses (Transfer Calculator)
+        # Exclude transfers already linked to an invoice (via some future mechanism) or that are administrative
+        # For now, we just list them. We rely on the frontend to filter or handle duplicates if logic changes.
+        # But wait, we don't have a direct link from Invoice -> Transfer yet.
+        # So we assume if a Transfer is "billed", it was converted to an OrderCharge and that Charge is billed.
+        # BUT the new flow is: Select Transfer in Wizard -> Create Invoice.
+        # This implies we need to know if a Transfer has been billed.
+        # We don't have a field `invoice` on Transfer yet for this flow.
+        # However, for this iteration, we list ALL billable transfers. The user manually selects.
+        # To make it smarter, we should filter out transfers that were already "converted" to charges?
+        # That logic is complex without a direct link.
+        # Let's list all transfers that have a valid markup configuration.
+        
+        from apps.transfers.models import Transfer
+        from decimal import Decimal
+        
+        transfers = Transfer.objects.filter(
+            service_order=order, 
+            transfer_type__in=['cargos', 'costos', 'terceros']
+        )
+        
+        for t in transfers:
+            # Calculate billable amount based on stored config
+            markup = t.customer_markup_percentage or Decimal('0.00')
+            applies_iva = t.customer_applies_iva
+            
+            cost = t.amount
+            base_price = cost * (1 + markup / Decimal('100.00'))
+            
+            if applies_iva:
+                iva = base_price * Decimal('0.13')
+            else:
+                iva = Decimal('0.00')
+                
+            total = base_price + iva
+            
+            # Check if this expense has already been converted to a charge?
+            # We can fuzzy match or rely on user. 
+            # Ideally we'd store `related_transfer` on OrderCharge.
+            
+            items.append({
+                'id': f'expense_{t.id}',
+                'original_id': t.id,
+                'type': 'expense',
+                'description': f"{t.description} (Gasto: {t.provider.name if t.provider else 'N/A'})",
+                'amount': float(base_price),
+                'iva': float(iva),
+                'total': float(total),
+                'notes': f"Costo original: {t.amount}. Margen: {markup}%",
+                'source_model': 'Transfer'
+            })
+            
+        return Response(items)
+
+    @action(detail=True, methods=['get'])
     def charges(self, request, pk=None):
         """Get all charges for a specific order"""
         order = self.get_object()
@@ -86,6 +168,8 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 'iva_amount': str(charge.iva_amount),
                 'total': str(charge.total),
                 'notes': charge.description,
+                'invoice_id': charge.invoice.id if charge.invoice else None,
+                'invoice_number': charge.invoice.invoice_number if charge.invoice else None,
             })
 
         return Response(charges_data)
@@ -100,18 +184,31 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 {'error': 'No se pueden agregar cargos a una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        service_id = request.data.get('service')
+        if not service_id:
+            return Response(
+                {'error': 'Debe seleccionar un servicio válido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             from apps.catalogs.models import Service
-            service = Service.objects.get(id=request.data.get('service'))
+            try:
+                service = Service.objects.get(id=service_id)
+            except (ValueError, TypeError):
+                 return Response(
+                    {'error': 'ID de servicio inválido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             # The frontend sends 'notes' but model has 'description'.
-            # 'discount' and 'created_by' are not in the OrderCharge model, so we ignore them for now.
             charge = OrderCharge.objects.create(
                 service_order=order,
                 service=service,
                 quantity=request.data.get('quantity', 1),
                 unit_price=request.data.get('unit_price', service.default_price),
+                discount=request.data.get('discount', 0),
                 description=request.data.get('notes', '')
             )
             
@@ -128,6 +225,47 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 {'error': 'Servicio no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=True, methods=['post'])
+    def update_expense_configurations(self, request, pk=None):
+        """Update billing configuration for expenses (Transfers)"""
+        # No check for order status, allowing updates even if closed (or partial)
+        
+        configs = request.data.get('configs', [])
+        if not configs:
+            return Response({'message': 'No hay configuraciones para guardar'}, status=status.HTTP_200_OK)
+
+        try:
+            from apps.transfers.models import Transfer
+            from decimal import Decimal
+            from django.db import transaction
+
+            updated_count = 0
+            with transaction.atomic():
+                for item in configs:
+                    transfer_id = item.get('expense_id')
+                    if not transfer_id:
+                        continue
+                        
+                    markup = Decimal(str(item.get('markup_percentage', 0)))
+                    applies_iva = item.get('applies_iva', False)
+
+                    Transfer.objects.filter(id=transfer_id).update(
+                        customer_markup_percentage=markup,
+                        customer_applies_iva=applies_iva
+                    )
+                    updated_count += 1
+
+            return Response({
+                'message': 'Configuración de gastos guardada correctamente',
+                'updated_count': updated_count
+            }, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response(
                 {'error': str(e)},

@@ -59,7 +59,7 @@ class OrderChargeSerializer(serializers.ModelSerializer):
         model = OrderCharge
         fields = [
             'id', 'service_order', 'service', 'service_name',
-            'description', 'quantity', 'unit_price',
+            'description', 'quantity', 'unit_price', 'discount',
             'subtotal', 'iva_amount', 'total',
             'created_at', 'updated_at'
         ]

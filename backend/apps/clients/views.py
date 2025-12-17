@@ -384,3 +384,94 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         wb.save(response)
         return response
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def export_clients_excel(self, request):
+        """Exportar listado de clientes a Excel"""
+        # Filtros
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Crear workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Listado de Clientes"
+
+        # Estilos
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="1F4E79")
+        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        currency_format = '#,##0.00'
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # === ENCABEZADO ===
+        ws['A1'] = "LISTADO GENERAL DE CLIENTES"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:J1')
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:J2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # Headers
+        headers = [
+            'ID', 'Nombre / Razón Social', 'NIT', 'Teléfono', 'Email',
+            'Dirección', 'Contacto', 'Condición Pago', 'Límite Crédito', 'Estado'
+        ]
+
+        start_row = 5
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=start_row, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
+        # Datos
+        data_row = start_row + 1
+        for client in queryset:
+            ws.cell(row=data_row, column=1, value=client.id).border = thin_border
+            ws.cell(row=data_row, column=2, value=client.name).border = thin_border
+            ws.cell(row=data_row, column=3, value=client.nit).border = thin_border
+            ws.cell(row=data_row, column=4, value=client.phone).border = thin_border
+            ws.cell(row=data_row, column=5, value=client.email).border = thin_border
+            ws.cell(row=data_row, column=6, value=client.address).border = thin_border
+            ws.cell(row=data_row, column=7, value=client.contact_person).border = thin_border
+
+            payment_cond = client.get_payment_condition_display()
+            if client.payment_condition == 'credito' and client.credit_days:
+                payment_cond += f" ({client.credit_days} días)"
+
+            ws.cell(row=data_row, column=8, value=payment_cond).border = thin_border
+
+            credit_cell = ws.cell(row=data_row, column=9, value=float(client.credit_limit))
+            credit_cell.number_format = currency_format
+            credit_cell.border = thin_border
+
+            status = "Activo" if client.is_active else "Inactivo"
+            ws.cell(row=data_row, column=10, value=status).border = thin_border
+
+            data_row += 1
+
+        # Ajustar anchos
+        column_widths = [8, 35, 15, 15, 25, 40, 25, 20, 15, 10]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
+        # Generar respuesta
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f'clientes_gpro_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        wb.save(response)
+        return response
