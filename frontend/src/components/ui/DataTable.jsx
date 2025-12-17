@@ -3,10 +3,14 @@ import {
     ChevronUpIcon,
     ChevronDownIcon,
     MagnifyingGlassIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 
 /**
- * DataTable - Tabla profesional con búsqueda, ordenamiento, paginación y filtros
+ * DataTable - Tabla Corporativa Enterprise
+ * Estilo: Denso, sobrio, optimizado para 1366x768
+ * Referencia: SAP Fiori Table, Stripe Dashboard
  */
 const DataTable = ({
     data = [],
@@ -18,6 +22,8 @@ const DataTable = ({
     emptyMessage = "No hay datos disponibles",
     pageSize = 10,
     showPagination = true,
+    compact = false, // Modo compacto para pantallas pequeñas
+    stickyHeader = true, // Header fijo para scroll
 }) => {
     const [searchTerm, setSearchTerm] = useState("");
     const [sortColumn, setSortColumn] = useState(null);
@@ -82,21 +88,41 @@ const DataTable = ({
         setCurrentPage(page);
     };
 
+    // Loading state con skeleton corporativo
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            <div className="w-full">
+                <div className="bg-white border border-slate-200 rounded-sm overflow-hidden">
+                    <div className="animate-pulse">
+                        <div className="h-10 bg-slate-50 border-b border-slate-200" />
+                        {[...Array(5)].map((_, i) => (
+                            <div
+                                key={i}
+                                className="h-12 border-b border-slate-100 flex items-center px-3 gap-4"
+                            >
+                                <div className="h-3 bg-slate-200 rounded w-24" />
+                                <div className="h-3 bg-slate-200 rounded w-32" />
+                                <div className="h-3 bg-slate-200 rounded w-20" />
+                                <div className="h-3 bg-slate-200 rounded flex-1" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         );
     }
 
+    // Padding dinámico según modo
+    const cellPadding = compact ? "px-3 py-2" : "px-3 py-3";
+    const headerPadding = compact ? "px-3 py-2" : "px-3 py-2.5";
+
     return (
         <div className="w-full">
-            {/* Búsqueda */}
+            {/* Búsqueda - Estilo corporativo */}
             {searchable && (
-                <div className="mb-4">
-                    <div className="relative">
-                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <div className="mb-3">
+                    <div className="relative max-w-xs">
+                        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <input
                             type="text"
                             placeholder={searchPlaceholder}
@@ -105,16 +131,21 @@ const DataTable = ({
                                 setSearchTerm(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg transition-all duration-200 focus:outline-none focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 placeholder:text-slate-400 text-sm"
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-sm bg-white placeholder:text-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors duration-150"
                         />
                     </div>
                 </div>
             )}
 
-            {/* Tabla */}
-            <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-                <table className="min-w-full">
-                    <thead className="bg-white border-b border-gray-200">
+            {/* Tabla - Container responsivo */}
+            <div className="relative overflow-x-auto bg-white border border-slate-200 rounded-sm">
+                <table className="w-full text-sm">
+                    {/* Header */}
+                    <thead
+                        className={`bg-slate-50 border-b border-slate-200 ${
+                            stickyHeader ? "sticky top-0 z-10" : ""
+                        }`}
+                    >
                         <tr>
                             {columns.map((column) => (
                                 <th
@@ -124,23 +155,34 @@ const DataTable = ({
                                         column.accessor &&
                                         handleSort(column.accessor)
                                     }
-                                    className={`px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider min-w-[100px] ${
+                                    className={`${headerPadding} text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap ${
                                         column.sortable !== false &&
                                         column.accessor
-                                            ? "cursor-pointer hover:bg-gray-50 transition-colors"
+                                            ? "cursor-pointer hover:bg-slate-100 select-none transition-colors duration-75"
                                             : ""
+                                    } ${column.width ? column.width : ""} ${
+                                        column.minWidth
+                                            ? `min-w-[${column.minWidth}]`
+                                            : "min-w-[80px]"
                                     }`}
+                                    style={
+                                        column.minWidth
+                                            ? { minWidth: column.minWidth }
+                                            : {}
+                                    }
                                 >
-                                    <div className="flex items-center space-x-1.5">
-                                        <span>{column.header}</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="truncate">
+                                            {column.header}
+                                        </span>
                                         {column.sortable !== false &&
                                             column.accessor &&
                                             sortColumn === column.accessor && (
-                                                <span className="text-gray-700">
+                                                <span className="text-slate-700 flex-shrink-0">
                                                     {sortDirection === "asc" ? (
-                                                        <ChevronUpIcon className="h-3.5 w-3.5" />
+                                                        <ChevronUpIcon className="h-3 w-3" />
                                                     ) : (
-                                                        <ChevronDownIcon className="h-3.5 w-3.5" />
+                                                        <ChevronDownIcon className="h-3 w-3" />
                                                     )}
                                                 </span>
                                             )}
@@ -149,35 +191,53 @@ const DataTable = ({
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    {/* Body */}
+                    <tbody className="divide-y divide-slate-100">
                         {paginatedData.length === 0 ? (
                             <tr>
                                 <td
                                     colSpan={columns.length}
-                                    className="px-5 py-16 text-center text-gray-500 text-sm"
+                                    className="px-3 py-12 text-center text-slate-500 text-sm"
                                 >
-                                    {emptyMessage}
+                                    <div className="flex flex-col items-center gap-2">
+                                        <svg
+                                            className="w-8 h-8 text-slate-300"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={1.5}
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                            />
+                                        </svg>
+                                        <span>{emptyMessage}</span>
+                                    </div>
                                 </td>
                             </tr>
                         ) : (
                             paginatedData.map((row, rowIndex) => (
                                 <tr
-                                    key={rowIndex}
+                                    key={row.id || rowIndex}
                                     onClick={() =>
                                         onRowClick && onRowClick(row)
                                     }
                                     className={`${
-                                        onRowClick
-                                            ? "cursor-pointer hover:bg-gray-50"
-                                            : ""
-                                    } transition-colors`}
+                                        onRowClick ? "cursor-pointer" : ""
+                                    } hover:bg-slate-50/70 transition-colors duration-75`}
                                 >
                                     {columns.map((column) => (
                                         <td
                                             key={
                                                 column.accessor || column.header
                                             }
-                                            className="px-5 py-5 whitespace-nowrap text-sm text-gray-900"
+                                            className={`${cellPadding} text-slate-700 ${
+                                                column.wrap
+                                                    ? ""
+                                                    : "whitespace-nowrap"
+                                            }`}
                                         >
                                             {column.cell
                                                 ? column.cell(row, rowIndex)
@@ -193,73 +253,88 @@ const DataTable = ({
                 </table>
             </div>
 
-            {/* Paginación */}
+            {/* Paginación - Estilo corporativo compacto */}
             {showPagination && totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                    <div className="text-sm text-gray-700">
+                <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    {/* Info de resultados */}
+                    <div className="text-xs text-slate-500">
                         Mostrando{" "}
-                        <span className="font-medium">
+                        <span className="font-medium text-slate-700">
                             {(currentPage - 1) * pageSize + 1}
-                        </span>{" "}
-                        a{" "}
-                        <span className="font-medium">
+                        </span>
+                        {" - "}
+                        <span className="font-medium text-slate-700">
                             {Math.min(
                                 currentPage * pageSize,
                                 sortedData.length
                             )}
-                        </span>{" "}
-                        de{" "}
-                        <span className="font-medium">{sortedData.length}</span>{" "}
-                        resultados
+                        </span>
+                        {" de "}
+                        <span className="font-medium text-slate-700">
+                            {sortedData.length}
+                        </span>
                     </div>
-                    <div className="flex space-x-2">
+
+                    {/* Controles de paginación */}
+                    <div className="flex items-center gap-1">
                         <button
                             onClick={() => handlePageChange(currentPage - 1)}
                             disabled={currentPage === 1}
-                            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
+                            aria-label="Página anterior"
                         >
-                            Anterior
+                            <ChevronLeftIcon className="h-4 w-4" />
                         </button>
-                        {[...Array(totalPages)].map((_, i) => {
-                            const page = i + 1;
-                            // Mostrar solo páginas cercanas a la actual
-                            if (
-                                page === 1 ||
-                                page === totalPages ||
-                                (page >= currentPage - 1 &&
-                                    page <= currentPage + 1)
-                            ) {
-                                return (
-                                    <button
-                                        key={page}
-                                        onClick={() => handlePageChange(page)}
-                                        className={`px-3 py-1 border rounded-md ${
-                                            currentPage === page
-                                                ? "bg-primary-600 text-white border-primary-600"
-                                                : "border-gray-300 hover:bg-gray-50"
-                                        }`}
-                                    >
-                                        {page}
-                                    </button>
-                                );
-                            } else if (
-                                page === currentPage - 2 ||
-                                page === currentPage + 2
-                            ) {
-                                return (
-                                    <span key={page} className="px-2">
-                                        ...
-                                    </span>
-                                );
-                            }
-                            return null;
-                        })}
+
+                        {/* Números de página - compactos */}
+                        <div className="flex items-center gap-1">
+                            {[...Array(totalPages)].map((_, i) => {
+                                const page = i + 1;
+                                if (
+                                    page === 1 ||
+                                    page === totalPages ||
+                                    (page >= currentPage - 1 &&
+                                        page <= currentPage + 1)
+                                ) {
+                                    return (
+                                        <button
+                                            key={page}
+                                            onClick={() =>
+                                                handlePageChange(page)
+                                            }
+                                            className={`min-w-[28px] h-7 px-2 text-xs font-medium rounded-sm border transition-colors duration-150 ${
+                                                currentPage === page
+                                                    ? "bg-brand-600 text-white border-brand-600"
+                                                    : "border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
+                                            }`}
+                                        >
+                                            {page}
+                                        </button>
+                                    );
+                                } else if (
+                                    page === currentPage - 2 ||
+                                    page === currentPage + 2
+                                ) {
+                                    return (
+                                        <span
+                                            key={page}
+                                            className="px-1 text-slate-400 text-xs"
+                                        >
+                                            ⋯
+                                        </span>
+                                    );
+                                }
+                                return null;
+                            })}
+                        </div>
+
                         <button
                             onClick={() => handlePageChange(currentPage + 1)}
                             disabled={currentPage === totalPages}
-                            className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                            className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
+                            aria-label="Página siguiente"
                         >
-                            Siguiente
+                            <ChevronRightIcon className="h-4 w-4" />
                         </button>
                     </div>
                 </div>

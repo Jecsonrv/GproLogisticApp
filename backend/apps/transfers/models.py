@@ -39,6 +39,20 @@ class Transfer(SoftDeleteModel):
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, verbose_name="Método de Pago")
 
+    # Moneda
+    CURRENCY_CHOICES = (
+        ('GTQ', 'Quetzales (GTQ)'),
+        ('USD', 'Dólares (USD)'),
+    )
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='GTQ', verbose_name="Moneda")
+    exchange_rate = models.DecimalField(
+        max_digits=10, 
+        decimal_places=4, 
+        default=Decimal('1.0000'), 
+        validators=[MinValueValidator(Decimal('0.0001'))],
+        verbose_name="Tipo de Cambio"
+    )
+
     amount = models.DecimalField(max_digits=15, decimal_places=2, verbose_name="Monto Total")
     paid_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Monto Pagado")
     balance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Saldo Pendiente")

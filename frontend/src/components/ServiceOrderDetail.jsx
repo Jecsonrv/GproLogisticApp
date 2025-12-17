@@ -177,11 +177,22 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     };
 
     const calculateChargeTotal = (charge) => {
-        const subtotal = charge.quantity * charge.unit_price;
+        const quantity = parseFloat(charge.quantity) || 0;
+        const unitPrice = parseFloat(charge.unit_price) || 0;
+        const exchangeRate = parseFloat(charge.exchange_rate) || 1;
+
+        const subtotal = quantity * unitPrice;
         const discount = subtotal * (parseFloat(charge.discount || 0) / 100);
         const base = subtotal - discount;
+
+        // Calcular IVA sobre el monto base (en moneda original)
         const iva = charge.applies_iva ? base * 0.13 : 0;
-        return base + iva;
+
+        // Total en moneda original
+        const totalOriginal = base + iva;
+
+        // Retornar total convertido a moneda base (GTQ)
+        return totalOriginal * exchangeRate;
     };
 
     const getServicePrice = (serviceId) => {
@@ -644,7 +655,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                     </div>
                                 )}
 
-                                {/* Charges Table */}
+                                {/* Charges Table - Responsive */}
                                 {charges.length === 0 ? (
                                     <EmptyState
                                         icon={DollarSign}
@@ -652,129 +663,142 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         description="Agregue servicios para calcular el cobro de esta orden"
                                     />
                                 ) : (
-                                    <div className="border rounded-lg overflow-hidden">
-                                        <table className="min-w-full divide-y divide-gray-200">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Servicio
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Cant.
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Precio
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Desc.
-                                                    </th>
-                                                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        IVA
-                                                    </th>
-                                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                        Total
-                                                    </th>
-                                                    {order.status ===
-                                                        "abierta" && (
-                                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
-                                                    )}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white divide-y divide-gray-200">
-                                                {charges.map((charge) => (
-                                                    <tr
-                                                        key={charge.id}
-                                                        className="hover:bg-gray-50 transition-colors"
-                                                    >
-                                                        <td className="px-4 py-3">
-                                                            <div className="text-sm font-medium text-gray-900 py-2">
-                                                                {charge.service_code
-                                                                    ? `${charge.service_code} - `
-                                                                    : ""}
-                                                                {
-                                                                    charge.service_name
-                                                                }
-                                                            </div>
-                                                            {charge.notes && (
-                                                                <div className="text-xs text-gray-500 mt-0.5">
+                                    <div className="border border-slate-200 rounded-sm overflow-hidden">
+                                        {/* Tabla responsive con scroll horizontal */}
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-slate-200 text-sm">
+                                                <thead className="bg-slate-50">
+                                                    <tr>
+                                                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[180px]">
+                                                            Servicio
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
+                                                            Cant.
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
+                                                            Precio
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
+                                                            Desc.
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-14">
+                                                            IVA
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
+                                                            Total
+                                                        </th>
+                                                        {order.status ===
+                                                            "abierta" && (
+                                                            <th className="px-3 py-2.5 w-10"></th>
+                                                        )}
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-slate-100">
+                                                    {charges.map((charge) => (
+                                                        <tr
+                                                            key={charge.id}
+                                                            className="hover:bg-slate-50/70 transition-colors duration-75"
+                                                        >
+                                                            <td className="px-3 py-2.5">
+                                                                <div className="text-sm font-medium text-slate-900">
+                                                                    {charge.service_code
+                                                                        ? `${charge.service_code} - `
+                                                                        : ""}
                                                                     {
-                                                                        charge.notes
+                                                                        charge.service_name
                                                                     }
                                                                 </div>
+                                                                {charge.notes && (
+                                                                    <div
+                                                                        className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]"
+                                                                        title={
+                                                                            charge.notes
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            charge.notes
+                                                                        }
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
+                                                                {
+                                                                    charge.quantity
+                                                                }
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
+                                                                {formatCurrency(
+                                                                    charge.unit_price
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
+                                                                {charge.discount >
+                                                                0
+                                                                    ? `${charge.discount}%`
+                                                                    : "-"}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-center">
+                                                                {charge.applies_iva ? (
+                                                                    <Badge
+                                                                        variant="secondary"
+                                                                        size="sm"
+                                                                    >
+                                                                        IVA
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <span className="text-slate-300">
+                                                                        -
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
+                                                                {formatCurrency(
+                                                                    calculateChargeTotal(
+                                                                        charge
+                                                                    )
+                                                                )}
+                                                            </td>
+                                                            {order.status ===
+                                                                "abierta" && (
+                                                                <td className="px-3 py-2.5 text-center">
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            handleDeleteCharge(
+                                                                                charge.id
+                                                                            )
+                                                                        }
+                                                                        className="text-slate-400 hover:text-danger-600 transition-colors p-1 rounded hover:bg-danger-50"
+                                                                        title="Eliminar"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </button>
+                                                                </td>
                                                             )}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot className="bg-slate-50 border-t border-slate-200">
+                                                    <tr>
+                                                        <td
+                                                            colSpan={5}
+                                                            className="px-3 py-2.5 text-right text-sm font-semibold text-slate-700"
+                                                        >
+                                                            Total Servicios:
                                                         </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
-                                                            {charge.quantity}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
+                                                        <td className="px-3 py-2.5 text-right font-bold text-brand-700 text-base tabular-nums">
                                                             {formatCurrency(
-                                                                charge.unit_price
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 py-2">
-                                                            {charge.discount > 0
-                                                                ? `${charge.discount}%`
-                                                                : "-"}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center py-2">
-                                                            {charge.applies_iva ? (
-                                                                <Badge
-                                                                    variant="secondary"
-                                                                    className="text-[10px] px-1.5 py-0"
-                                                                >
-                                                                    IVA
-                                                                </Badge>
-                                                            ) : (
-                                                                <span className="text-gray-300">
-                                                                    -
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 py-2">
-                                                            {formatCurrency(
-                                                                calculateChargeTotal(
-                                                                    charge
-                                                                )
+                                                                order.total_services ||
+                                                                    0
                                                             )}
                                                         </td>
                                                         {order.status ===
                                                             "abierta" && (
-                                                            <td className="px-4 py-3 text-center py-2">
-                                                                <button
-                                                                    onClick={() =>
-                                                                        handleDeleteCharge(
-                                                                            charge.id
-                                                                        )
-                                                                    }
-                                                                    className="text-gray-400 hover:text-red-600 transition-colors"
-                                                                    title="Eliminar"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </button>
-                                                            </td>
+                                                            <td></td>
                                                         )}
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                            <tfoot className="bg-gray-50">
-                                                <tr>
-                                                    <td
-                                                        colSpan={5}
-                                                        className="px-4 py-3 text-right font-semibold text-gray-900"
-                                                    >
-                                                        Total Servicios:
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-bold text-blue-700 text-base">
-                                                        {formatCurrency(
-                                                            order.total_services ||
-                                                                0
-                                                        )}
-                                                    </td>
-                                                    {order.status ===
-                                                        "abierta" && <td></td>}
-                                                </tr>
-                                            </tfoot>
-                                        </table>
+                                                </tfoot>
+                                            </table>
+                                        </div>
                                     </div>
                                 )}
                             </CardContent>

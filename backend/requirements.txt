@@ -1,15 +1,48 @@
-django
-djangorestframework
-django-cors-headers
-psycopg2-binary
-python-dotenv
-djangorestframework-simplejwt
-django-filter
-markdown
-django-import-export
-openpyxl
-whitenoise
-drf-spectacular
-python-dateutil
+# ============================================
+# GPRO Logistic - Backend Dependencies
+# ============================================
+
+# Django Core
+django>=4.2,<5.0
+djangorestframework>=3.14
+django-cors-headers>=4.3
+django-filter>=23.5
+python-dotenv>=1.0
+
+# Authentication
+djangorestframework-simplejwt>=5.3
+
+# Database
+psycopg2-binary>=2.9      # PostgreSQL adapter
+# psycopg[binary]>=3.1    # PostgreSQL 3 (alternativa más moderna)
+
+# Redis & Caching
+redis>=5.0
+django-redis>=5.4
+hiredis>=2.3              # Parser C para Redis (mejor rendimiento)
+
+# API Documentation
+drf-spectacular>=0.27
+markdown>=3.5
+
+# Import/Export
+django-import-export>=3.3
+openpyxl>=3.1
+
+# PDF Generation
 reportlab==4.0.7
-python-magic
+
+# Static Files
+whitenoise>=6.6
+
+# Utilities
+python-dateutil>=2.8
+python-magic>=0.4         # Detección de tipos MIME
+
+# Production Server (opcional)
+gunicorn>=21.2
+uvicorn>=0.24             # ASGI server (si usas async)
+
+# Monitoring & Logging (opcional - producción)
+# sentry-sdk>=1.38        # Error tracking
+# django-prometheus>=2.3  # Métricas

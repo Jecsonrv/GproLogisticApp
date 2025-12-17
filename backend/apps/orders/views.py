@@ -19,8 +19,15 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     search_fields = ['order_number', 'duca', 'purchase_order']
 
     def get_queryset(self):
-        """Optimizar queries con select_related y prefetch_related para evitar N+1"""
-        from django.db.models import Prefetch
+        """
+        Optimized queryset with select_related/prefetch_related to prevent N+1 queries.
+        Implements Row-Level Security (IDOR protection):
+        - Admins/Operativo2: See all orders.
+        - Operativo: See only orders assigned to them (customs_agent) or created by them.
+        """
+        from django.db.models import Prefetch, Q
+        user = self.request.user
+
         queryset = ServiceOrder.objects.select_related(
             'client',
             'sub_client',
@@ -39,7 +46,17 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 'transfers'
             )
 
-        return queryset
+        # Row-Level Security (IDOR protection)
+        if user.is_authenticated:
+            # Si es admin o operativo2, ver todo
+            if user.role in ['admin', 'operativo2']:
+                return queryset
+            # Si es operativo básico, filtrar por órdenes asignadas o creadas
+            if user.role == 'operativo':
+                return queryset.filter(Q(customs_agent=user) | Q(created_by=user))
+
+        # Fallback de seguridad
+        return queryset.none()
 
     def perform_create(self, serializer):
         """Assign current user as customs_agent when creating order"""

@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Q, Count
 from django.http import HttpResponse
+from django.db import transaction
 from decimal import Decimal
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -10,6 +11,15 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from .models import Invoice, InvoicePayment, ServiceOrder, CreditNote
 from .serializers import InvoiceSerializer, InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
+
+# Import distributed lock utilities (only active when Redis is configured)
+try:
+    from apps.core.cache import distributed_lock, LockAcquisitionError
+    LOCKS_ENABLED = True
+except ImportError:
+    LOCKS_ENABLED = False
+    distributed_lock = None
+    LockAcquisitionError = Exception
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
@@ -27,58 +37,77 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return InvoiceSerializer
 
     def perform_create(self, serializer):
-        """Create invoice from service order"""
-        # Get the service order
+        """Create invoice from service order with distributed lock"""
         service_order_id = self.request.data.get('service_order')
-        total_amount = Decimal(str(self.request.data.get('total_amount', 0)))
-        invoice_number = self.request.data.get('invoice_number', '')
-
-        # Get dates
-        from datetime import datetime
-        issue_date = self.request.data.get('issue_date')
-        if isinstance(issue_date, str):
-            issue_date = datetime.strptime(issue_date, '%Y-%m-%d').date()
-
-        due_date = self.request.data.get('due_date')
-        if due_date and isinstance(due_date, str):
-            due_date = datetime.strptime(due_date, '%Y-%m-%d').date()
-
+        
         if not service_order_id:
             raise ValueError("Se requiere una orden de servicio")
 
-        try:
-            service_order = ServiceOrder.objects.get(id=service_order_id)
-        except ServiceOrder.DoesNotExist:
-            raise ValueError("Orden de servicio no encontrada")
+        # Use distributed lock to prevent concurrent invoicing of the same order
+        def create_invoice():
+            total_amount = Decimal(str(self.request.data.get('total_amount', 0)))
+            invoice_number = self.request.data.get('invoice_number', '')
 
-        # Get file if provided
-        pdf_file = self.request.FILES.get('pdf_file')
-        dte_file = self.request.FILES.get('dte_file')
+            # Get dates
+            from datetime import datetime
+            issue_date = self.request.data.get('issue_date')
+            if isinstance(issue_date, str):
+                issue_date = datetime.strptime(issue_date, '%Y-%m-%d').date()
 
-        # Create invoice with values
-        invoice_data = {
-            'created_by': self.request.user,
-            'invoice_number': invoice_number,
-            'issue_date': issue_date,
-            'due_date': due_date,
-            'total_amount': total_amount,
-            'balance': total_amount,
-            'paid_amount': Decimal('0.00')
-        }
+            due_date = self.request.data.get('due_date')
+            if due_date and isinstance(due_date, str):
+                due_date = datetime.strptime(due_date, '%Y-%m-%d').date()
 
-        # Add files if provided
-        if pdf_file:
-            invoice_data['pdf_file'] = pdf_file
-        if dte_file:
-            invoice_data['dte_file'] = dte_file
+            try:
+                service_order = ServiceOrder.objects.select_for_update().get(id=service_order_id)
+            except ServiceOrder.DoesNotExist:
+                raise ValueError("Orden de servicio no encontrada")
 
-        invoice = serializer.save(**invoice_data)
+            # Double-check if already invoiced (inside lock)
+            if service_order.facturado:
+                raise ValueError("Esta orden de servicio ya fue facturada")
 
-        # Mark service order as invoiced
-        service_order.facturado = True
-        service_order.save()
+            # Get file if provided
+            pdf_file = self.request.FILES.get('pdf_file')
+            dte_file = self.request.FILES.get('dte_file')
 
-        return invoice
+            # Create invoice with values
+            invoice_data = {
+                'created_by': self.request.user,
+                'invoice_number': invoice_number,
+                'issue_date': issue_date,
+                'due_date': due_date,
+                'total_amount': total_amount,
+                'balance': total_amount,
+                'paid_amount': Decimal('0.00')
+            }
+
+            # Add files if provided
+            if pdf_file:
+                invoice_data['pdf_file'] = pdf_file
+            if dte_file:
+                invoice_data['dte_file'] = dte_file
+
+            invoice = serializer.save(**invoice_data)
+
+            # Mark service order as invoiced
+            service_order.facturado = True
+            service_order.save()
+
+            return invoice
+
+        # Apply distributed lock if Redis is available
+        if LOCKS_ENABLED and distributed_lock:
+            try:
+                with distributed_lock(f'invoice_os_{service_order_id}', timeout=30):
+                    with transaction.atomic():
+                        return create_invoice()
+            except LockAcquisitionError:
+                raise ValueError("Otro usuario está procesando esta orden. Intente nuevamente.")
+        else:
+            # Fallback to database-level lock only
+            with transaction.atomic():
+                return create_invoice()
 
     def get_queryset(self):
         from django.db.models import Prefetch
@@ -326,7 +355,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def add_payment(self, request, pk=None):
-        """Add a payment (abono) to an invoice"""
+        """Add a payment (abono) to an invoice with distributed lock"""
         invoice = self.get_object()
 
         if invoice.balance <= 0:
@@ -335,22 +364,23 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
+        def process_payment():
+            # Re-fetch invoice inside lock to ensure fresh data
+            inv = Invoice.objects.select_for_update().get(pk=pk)
+            
+            # Re-validate balance inside lock
+            if inv.balance <= 0:
+                raise ValueError('Esta factura ya está completamente pagada')
+            
             amount = Decimal(str(request.data.get('amount', 0)))
             if amount <= 0:
-                return Response(
-                    {'error': 'El monto debe ser mayor a cero'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                raise ValueError('El monto debe ser mayor a cero')
 
-            if amount > invoice.balance:
-                return Response(
-                    {'error': f'El monto excede el saldo pendiente (${invoice.balance})'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            if amount > inv.balance:
+                raise ValueError(f'El monto excede el saldo pendiente (${inv.balance})')
 
             payment = InvoicePayment.objects.create(
-                invoice=invoice,
+                invoice=inv,
                 amount=amount,
                 payment_date=request.data.get('payment_date'),
                 payment_method=request.data.get('payment_method', 'transferencia'),
@@ -360,48 +390,68 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             )
 
             # Update invoice balance
-            invoice.paid_amount += amount
-            invoice.balance = invoice.total_amount - invoice.paid_amount
+            inv.paid_amount += amount
+            inv.balance = inv.total_amount - inv.paid_amount
 
-            if invoice.balance <= 0:
-                invoice.status = 'pagada'
+            if inv.balance <= 0:
+                inv.status = 'pagada'
 
-            invoice.save()
+            inv.save()
+
+            return payment, inv.balance
+
+        try:
+            # Apply distributed lock if Redis is available
+            if LOCKS_ENABLED and distributed_lock:
+                try:
+                    with distributed_lock(f'invoice_payment_{pk}', timeout=30):
+                        with transaction.atomic():
+                            payment, new_balance = process_payment()
+                except LockAcquisitionError:
+                    return Response(
+                        {'error': 'Otro usuario está procesando esta factura. Intente nuevamente.'},
+                        status=status.HTTP_409_CONFLICT
+                    )
+            else:
+                with transaction.atomic():
+                    payment, new_balance = process_payment()
 
             return Response({
                 'message': 'Pago registrado exitosamente',
                 'payment_id': payment.id,
-                'new_balance': str(invoice.balance)
+                'new_balance': str(new_balance)
             }, status=status.HTTP_201_CREATED)
 
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def add_credit_note(self, request, pk=None):
-        """Register a credit note for an invoice"""
+        """Register a credit note for an invoice with distributed lock"""
         invoice = self.get_object()
         
         if invoice.status == 'cancelled':
              return Response({'error': 'No se pueden aplicar NC a facturas anuladas'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        def process_credit_note():
+            # Re-fetch invoice inside lock
+            inv = Invoice.objects.select_for_update().get(pk=pk)
+            
+            if inv.status == 'cancelled':
+                raise ValueError('No se pueden aplicar NC a facturas anuladas')
              
-        try:
             amount = Decimal(str(request.data.get('amount', 0)))
             if amount <= 0:
-                 return Response({'error': 'El monto debe ser mayor a cero'}, status=status.HTTP_400_BAD_REQUEST)
+                 raise ValueError('El monto debe ser mayor a cero')
                  
-            # Validar contra saldo pendiente para evitar saldos negativos
-            # Nota: Si se requiere permitir saldos a favor, cambiar a invoice.total_amount
-            if amount > invoice.balance:
-                return Response({
-                    'error': f'El monto de la NC no puede superar el saldo pendiente de la factura (${invoice.balance})'
-                }, status=status.HTTP_400_BAD_REQUEST)
+            # Validate against pending balance
+            if amount > inv.balance:
+                raise ValueError(f'El monto de la NC no puede superar el saldo pendiente de la factura (${inv.balance})')
 
             credit_note = CreditNote.objects.create(
-                invoice=invoice,
+                invoice=inv,
                 note_number=request.data.get('note_number'),
                 amount=amount,
                 reason=request.data.get('reason', ''),
@@ -410,13 +460,31 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 created_by=request.user
             )
             
-            # Recalculate invoice happens in CreditNote.save()
+            return credit_note
+
+        try:
+            # Apply distributed lock if Redis is available
+            if LOCKS_ENABLED and distributed_lock:
+                try:
+                    with distributed_lock(f'invoice_credit_note_{pk}', timeout=30):
+                        with transaction.atomic():
+                            credit_note = process_credit_note()
+                except LockAcquisitionError:
+                    return Response(
+                        {'error': 'Otro usuario está procesando esta factura. Intente nuevamente.'},
+                        status=status.HTTP_409_CONFLICT
+                    )
+            else:
+                with transaction.atomic():
+                    credit_note = process_credit_note()
             
             return Response({
                 'message': 'Nota de Crédito registrada exitosamente',
                 'credit_note_id': credit_note.id
             }, status=status.HTTP_201_CREATED)
             
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
