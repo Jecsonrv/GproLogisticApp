@@ -137,6 +137,20 @@ api.interceptors.response.use(
             }
         }
 
+        // Debug info en development
+        if (import.meta.env.DEV && error.response?.status >= 500) {
+            console.error('Server Error Details:', {
+                url: error.config?.url,
+                method: error.config?.method,
+                data: error.response?.data
+            });
+        }
+
+        // Marcar errores de red para manejo especial
+        if (!error.response) {
+            error.isNetworkError = true;
+        }
+
         // Mostrar toast de error automáticamente si no está deshabilitado
         if (!originalRequest._skipErrorToast) {
             showErrorToast(error);

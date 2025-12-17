@@ -86,8 +86,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             setCharges(response.data.charges || []);
             setExpenses(response.data.third_party_expenses || []);
         } catch (error) {
-            // toast.error('Error al cargar detalle de OS');
-            console.error(error);
+            const errorMsg = error.response?.data?.detail || error.response?.data?.error || "Error al cargar detalle de la orden";
+            toast.error(errorMsg);
+            console.error("Error fetching order detail:", error);
         } finally {
             setLoading(false);
         }
@@ -98,7 +99,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             const response = await axios.get("/catalogs/services/activos/");
             setServices(response.data);
         } catch (error) {
-            console.error("Error loading services");
+            // Silencioso para catálogos secundarios, solo log en dev
+            console.error("Error loading services:", error);
         }
     };
 
@@ -107,7 +109,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             const response = await axios.get("/catalogs/providers/");
             setProviders(response.data);
         } catch (error) {
-            console.error("Error loading providers");
+            // Silencioso para catálogos secundarios, solo log en dev
+            console.error("Error loading providers:", error);
         }
     };
 
@@ -118,7 +121,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             );
             setClientPrices(response.data);
         } catch (error) {
-            console.error("Error loading client prices", error);
+            // Silencioso - precios personalizados son opcionales
+            console.error("Error loading client prices:", error);
         }
     };
 

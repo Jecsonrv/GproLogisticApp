@@ -129,8 +129,13 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     # Totales calculados
     total_services = serializers.SerializerMethodField()
     total_third_party = serializers.SerializerMethodField()
+    total_direct_costs = serializers.SerializerMethodField()
     total_amount = serializers.SerializerMethodField()
     total_transfers = serializers.SerializerMethodField()
+
+    # Métricas de rentabilidad
+    profit = serializers.SerializerMethodField()
+    profit_margin = serializers.SerializerMethodField()
 
     # Información de transferencias
     transfers_summary = serializers.SerializerMethodField()
@@ -149,8 +154,9 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'closed_by', 'closed_by_username', 'closed_at',
             'created_at', 'updated_at',
             'documents', 'charges',
-            'total_services', 'total_third_party', 'total_amount',
-            'total_transfers', 'transfers_summary'
+            'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
+            'total_transfers', 'transfers_summary',
+            'profit', 'profit_margin'
         ]
         read_only_fields = [
             'id', 'order_number', 'mes', 'created_at', 'updated_at',
@@ -158,8 +164,9 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'client_name', 'sub_client_name', 'shipment_type_name',
             'provider_name', 'customs_agent_name',
             'created_by_username', 'closed_by_username', 'status_display',
-            'total_services', 'total_third_party', 'total_amount',
-            'total_transfers', 'transfers_summary'
+            'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
+            'total_transfers', 'transfers_summary',
+            'profit', 'profit_margin'
         ]
 
     def get_total_services(self, obj):
@@ -168,17 +175,29 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     def get_total_third_party(self, obj):
         return float(obj.get_total_third_party())
 
+    def get_total_direct_costs(self, obj):
+        """Total de costos directos (no facturables al cliente)"""
+        return float(obj.get_total_direct_costs())
+
     def get_total_amount(self, obj):
         return float(obj.get_total_amount())
 
     def get_total_transfers(self, obj):
         return obj.transfers.aggregate(Sum('amount'))['amount__sum'] or 0
 
+    def get_profit(self, obj):
+        """Ganancia bruta de la OS (Ingresos por Servicios - Costos Directos)"""
+        return float(obj.get_profit())
+
+    def get_profit_margin(self, obj):
+        """Margen de ganancia como porcentaje"""
+        return float(obj.get_profit_margin())
+
     def get_transfers_summary(self, obj):
-        """Resumen de transferencias por tipo"""
+        """Resumen de transferencias por tipo (incluye valores actuales y legacy)"""
         return {
-            'terceros': obj.transfers.filter(transfer_type='terceros').aggregate(Sum('amount'))['amount__sum'] or 0,
-            'propios': obj.transfers.filter(transfer_type='propios').aggregate(Sum('amount'))['amount__sum'] or 0,
+            'cargos_cliente': obj.transfers.filter(transfer_type__in=['cargos', 'terceros']).aggregate(Sum('amount'))['amount__sum'] or 0,
+            'costos_directos': obj.transfers.filter(transfer_type__in=['costos', 'propios']).aggregate(Sum('amount'))['amount__sum'] or 0,
             'admin': obj.transfers.filter(transfer_type='admin').aggregate(Sum('amount'))['amount__sum'] or 0,
         }
 
