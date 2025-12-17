@@ -32,28 +32,28 @@ class DashboardView(APIView):
             created_at__month=prev_month
         ).count()
 
-        # Monto facturado (terceros del mes)
+        # Monto facturado (cargos a clientes: 'cargos' actual + 'terceros' legacy)
         billed_amount = Transfer.objects.filter(
-            transfer_type='terceros',
+            transfer_type__in=['cargos', 'terceros'],
             transaction_date__year=current_year,
             transaction_date__month=current_month
         ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
+
         billed_amount_prev = Transfer.objects.filter(
-            transfer_type='terceros',
+            transfer_type__in=['cargos', 'terceros'],
             transaction_date__year=prev_year,
             transaction_date__month=prev_month
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # Gastos operativos del mes
+        # Gastos operativos del mes ('costos' actual + 'propios' legacy)
         operating_costs = Transfer.objects.filter(
-            transfer_type='propios',
+            transfer_type__in=['costos', 'propios'],
             transaction_date__year=current_year,
             transaction_date__month=current_month
         ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
+
         operating_costs_prev = Transfer.objects.filter(
-            transfer_type='propios',
+            transfer_type__in=['costos', 'propios'],
             transaction_date__year=prev_year,
             transaction_date__month=prev_month
         ).aggregate(Sum('amount'))['amount__sum'] or 0
@@ -82,16 +82,16 @@ class DashboardView(APIView):
             status='cerrada'
         ).count()
 
-        # Top 5 clientes por facturación del mes
+        # Top 5 clientes por facturación del mes (cargos + terceros legacy)
         top_clients = ServiceOrder.objects.filter(
             created_at__year=current_year,
             created_at__month=current_month
         ).values(
-            'client__id', 
+            'client__id',
             'client__name'
         ).annotate(
             total_orders=Count('id'),
-            total_amount=Sum('transfers__amount', filter=Q(transfers__transfer_type='terceros'))
+            total_amount=Sum('transfers__amount', filter=Q(transfers__transfer_type__in=['cargos', 'terceros']))
         ).order_by('-total_amount')[:5]
 
         # Calcular tendencias (% cambio vs mes anterior)
@@ -107,11 +107,10 @@ class DashboardView(APIView):
         if operating_costs_prev > 0:
             costs_trend = ((float(operating_costs) - float(operating_costs_prev)) / float(operating_costs_prev)) * 100
 
-        # Transferencias pendientes de pago
-        pending_transfers = Transfer.objects.filter(status='provisionada').count()
-        pending_transfers_amount = Transfer.objects.filter(
-            status='provisionada'
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
+        # Transferencias pendientes de pago ('pendiente' actual + 'provisionada' legacy)
+        pending_transfers_qs = Transfer.objects.filter(status__in=['pendiente', 'provisionada'])
+        pending_transfers = pending_transfers_qs.count()
+        pending_transfers_amount = pending_transfers_qs.aggregate(Sum('amount'))['amount__sum'] or 0
 
         # Facturas (CXC)
         pending_invoices = Invoice.objects.filter(
@@ -164,17 +163,29 @@ class DashboardView(APIView):
                 'days_until_due': days_until_due
             })
 
-        # Alertas de clientes próximos a exceder límite de crédito
-        clients_near_limit = []
-        for client in Client.objects.filter(payment_condition='credito', is_active=True):
-            if client.credit_limit > 0:
-                # Calcular crédito utilizado (facturas pendientes)
-                credit_used = Invoice.objects.filter(
-                    service_order__client=client,
-                    balance__gt=0
-                ).exclude(status='paid').aggregate(Sum('balance'))['balance__sum'] or 0
+        # Alertas de clientes próximos a exceder límite de crédito (optimizado - sin N+1)
+        # Usar una sola query con subquery para calcular crédito usado por cliente
+        from django.db.models import OuterRef, Subquery, DecimalField
+        from django.db.models.functions import Coalesce
 
-                credit_percentage = (float(credit_used) / float(client.credit_limit)) * 100
+        credit_subquery = Invoice.objects.filter(
+            service_order__client=OuterRef('pk'),
+            balance__gt=0
+        ).exclude(status='paid').values('service_order__client').annotate(
+            total=Sum('balance')
+        ).values('total')
+
+        clients_with_credit = Client.objects.filter(
+            payment_condition='credito',
+            is_active=True,
+            credit_limit__gt=0
+        ).annotate(
+            credit_used=Coalesce(Subquery(credit_subquery), 0, output_field=DecimalField())
+        )
+
+        for client in clients_with_credit:
+            if client.credit_limit > 0:
+                credit_percentage = (float(client.credit_used) / float(client.credit_limit)) * 100
 
                 if credit_percentage >= 80:  # Alerta si está al 80% o más
                     alerts.append({
@@ -184,30 +195,32 @@ class DashboardView(APIView):
                         'message': f'Cliente {client.name} al {credit_percentage:.0f}% de su límite de crédito',
                         'client': client.name,
                         'client_id': client.id,
-                        'credit_used': float(credit_used),
+                        'credit_used': float(client.credit_used),
                         'credit_limit': float(client.credit_limit),
                         'credit_percentage': round(credit_percentage, 1)
                     })
 
-        # Órdenes recientes (últimas 10)
-        recent_orders = ServiceOrder.objects.select_related('client').order_by('-created_at')[:10]
-        recent_orders_data = []
-        for order in recent_orders:
-            # Calcular monto total de la orden
-            total_amount = Transfer.objects.filter(
-                service_order=order,
-                transfer_type__in=['terceros', 'cargos']
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
-            recent_orders_data.append({
+        # Órdenes recientes (últimas 10) - optimizado con annotate para evitar N+1
+        recent_orders = ServiceOrder.objects.select_related('client').annotate(
+            calculated_total=Coalesce(
+                Sum('transfers__amount', filter=Q(transfers__transfer_type__in=['cargos', 'terceros'])),
+                0,
+                output_field=DecimalField()
+            )
+        ).order_by('-created_at')[:10]
+
+        recent_orders_data = [
+            {
                 'id': order.id,
                 'order_number': order.order_number,
                 'client_name': order.client.name if order.client else 'N/A',
                 'created_at': order.created_at.isoformat(),
                 'status': order.status,
-                'total_amount': float(total_amount),
+                'total_amount': float(order.calculated_total),
                 'eta': order.eta.isoformat() if order.eta else None,
-            })
+            }
+            for order in recent_orders
+        ]
 
         data = {
             'current_month': {

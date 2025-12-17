@@ -131,21 +131,17 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         return obj.transfers.filter(transfer_type__in=['propios', 'costos']).aggregate(Sum('amount'))['amount__sum'] or 0
 
     def validate_client(self, value):
-        # Check credit limit
+        """Validar límite de crédito del cliente usando el método actualizado"""
         client = value
         if client.payment_condition == 'credito':
-            # Calculate used credit
-            pending_orders = ServiceOrder.objects.filter(client=client, status='abierta')
-            credit_used = Transfer.objects.filter(
-                service_order__in=pending_orders,
-                transfer_type='terceros',
-                status='provisionada'
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
-            if credit_used >= client.credit_limit:
+            # Usar los métodos del modelo Client que calculan correctamente basándose en Invoice.balance
+            credit_available = client.get_credit_available()
+            credit_used = client.get_credit_used()
+
+            if credit_available <= 0:
                 raise serializers.ValidationError(
-                    f"El cliente ha excedido su límite de crédito de Q{client.credit_limit}. "
-                    f"Crédito usado: Q{credit_used}"
+                    f"El cliente ha excedido su límite de crédito de ${client.credit_limit}. "
+                    f"Crédito usado: ${credit_used}"
                 )
         return value
 

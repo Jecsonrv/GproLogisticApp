@@ -13,12 +13,34 @@ import io
 import os
 
 class ServiceOrderViewSet(viewsets.ModelViewSet):
-    queryset = ServiceOrder.objects.all()
     serializer_class = ServiceOrderSerializer
     permission_classes = [IsOperativo]
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
-    
+
+    def get_queryset(self):
+        """Optimizar queries con select_related y prefetch_related para evitar N+1"""
+        from django.db.models import Prefetch
+        queryset = ServiceOrder.objects.select_related(
+            'client',
+            'sub_client',
+            'shipment_type',
+            'provider',
+            'customs_agent',
+            'created_by',
+            'closed_by'
+        )
+
+        # Para el detalle, prefetch los objetos relacionados
+        if self.action == 'retrieve':
+            queryset = queryset.prefetch_related(
+                Prefetch('documents', queryset=OrderDocument.objects.select_related('uploaded_by')),
+                Prefetch('charges', queryset=OrderCharge.objects.select_related('service')),
+                'transfers'
+            )
+
+        return queryset
+
     def perform_create(self, serializer):
         """Assign current user as customs_agent when creating order"""
         serializer.save(created_by=self.request.user, customs_agent=self.request.user)

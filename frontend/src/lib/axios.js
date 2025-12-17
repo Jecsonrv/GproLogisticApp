@@ -59,13 +59,30 @@ api.interceptors.response.use(
       }
     }
 
-    // Manejar otros errores
+    // Manejar otros errores críticos con feedback visual
+    // Los errores se siguen propagando para que los componentes puedan manejarlos
     if (error.response?.status === 403) {
-      console.error('Acceso denegado');
+      console.error('Acceso denegado:', error.response?.data);
+      // El error se propaga para manejo específico en el componente
     }
 
     if (error.response?.status === 500) {
-      console.error('Error del servidor');
+      console.error('Error del servidor:', error.response?.data);
+      // Agregar información de debug en development
+      if (import.meta.env.DEV) {
+        console.error('Server Error Details:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.response?.data
+        });
+      }
+    }
+
+    // Manejar errores de red (sin respuesta del servidor)
+    if (!error.response) {
+      console.error('Error de conexión:', error.message);
+      // Podría ser un timeout o problema de red
+      error.isNetworkError = true;
     }
 
     return Promise.reject(error);

@@ -81,9 +81,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return invoice
 
     def get_queryset(self):
+        from django.db.models import Prefetch
         queryset = Invoice.objects.all().select_related(
             'service_order', 'service_order__client', 'service_order__sub_client', 'created_by'
-        ).prefetch_related('payments')
+        ).prefetch_related(
+            Prefetch('payments', queryset=InvoicePayment.objects.filter(is_deleted=False).select_related('bank', 'created_by')),
+            Prefetch('credit_notes', queryset=CreditNote.objects.filter(is_deleted=False).select_related('created_by'))
+        )
 
         # Filter by status
         status_filter = self.request.query_params.get('status')
@@ -427,7 +431,7 @@ class InvoicePaymentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return InvoicePayment.objects.all().select_related(
-            'invoice', 'invoice__client', 'created_by'
+            'invoice', 'invoice__service_order', 'invoice__service_order__client', 'created_by', 'bank'
         )
 
     def destroy(self, request, *args, **kwargs):

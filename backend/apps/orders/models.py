@@ -122,6 +122,35 @@ class ServiceOrder(SoftDeleteModel):
         """Calcula el monto total de la OS (servicios + terceros)"""
         return self.get_total_services() + self.get_total_third_party()
 
+    def get_profit(self):
+        """
+        Calcula la ganancia bruta de la Orden de Servicio.
+
+        Profit = Ingresos por Servicios - Costos Directos
+
+        Nota: Los cargos a terceros (cargos/terceros) son pass-through y no afectan
+        la ganancia ya que se facturan al cliente al mismo monto que se pagan.
+        Los gastos administrativos (admin) no se incluyen aquí porque no están
+        vinculados directamente a esta OS específica.
+        """
+        from decimal import Decimal
+        total_services = self.get_total_services() or Decimal('0.00')
+        direct_costs = self.get_total_direct_costs() or Decimal('0.00')
+        return total_services - direct_costs
+
+    def get_profit_margin(self):
+        """
+        Calcula el margen de ganancia como porcentaje.
+
+        Margen = (Profit / Ingresos por Servicios) * 100
+        """
+        from decimal import Decimal
+        total_services = self.get_total_services() or Decimal('0.00')
+        if total_services <= 0:
+            return Decimal('0.00')
+        profit = self.get_profit()
+        return (profit / total_services) * Decimal('100')
+
 class OrderDocument(models.Model):
     """Documentos asociados a una Orden de Servicio"""
     DOCUMENT_TYPE_CHOICES = (
