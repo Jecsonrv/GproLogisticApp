@@ -227,7 +227,27 @@ from datetime import timedelta
 
 
 class OrderCharge(SoftDeleteModel):
-    """Cobros/Servicios facturados en una Orden de Servicio"""
+    """
+    Cobros/Servicios facturados en una Orden de Servicio (Calculadora de Servicios)
+
+    Tratamiento fiscal según normativa salvadoreña:
+    - GRAVADO: Se aplica IVA 13%
+    - EXENTO: No se aplica IVA por exención legal
+    - NO_SUJETO: No se aplica IVA (exportaciones)
+    """
+    # Tipos de tratamiento fiscal
+    IVA_TYPE_CHOICES = (
+        ('gravado', 'Gravado (13% IVA)'),
+        ('exento', 'Exento'),
+        ('no_sujeto', 'No Sujeto'),
+    )
+
+    # Estado de facturación del item
+    BILLING_STATUS_CHOICES = (
+        ('disponible', 'Disponible para Facturar'),
+        ('facturado', 'Facturado'),
+    )
+
     service_order = models.ForeignKey(
         ServiceOrder,
         on_delete=models.CASCADE,
@@ -248,7 +268,23 @@ class OrderCharge(SoftDeleteModel):
         verbose_name="Servicio"
     )
     description = models.CharField(max_length=255, blank=True, verbose_name="Descripción")
-    
+
+    # Tratamiento fiscal
+    iva_type = models.CharField(
+        max_length=20,
+        choices=IVA_TYPE_CHOICES,
+        default='gravado',
+        verbose_name="Tratamiento Fiscal"
+    )
+
+    # Estado de facturación para tracking
+    billing_status = models.CharField(
+        max_length=20,
+        choices=BILLING_STATUS_CHOICES,
+        default='disponible',
+        verbose_name="Estado de Facturación"
+    )
+
     # Moneda
     CURRENCY_CHOICES = (
         ('GTQ', 'Quetzales (GTQ)'),
@@ -256,9 +292,9 @@ class OrderCharge(SoftDeleteModel):
     )
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='GTQ', verbose_name="Moneda")
     exchange_rate = models.DecimalField(
-        max_digits=10, 
-        decimal_places=4, 
-        default=Decimal('1.0000'), 
+        max_digits=10,
+        decimal_places=4,
+        default=Decimal('1.0000'),
         validators=[MinValueValidator(Decimal('0.0001'))],
         verbose_name="Tipo de Cambio"
     )
@@ -292,32 +328,78 @@ class OrderCharge(SoftDeleteModel):
         return f"{self.service_order.order_number} - {self.service.name}"
 
     def save(self, *args, **kwargs):
-        """Calcula automáticamente subtotal, IVA y total"""
+        """
+        Calcula automáticamente subtotal, IVA y total.
+        Sincroniza el tratamiento fiscal desde el servicio si no está especificado.
+        Actualiza el estado de facturación según la vinculación con factura.
+        """
         # Validación: No permitir modificar cargos de órdenes cerradas o facturadas
-        # Excepción: Si se está marcando como eliminado (is_deleted=True) por un administrador (lógica a manejar en vista/serializer)
-        # Aquí validamos el estado de la orden
         if self.service_order.status == 'cerrada' or self.service_order.facturado:
-            # Permitir solo si es un soft delete y la orden NO está facturada (una cerrada se puede reabrir, una facturada NO se debe tocar)
             if self.is_deleted and not self.service_order.facturado:
-                pass # Permitir borrar cargo de orden cerrada (implica reapertura lógica)
+                pass  # Permitir borrar cargo de orden cerrada
             elif not self.is_deleted:
-                 raise ValidationError("No se pueden modificar cargos de una orden cerrada o facturada.")
+                raise ValidationError("No se pueden modificar cargos de una orden cerrada o facturada.")
+
+        # Sincronizar iva_type desde el servicio si es nuevo registro
+        if not self.pk and self.service:
+            # Usar el iva_type del servicio si está disponible
+            if hasattr(self.service, 'iva_type') and self.service.iva_type:
+                self.iva_type = self.service.iva_type
+            else:
+                # Compatibilidad: usar applies_iva para determinar el tipo
+                self.iva_type = 'gravado' if self.service.applies_iva else 'exento'
+
+        # Sincronizar estado de facturación
+        if self.invoice:
+            self.billing_status = 'facturado'
+        else:
+            self.billing_status = 'disponible'
 
         # Calcular subtotal con descuento
         base_subtotal = self.quantity * self.unit_price
         discount_amount = base_subtotal * (self.discount / Decimal('100.00'))
         self.subtotal = base_subtotal - discount_amount
 
-        if self.service.applies_iva:
+        # Calcular IVA según tratamiento fiscal
+        if self.iva_type == 'gravado':
             self.iva_amount = self.subtotal * Decimal('0.13')
         else:
+            # Exento o No Sujeto: no aplica IVA
             self.iva_amount = Decimal('0.00')
+
         self.total = self.subtotal + self.iva_amount
         super().save(*args, **kwargs)
 
+    def get_iva_type_display_short(self):
+        """Retorna etiqueta corta para UI"""
+        labels = {
+            'gravado': 'IVA 13%',
+            'exento': 'Exento',
+            'no_sujeto': 'No Sujeto'
+        }
+        return labels.get(self.iva_type, 'N/A')
+
+    def is_editable(self):
+        """Verifica si el cargo puede ser editado"""
+        # No editable si está facturado y la factura tiene DTE
+        if self.invoice and self.invoice.is_dte_issued:
+            return False
+        # No editable si la orden está cerrada
+        if self.service_order.status == 'cerrada':
+            return False
+        return True
+
 
 class Invoice(models.Model):
-    """Factura emitida al cliente (CXC)"""
+    """
+    Factura emitida al cliente (CXC)
+
+    Cumplimiento fiscal El Salvador:
+    - Retención 1%: Aplica para Grandes Contribuyentes con CCF cuando
+      el subtotal (sin IVA) supera $100.00
+    - El IVA se desglosa separadamente para cuadre con facturación electrónica
+    - Una vez marcada como DTE emitido, solo permite notas de crédito
+    """
     INVOICE_TYPE_CHOICES = (
         ('DTE', 'DTE (Documento Tributario Electrónico)'),
         ('FEX', 'FEX (Factura de Exportación)'),
@@ -344,13 +426,22 @@ class Invoice(models.Model):
     issue_date = models.DateField(default=timezone.localdate, verbose_name="Fecha de Emisión")
     due_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Vencimiento")
 
-    # Montos
-    subtotal_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Servicios")
+    # Montos - Desglose para cuadre con facturación electrónica
+    # Servicios (OrderCharge)
+    subtotal_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Servicios (Neto)")
     iva_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="IVA Servicios")
-    total_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Total Servicios (con IVA)")
-    subtotal_third_party = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Gastos a Terceros")
+    total_services = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Total Servicios")
 
-    # Fiscalidad El Salvador - Retención Gran Contribuyente
+    # Gastos a Terceros (Transfer) - Desglose completo para DTE
+    subtotal_third_party = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Gastos (Neto)")
+    iva_third_party = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="IVA Gastos")
+    total_third_party = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Total Gastos")
+
+    # Totales consolidados
+    subtotal_neto = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Subtotal Neto (Sin IVA)")
+    iva_total = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="IVA Total")
+
+    # Fiscalidad El Salvador - Retención Gran Contribuyente (1% sobre subtotal > $100)
     retencion = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'), verbose_name="Retención 1% (Gran Contribuyente)")
 
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Total Factura")
@@ -405,24 +496,23 @@ class Invoice(models.Model):
         return f"{self.invoice_number or 'SIN-NUM'} - {self.service_order.order_number}"
 
     def save(self, *args, **kwargs):
-        """Genera número de factura automático y calcula saldos"""
+        """
+        Genera número de factura automático y calcula saldos.
+        Aplica retención 1% para Grandes Contribuyentes con CCF si subtotal > $100.
+        """
         if not self.invoice_number:
             from django.db import transaction
             from django.db.models import Max
 
             year = timezone.now().year
 
-            # Usar transacción atómica para evitar race conditions
             with transaction.atomic():
-                # Buscar el máximo número del año actual que sea PRE-FACTURA (o DTE si ya se editó, pero el auto es PRE)
-                # El formato automático será: PRE-XXXXX-YYYY
                 result = Invoice.objects.select_for_update().filter(
                     invoice_number__regex=rf'^PRE-\d{{5}}-{year}$'
                 ).aggregate(max_num=Max('invoice_number'))
 
                 if result['max_num']:
                     try:
-                        # Extraer el número de en medio: PRE-00001-2025 -> 00001
                         parts = result['max_num'].split('-')
                         if len(parts) >= 2:
                             last_num = int(parts[1])
@@ -436,17 +526,28 @@ class Invoice(models.Model):
 
                 self.invoice_number = f"PRE-{new_num:05d}-{year}"
 
+        # Calcular totales consolidados
+        self.subtotal_neto = self.subtotal_services + self.subtotal_third_party
+        self.iva_total = self.iva_services + (self.iva_third_party if hasattr(self, 'iva_third_party') else Decimal('0.00'))
+
         # Calcular retención del 1% para Grandes Contribuyentes con CCF
+        # SOLO si el subtotal neto (sin IVA) supera $100.00 (Art. 162 Código Tributario El Salvador)
+        RETENCION_THRESHOLD = Decimal('100.00')
+        RETENCION_RATE = Decimal('0.01')
+
         client = self.service_order.client
-        if client.is_gran_contribuyente and self.invoice_type == 'CCF':
-            # Retención del 1% sobre el subtotal de servicios
-            self.retencion = (self.subtotal_services + self.subtotal_third_party) * Decimal('0.01')
+        if (client.is_gran_contribuyente and
+            self.invoice_type == 'CCF' and
+            self.subtotal_neto > RETENCION_THRESHOLD):
+            # Retención del 1% sobre el subtotal neto (sin IVA)
+            self.retencion = self.subtotal_neto * RETENCION_RATE
         else:
             self.retencion = Decimal('0.00')
 
         # El saldo a pagar se reduce por la retención, los pagos y las notas de crédito
         self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
 
+        # Actualizar estado
         if self.balance <= 0 and self.status != 'cancelled':
             self.status = 'paid'
         elif self.paid_amount > 0 and self.balance > 0:
@@ -456,7 +557,6 @@ class Invoice(models.Model):
         elif self.due_date and self.due_date < timezone.now().date() and self.balance > 0:
             self.status = 'overdue'
         elif self.status != 'cancelled':
-            # Si hay saldo, no hay pagos parciales ni creditos, y no esta vencida ni cancelada -> Pendiente
             self.status = 'pending'
 
         if self.payment_condition == 'credito' and not self.due_date:
@@ -466,39 +566,76 @@ class Invoice(models.Model):
         super().save(*args, **kwargs)
 
     def calculate_totals(self):
-        """Calcula los totales de servicios y gastos a terceros"""
+        """
+        Calcula los totales de servicios y gastos a terceros con desglose de IVA.
+        Asegura coherencia entre OS y CXC mediante cálculo atómico.
+        """
         from decimal import Decimal
-        
-        # 1. Sumar cargos de servicios (OrderCharge) asignados a esta factura
-        charges = self.charges.all()
-        self.subtotal_services = sum(c.subtotal for c in charges) or Decimal('0.00')
-        self.iva_services = sum(c.iva_amount for c in charges) or Decimal('0.00')
-        self.total_services = sum(c.total for c in charges) or Decimal('0.00')
-        
-        # 2. Sumar gastos (Transfers) facturados - se quedan en su tabla, no se mueven
-        # Los gastos se calculan con su margen e IVA configurado
-        subtotal_expenses = Decimal('0.00')
-        iva_expenses = Decimal('0.00')
-        
-        for transfer in self.billed_transfers.all():
-            # Calcular precio al cliente (costo + margen)
-            cost = transfer.amount
-            markup = transfer.customer_markup_percentage or Decimal('0.00')
-            base_price = cost * (1 + markup / Decimal('100.00'))
-            
-            if transfer.customer_applies_iva:
-                iva = base_price * Decimal('0.13')
-            else:
-                iva = Decimal('0.00')
-            
-            subtotal_expenses += base_price
-            iva_expenses += iva
-        
-        self.subtotal_third_party = subtotal_expenses
-        
-        # 3. Total general
-        self.total_amount = self.total_services + self.subtotal_third_party + iva_expenses
-        self.save()
+        from django.db import transaction
+
+        with transaction.atomic():
+            # 1. Sumar cargos de servicios (OrderCharge) asignados a esta factura
+            charges = self.charges.filter(is_deleted=False)
+            self.subtotal_services = sum(c.subtotal for c in charges) or Decimal('0.00')
+            self.iva_services = sum(c.iva_amount for c in charges) or Decimal('0.00')
+            self.total_services = self.subtotal_services + self.iva_services
+
+            # 2. Sumar gastos (Transfers) facturados con desglose de IVA
+            subtotal_expenses = Decimal('0.00')
+            iva_expenses = Decimal('0.00')
+
+            for transfer in self.billed_transfers.filter(is_deleted=False):
+                # Usar los métodos del modelo Transfer para cálculos consistentes
+                base_price = transfer.get_customer_base_price()
+                iva = transfer.get_customer_iva_amount()
+
+                subtotal_expenses += base_price
+                iva_expenses += iva
+
+            self.subtotal_third_party = subtotal_expenses
+            self.iva_third_party = iva_expenses
+            self.total_third_party = subtotal_expenses + iva_expenses
+
+            # 3. Totales consolidados para cuadre con DTE
+            self.subtotal_neto = self.subtotal_services + self.subtotal_third_party
+            self.iva_total = self.iva_services + self.iva_third_party
+
+            # 4. Total general (Neto + IVA)
+            self.total_amount = self.subtotal_neto + self.iva_total
+
+            self.save()
+
+    def get_billing_summary(self):
+        """
+        Retorna resumen de facturación para UI con desglose completo.
+        Útil para mostrar la "pre-factura" antes de emitir DTE.
+        """
+        return {
+            'servicios': {
+                'subtotal': float(self.subtotal_services),
+                'iva': float(self.iva_services),
+                'total': float(self.total_services),
+                'items_count': self.charges.filter(is_deleted=False).count()
+            },
+            'gastos': {
+                'subtotal': float(self.subtotal_third_party),
+                'iva': float(getattr(self, 'iva_third_party', 0) or 0),
+                'total': float(getattr(self, 'total_third_party', 0) or self.subtotal_third_party),
+                'items_count': self.billed_transfers.filter(is_deleted=False).count()
+            },
+            'consolidado': {
+                'subtotal_neto': float(getattr(self, 'subtotal_neto', 0) or (self.subtotal_services + self.subtotal_third_party)),
+                'iva_total': float(getattr(self, 'iva_total', 0) or self.iva_services),
+                'total_bruto': float(self.total_amount),
+                'retencion': float(self.retencion),
+                'total_a_cobrar': float(self.total_amount - self.retencion)
+            },
+            'estado': {
+                'is_dte_issued': self.is_dte_issued,
+                'is_editable': not self.is_dte_issued,
+                'status': self.status
+            }
+        }
 
     def days_overdue(self):
         """Calcula cuántos días lleva vencida la factura"""
@@ -670,14 +807,30 @@ class OrderHistory(models.Model):
 
 
 class InvoiceEditHistory(models.Model):
-    """Historial de ediciones en pre-facturas (antes de emitir DTE)"""
+    """
+    Historial de ediciones en pre-facturas (antes de emitir DTE)
+
+    Audit Trail completo para cumplimiento contable y fiscal.
+    Registra quién, cuándo y qué cambió para trazabilidad.
+    """
     EDIT_TYPE_CHOICES = (
-        ('charge_added', 'Línea Agregada'),
-        ('charge_edited', 'Línea Editada'),
-        ('charge_removed', 'Línea Eliminada'),
+        # Ediciones de líneas
+        ('charge_added', 'Línea de Servicio Agregada'),
+        ('charge_edited', 'Línea de Servicio Editada'),
+        ('charge_removed', 'Línea de Servicio Removida'),
+        ('expense_added', 'Gasto Agregado'),
         ('expense_edited', 'Gasto Editado'),
+        ('expense_removed', 'Gasto Removido'),
+        # Ediciones de configuración de cobro
+        ('markup_changed', 'Margen de Utilidad Modificado'),
+        ('iva_type_changed', 'Tipo de IVA Modificado'),
+        ('iva_toggle_changed', 'Aplicación de IVA Modificada'),
+        # Totales y DTE
         ('totals_recalculated', 'Totales Recalculados'),
         ('dte_marked', 'Marcada como DTE Emitido'),
+        # Sincronización
+        ('synced_from_os', 'Sincronizado desde OS'),
+        ('synced_to_os', 'Sincronizado hacia OS'),
     )
     
     invoice = models.ForeignKey(

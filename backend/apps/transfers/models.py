@@ -8,8 +8,25 @@ from apps.catalogs.models import Provider, Bank
 from apps.validators import validate_document_file
 from apps.core.models import SoftDeleteModel
 
+# Constantes fiscales El Salvador
+IVA_RATE = Decimal('0.13')
+RETENCION_RATE = Decimal('0.01')
+RETENCION_THRESHOLD = Decimal('100.00')
+
+
 class Transfer(SoftDeleteModel):
-    """Pagos a Proveedores - Registro de gastos y costos"""
+    """
+    Pagos a Proveedores - Registro de gastos y costos (Calculadora de Gastos Reembolsables)
+
+    IMPORTANTE: El campo 'amount' (Monto Base) NO es editable una vez creado,
+    ya que representa el costo real pagado/por pagar al proveedor.
+    Solo se permite editar: customer_markup_percentage y customer_iva_type.
+
+    Tratamiento fiscal según normativa salvadoreña:
+    - GRAVADO: Se aplica IVA 13% al cobrar al cliente
+    - EXENTO: No se aplica IVA
+    - NO_SUJETO: No se aplica IVA (servicios de exportación)
+    """
     TYPE_CHOICES = (
         ('costos', 'Costos Directos'),  # Pagos para ejecutar servicio de cliente
         ('cargos', 'Cargos a Clientes'),  # Facturables al cliente
@@ -19,6 +36,19 @@ class Transfer(SoftDeleteModel):
         ('propios', 'Costos Operativos (Legacy)'),
     )
     transfer_type = models.CharField(max_length=20, choices=TYPE_CHOICES, verbose_name="Tipo de Gasto")
+
+    # Tipos de tratamiento fiscal para cobro al cliente
+    IVA_TYPE_CHOICES = (
+        ('gravado', 'Gravado (13% IVA)'),
+        ('exento', 'Exento'),
+        ('no_sujeto', 'No Sujeto'),
+    )
+
+    # Estado de facturación del item
+    BILLING_STATUS_CHOICES = (
+        ('disponible', 'Disponible para Facturar'),
+        ('facturado', 'Facturado'),
+    )
 
     STATUS_CHOICES = (
         ('pendiente', 'Pendiente'),  # Registrado, esperando aprobación
@@ -89,20 +119,45 @@ class Transfer(SoftDeleteModel):
     
     # Configuración de Cobro al Cliente (para Calculadora de Gastos)
     customer_markup_percentage = models.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal('0.00'), 
+        max_digits=5, decimal_places=2, default=Decimal('0.00'),
         verbose_name="Margen Cobro Cliente %"
     )
-    customer_applies_iva = models.BooleanField(default=False, verbose_name="Aplica IVA Cliente")
-    
+    # Campo legacy para compatibilidad
+    customer_applies_iva = models.BooleanField(default=False, verbose_name="Aplica IVA Cliente (Legacy)")
+
+    # Nuevo campo para tratamiento fiscal completo al cobrar al cliente
+    customer_iva_type = models.CharField(
+        max_length=20,
+        choices=IVA_TYPE_CHOICES,
+        default='exento',  # Por defecto exento hasta que el usuario lo configure
+        verbose_name="Tratamiento Fiscal Cliente",
+        help_text="Tipo de IVA a aplicar al cobrar este gasto al cliente"
+    )
+
+    # Estado de facturación para tracking
+    billing_status = models.CharField(
+        max_length=20,
+        choices=BILLING_STATUS_CHOICES,
+        default='disponible',
+        verbose_name="Estado de Facturación"
+    )
+
     # Referencia a factura (si ya fue facturado al cliente)
     invoice = models.ForeignKey(
-        'orders.Invoice', 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
+        'orders.Invoice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='billed_transfers',
         verbose_name="Factura Asociada",
         help_text="Factura donde se cobró este gasto al cliente"
+    )
+
+    # Flag para indicar si el monto base fue bloqueado (desde pago a proveedor)
+    amount_locked = models.BooleanField(
+        default=False,
+        verbose_name="Monto Base Bloqueado",
+        help_text="Si True, el monto base no puede editarse (viene del pago a proveedor)"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -140,6 +195,7 @@ class Transfer(SoftDeleteModel):
 
     def save(self, *args, **kwargs):
         self.full_clean()
+
         # Establecer el mes automáticamente
         if not self.mes:
             months = {
@@ -150,9 +206,22 @@ class Transfer(SoftDeleteModel):
             month_num = self.transaction_date.month if self.transaction_date else timezone.now().month
             self.mes = months[month_num]
 
+        # Sincronizar campo legacy customer_applies_iva con customer_iva_type
+        self.customer_applies_iva = (self.customer_iva_type == 'gravado')
+
+        # Sincronizar estado de facturación
+        if self.invoice:
+            self.billing_status = 'facturado'
+        else:
+            self.billing_status = 'disponible'
+
+        # Bloquear monto si ya tiene pagos registrados
+        if self.paid_amount > 0:
+            self.amount_locked = True
+
         # Calcular balance
         self.balance = self.amount - self.paid_amount
-        
+
         # Actualizar estado basado en saldo
         if self.balance <= 0 and self.amount > 0:
             self.status = 'pagado'
@@ -161,9 +230,85 @@ class Transfer(SoftDeleteModel):
         elif self.paid_amount > 0 and self.balance > 0:
             self.status = 'parcial'
         elif self.status == 'pagado' and self.balance > 0:
-            self.status = 'aprobado' # Revertir a aprobado si el saldo vuelve a ser positivo
+            self.status = 'aprobado'
 
         super().save(*args, **kwargs)
+
+    # Métodos de cálculo para Calculadora de Gastos Reembolsables
+    def get_customer_base_price(self):
+        """
+        Calcula el precio base para cobrar al cliente (costo + margen).
+
+        Returns:
+            Decimal: Precio base sin IVA
+        """
+        cost = self.amount * (self.exchange_rate or Decimal('1.0000'))
+        markup = self.customer_markup_percentage or Decimal('0.00')
+        return cost * (1 + markup / Decimal('100.00'))
+
+    def get_customer_iva_amount(self):
+        """
+        Calcula el monto de IVA para cobrar al cliente.
+
+        Returns:
+            Decimal: Monto de IVA (0 si exento/no_sujeto)
+        """
+        base_price = self.get_customer_base_price()
+        if self.customer_iva_type == 'gravado':
+            return base_price * IVA_RATE
+        return Decimal('0.00')
+
+    def get_customer_total(self):
+        """
+        Calcula el total a cobrar al cliente (base + IVA).
+
+        Returns:
+            Decimal: Total con IVA si aplica
+        """
+        return self.get_customer_base_price() + self.get_customer_iva_amount()
+
+    def get_profit(self):
+        """
+        Calcula la ganancia sobre este gasto.
+
+        Returns:
+            Decimal: Ganancia (precio base - costo original)
+        """
+        cost = self.amount * (self.exchange_rate or Decimal('1.0000'))
+        return self.get_customer_base_price() - cost
+
+    def get_iva_type_display_short(self):
+        """Retorna etiqueta corta para UI"""
+        labels = {
+            'gravado': 'IVA 13%',
+            'exento': 'Exento',
+            'no_sujeto': 'No Sujeto'
+        }
+        return labels.get(self.customer_iva_type, 'N/A')
+
+    def is_amount_editable(self):
+        """
+        Verifica si el monto base puede ser editado.
+
+        El monto base NO es editable si:
+        - Tiene pagos registrados (amount_locked=True)
+        - Ya fue facturado al cliente
+        """
+        if self.amount_locked:
+            return False
+        if self.invoice:
+            return False
+        return True
+
+    def is_billing_config_editable(self):
+        """
+        Verifica si la configuración de cobro (margen, IVA) puede ser editada.
+
+        Solo NO es editable si la factura asociada ya tiene DTE emitido.
+        """
+        if self.invoice and self.invoice.is_dte_issued:
+            return False
+        return True
         
     def delete(self, *args, **kwargs):
         self.payments.all().delete()

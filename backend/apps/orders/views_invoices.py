@@ -305,71 +305,119 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def edit_expense(self, request, pk=None):
         """
         Editar un gasto facturado (solo si es pre-factura).
-        Permite modificar: costo, margen, aplica IVA.
-        Los cambios se reflejan tanto en la factura como en la OS.
+
+        RESTRICCIONES DE INTEGRIDAD:
+        - El Monto Base (amount) NO es editable si tiene pagos o está bloqueado
+        - Solo se permite editar: Margen de Utilidad y configuración de IVA
+        - Los cambios se sincronizan bidireccionalmente con la OS
+
+        CAMPOS PERMITIDOS:
+        - customer_markup_percentage: Margen de utilidad (%)
+        - customer_iva_type: Tratamiento fiscal (gravado/exento/no_sujeto)
+        - customer_applies_iva: Legacy boolean (se sincroniza automáticamente)
         """
         invoice = self.get_object()
-        
+
         if invoice.is_dte_issued:
             return Response(
                 {'error': 'No se puede editar. Esta factura ya tiene DTE emitido. Use notas de crédito.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         transfer_id = request.data.get('transfer_id')
         if not transfer_id:
             return Response(
                 {'error': 'Se requiere transfer_id'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from apps.transfers.models import Transfer
         try:
-            transfer = Transfer.objects.get(id=transfer_id, invoice=invoice)
+            transfer = Transfer.objects.select_for_update().get(id=transfer_id, invoice=invoice)
         except Transfer.DoesNotExist:
             return Response(
                 {'error': 'Gasto no encontrado en esta factura'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Guardar valores anteriores para historial
+
+        # RESTRICCIÓN: El monto base NO es editable
+        if 'amount' in request.data:
+            if not transfer.is_amount_editable():
+                return Response(
+                    {'error': 'El monto base no es editable. Viene del pago al proveedor y no puede modificarse.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Guardar valores anteriores para audit trail
         previous_values = {
             'amount': str(transfer.amount),
             'customer_markup_percentage': str(transfer.customer_markup_percentage),
+            'customer_iva_type': transfer.customer_iva_type,
             'customer_applies_iva': transfer.customer_applies_iva
         }
-        
-        # Actualizar campos si se proporcionan
-        if 'amount' in request.data:
-            transfer.amount = Decimal(str(request.data['amount']))
-        if 'customer_markup_percentage' in request.data:
-            transfer.customer_markup_percentage = Decimal(str(request.data['customer_markup_percentage']))
-        if 'customer_applies_iva' in request.data:
-            transfer.customer_applies_iva = request.data['customer_applies_iva']
-        
-        transfer.save()
-        
-        # Registrar en historial
-        from .models import InvoiceEditHistory
-        InvoiceEditHistory.objects.create(
-            invoice=invoice,
-            edit_type='expense_edited',
-            description=f'Gasto editado: {transfer.description}',
-            previous_values=previous_values,
-            new_values={
-                'amount': str(transfer.amount),
-                'customer_markup_percentage': str(transfer.customer_markup_percentage),
-                'customer_applies_iva': transfer.customer_applies_iva
-            },
-            user=request.user
-        )
-        
-        # Recalcular totales de la factura
-        invoice.calculate_totals()
-        
+
+        changes_made = []
+
+        with transaction.atomic():
+            # Actualizar margen si se proporciona
+            if 'customer_markup_percentage' in request.data:
+                old_markup = transfer.customer_markup_percentage
+                new_markup = Decimal(str(request.data['customer_markup_percentage']))
+                if old_markup != new_markup:
+                    transfer.customer_markup_percentage = new_markup
+                    changes_made.append(f'Margen: {old_markup}% → {new_markup}%')
+
+            # Actualizar tipo de IVA si se proporciona (nuevo campo)
+            if 'customer_iva_type' in request.data:
+                old_iva_type = transfer.customer_iva_type
+                new_iva_type = request.data['customer_iva_type']
+                if old_iva_type != new_iva_type:
+                    transfer.customer_iva_type = new_iva_type
+                    changes_made.append(f'Tipo IVA: {old_iva_type} → {new_iva_type}')
+
+            # Compatibilidad: actualizar legacy applies_iva
+            if 'customer_applies_iva' in request.data:
+                old_applies = transfer.customer_applies_iva
+                new_applies = request.data['customer_applies_iva']
+                if old_applies != new_applies:
+                    # Sincronizar con customer_iva_type
+                    transfer.customer_iva_type = 'gravado' if new_applies else 'exento'
+                    changes_made.append(f'Aplica IVA: {old_applies} → {new_applies}')
+
+            transfer.save()
+
+            # Registrar en historial con detalle de cambios
+            from .models import InvoiceEditHistory
+
+            if changes_made:
+                InvoiceEditHistory.objects.create(
+                    invoice=invoice,
+                    edit_type='expense_edited',
+                    description=f'Gasto editado: {transfer.description[:50]}... | Cambios: {", ".join(changes_made)}',
+                    previous_values=previous_values,
+                    new_values={
+                        'amount': str(transfer.amount),
+                        'customer_markup_percentage': str(transfer.customer_markup_percentage),
+                        'customer_iva_type': transfer.customer_iva_type,
+                        'customer_applies_iva': transfer.customer_applies_iva
+                    },
+                    user=request.user
+                )
+
+            # Recalcular totales de la factura (sincronización automática)
+            invoice.calculate_totals()
+
         return Response({
             'message': 'Gasto actualizado correctamente',
-            'transfer_id': transfer.id
+            'transfer_id': transfer.id,
+            'changes': changes_made,
+            'new_values': {
+                'customer_markup_percentage': str(transfer.customer_markup_percentage),
+                'customer_iva_type': transfer.customer_iva_type,
+                'base_price': str(transfer.get_customer_base_price()),
+                'iva_amount': str(transfer.get_customer_iva_amount()),
+                'total': str(transfer.get_customer_total())
+            }
         })
 
     @action(detail=True, methods=['patch'])
@@ -451,75 +499,122 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def remove_item(self, request, pk=None):
         """
         Quita un item de la factura (servicio o gasto).
-        El item vuelve a estar disponible para facturar.
-        Solo funciona si es pre-factura.
+
+        REVERSIBILIDAD:
+        - El item vuelve automáticamente a la OS como "Disponible para Facturar"
+        - El billing_status se actualiza a 'disponible'
+        - Solo funciona si la factura está en estado "Pendiente" (pre-factura)
+
+        RESTRICCIÓN:
+        - No se puede remover items de facturas con DTE emitido
         """
         invoice = self.get_object()
-        
+
         if invoice.is_dte_issued:
             return Response(
                 {'error': 'No se puede editar. Esta factura ya tiene DTE emitido. Use notas de crédito.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         item_type = request.data.get('item_type')  # 'charge' o 'expense'
         item_id = request.data.get('item_id')
-        
+
         if not item_type or not item_id:
             return Response(
                 {'error': 'Se requiere item_type (charge/expense) e item_id'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from .models import InvoiceEditHistory
-        
-        if item_type == 'charge':
-            from .models import OrderCharge
-            try:
-                charge = OrderCharge.objects.get(id=item_id, invoice=invoice)
-                # Desvincular de la factura (no eliminar, vuelve a estar disponible)
-                description = f'{charge.service.name} - {charge.description}'
-                charge.invoice = None
-                charge.save()
-                
-                InvoiceEditHistory.objects.create(
-                    invoice=invoice,
-                    edit_type='charge_removed',
-                    description=f'Cargo removido: {description}',
-                    previous_values={'charge_id': item_id, 'linked_to_invoice': True},
-                    new_values={'linked_to_invoice': False},
-                    user=request.user
-                )
-            except OrderCharge.DoesNotExist:
-                return Response({'error': 'Cargo no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-                
-        elif item_type == 'expense':
-            from apps.transfers.models import Transfer
-            try:
-                transfer = Transfer.objects.get(id=item_id, invoice=invoice)
-                description = transfer.description
-                # Desvincular de la factura
-                transfer.invoice = None
-                transfer.save()
-                
-                InvoiceEditHistory.objects.create(
-                    invoice=invoice,
-                    edit_type='charge_removed',
-                    description=f'Gasto removido: {description}',
-                    previous_values={'transfer_id': item_id, 'linked_to_invoice': True},
-                    new_values={'linked_to_invoice': False},
-                    user=request.user
-                )
-            except Transfer.DoesNotExist:
-                return Response({'error': 'Gasto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            return Response({'error': 'item_type debe ser "charge" o "expense"'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Recalcular totales
-        invoice.calculate_totals()
-        
+
+        with transaction.atomic():
+            if item_type == 'charge':
+                from .models import OrderCharge
+                try:
+                    charge = OrderCharge.objects.select_for_update().get(id=item_id, invoice=invoice)
+
+                    # Guardar información para historial
+                    description = f'{charge.service.name} - {charge.description}'
+                    previous_values = {
+                        'charge_id': item_id,
+                        'linked_to_invoice': True,
+                        'invoice_number': invoice.invoice_number,
+                        'billing_status': charge.billing_status,
+                        'total': str(charge.total)
+                    }
+
+                    # Desvincular de la factura (vuelve a estar disponible)
+                    charge.invoice = None
+                    charge.billing_status = 'disponible'
+                    charge.save()
+
+                    InvoiceEditHistory.objects.create(
+                        invoice=invoice,
+                        edit_type='charge_removed',
+                        description=f'Servicio removido y retornado a OS: {description}',
+                        previous_values=previous_values,
+                        new_values={
+                            'linked_to_invoice': False,
+                            'billing_status': 'disponible',
+                            'available_in_os': True
+                        },
+                        user=request.user
+                    )
+
+                except OrderCharge.DoesNotExist:
+                    return Response({'error': 'Cargo no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+            elif item_type == 'expense':
+                from apps.transfers.models import Transfer
+                try:
+                    transfer = Transfer.objects.select_for_update().get(id=item_id, invoice=invoice)
+
+                    description = transfer.description[:100]
+                    previous_values = {
+                        'transfer_id': item_id,
+                        'linked_to_invoice': True,
+                        'invoice_number': invoice.invoice_number,
+                        'billing_status': transfer.billing_status,
+                        'total': str(transfer.get_customer_total())
+                    }
+
+                    # Desvincular de la factura (vuelve a estar disponible)
+                    transfer.invoice = None
+                    transfer.billing_status = 'disponible'
+                    transfer.save()
+
+                    InvoiceEditHistory.objects.create(
+                        invoice=invoice,
+                        edit_type='expense_removed',
+                        description=f'Gasto removido y retornado a OS: {description}',
+                        previous_values=previous_values,
+                        new_values={
+                            'linked_to_invoice': False,
+                            'billing_status': 'disponible',
+                            'available_in_os': True
+                        },
+                        user=request.user
+                    )
+
+                except Transfer.DoesNotExist:
+                    return Response({'error': 'Gasto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                return Response({'error': 'item_type debe ser "charge" o "expense"'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Recalcular totales de la factura
+            invoice.calculate_totals()
+
+            # Verificar si la factura quedó vacía
+            charges_count = invoice.charges.filter(is_deleted=False).count()
+            expenses_count = invoice.billed_transfers.filter(is_deleted=False).count()
+
         return Response({
-            'message': f'Item removido de la factura. Ahora está disponible para facturar nuevamente.'
+            'message': f'Item removido de la factura. Ahora está disponible para facturar nuevamente.',
+            'item_returned_to_os': True,
+            'invoice_items_remaining': {
+                'charges': charges_count,
+                'expenses': expenses_count
+            }
         })
 
     @action(detail=True, methods=['post'])

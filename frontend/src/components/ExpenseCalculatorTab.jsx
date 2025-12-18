@@ -5,14 +5,25 @@ import {
     RotateCcw,
     FileCheck,
     AlertCircle,
+    Lock,
+    Info,
 } from "lucide-react";
-import { Button, Card, CardContent, ConfirmDialog, Input, Badge } from "./ui";
+import { Button, Card, CardContent, ConfirmDialog, Input, Badge, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency } from "../lib/utils";
 
 /**
- * ExpenseCalculatorTab - Calculadora de Gastos para Facturación (Diseño ERP Simplificado)
+ * ExpenseCalculatorTab - Calculadora de Gastos Reembolsables para Facturación
+ *
+ * Cumplimiento fiscal El Salvador:
+ * - GRAVADO: IVA 13%
+ * - EXENTO: Sin IVA
+ * - NO_SUJETO: Sin IVA (exportaciones)
+ *
+ * RESTRICCIONES:
+ * - El Monto Base (costo) NO es editable (viene del pago a proveedor)
+ * - Solo se permite editar: Margen de Utilidad y Tipo de IVA
  */
 const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
     const [expenses, setExpenses] = useState([]);
@@ -23,18 +34,25 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
 
     const IVA_RATE = 0.13;
 
-    // Calcular valores derivados
+    // Tipos de IVA según normativa salvadoreña
+    const IVA_TYPES = [
+        { value: 'gravado', label: 'Gravado (13%)', rate: 0.13 },
+        { value: 'exento', label: 'Exento', rate: 0 },
+        { value: 'no_sujeto', label: 'No Sujeto', rate: 0 },
+    ];
+
+    // Calcular valores derivados con soporte para tipos de IVA
     const calculateValues = (expense, adjustment) => {
         const cost = parseFloat(expense.amount);
         const markupPercent = parseFloat(adjustment?.markup_percentage || 0);
-        const appliesIva = !!adjustment?.applies_iva;
+        const ivaType = adjustment?.iva_type || 'exento';
 
         // Precio Base (Venta sin IVA)
-        // Si hay margen, se aplica sobre el costo: Costo * (1 + %)
         const basePrice = cost * (1 + markupPercent / 100);
 
-        // IVA
-        const ivaAmount = appliesIva ? basePrice * IVA_RATE : 0;
+        // IVA según tipo fiscal
+        const ivaRate = ivaType === 'gravado' ? IVA_RATE : 0;
+        const ivaAmount = basePrice * ivaRate;
 
         // Total
         const total = basePrice + ivaAmount;
@@ -42,7 +60,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
         // Ganancia
         const profit = basePrice - cost;
 
-        return { cost, basePrice, ivaAmount, total, profit };
+        return { cost, basePrice, ivaAmount, total, profit, ivaType };
     };
 
     useEffect(() => {
@@ -63,14 +81,21 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
 
                 setExpenses(billableExpenses);
 
-                // Inicializar ajustes con valores guardados en el transfer o por defecto
+                // Inicializar ajustes con valores guardados en el transfer
                 const initialAdjustments = {};
                 billableExpenses.forEach((exp) => {
+                    // Determinar tipo de IVA: usar customer_iva_type si existe, sino derivar de applies_iva
+                    let ivaType = exp.customer_iva_type || 'exento';
+                    if (!exp.customer_iva_type && exp.customer_applies_iva) {
+                        ivaType = 'gravado';
+                    }
+
                     initialAdjustments[exp.id] = {
-                        markup_percentage: parseFloat(
-                            exp.customer_markup_percentage || 0
-                        ),
-                        applies_iva: exp.customer_applies_iva || false,
+                        markup_percentage: parseFloat(exp.customer_markup_percentage || 0),
+                        iva_type: ivaType,
+                        // Metadatos de restricción
+                        amount_locked: exp.amount_locked || false,
+                        is_billed: !!exp.invoice_id,
                     };
                 });
                 setExpenseAdjustments(initialAdjustments);
@@ -123,7 +148,9 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
         expenses.forEach((exp) => {
             resetAdjustments[exp.id] = {
                 markup_percentage: 0,
-                applies_iva: false,
+                iva_type: 'exento',
+                amount_locked: exp.amount_locked || false,
+                is_billed: !!exp.invoice_id,
             };
         });
         setExpenseAdjustments(resetAdjustments);
@@ -134,30 +161,35 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
     const handleSaveAsCharges = async () => {
         try {
             setSaving(true);
-            const configs = expenses.map((expense) => {
-                const adj = expenseAdjustments[expense.id];
-                return {
-                    expense_id: expense.id,
-                    markup_percentage: adj?.markup_percentage || 0,
-                    applies_iva: adj?.applies_iva || false,
-                };
-            });
+            const configs = expenses
+                .filter(expense => !expenseAdjustments[expense.id]?.is_billed) // Solo guardar no facturados
+                .map((expense) => {
+                    const adj = expenseAdjustments[expense.id];
+                    return {
+                        expense_id: expense.id,
+                        markup_percentage: adj?.markup_percentage || 0,
+                        iva_type: adj?.iva_type || 'exento',
+                        // Compatibilidad legacy
+                        applies_iva: adj?.iva_type === 'gravado',
+                    };
+                });
 
-            await axios.post(
+            const response = await axios.post(
                 `/orders/service-orders/${orderId}/update_expense_configurations/`,
-                {
-                    configs: configs,
-                }
+                { configs }
             );
 
-            toast.success("Configuración de gastos guardada correctamente");
+            const { updated_count, synced_invoices } = response.data;
+            let message = `Configuración guardada: ${updated_count} gastos actualizados`;
+            if (synced_invoices > 0) {
+                message += ` | ${synced_invoices} facturas sincronizadas`;
+            }
+            toast.success(message);
 
             if (onUpdate) onUpdate();
         } catch (error) {
             console.error("Error saving configs:", error);
-            const errorMsg =
-                error.response?.data?.error ||
-                "Error al guardar la configuración";
+            const errorMsg = error.response?.data?.error || "Error al guardar la configuración";
             toast.error(errorMsg);
         } finally {
             setSaving(false);
@@ -212,7 +244,18 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                     )}
                 </div>
 
-                {/* Tabla Simplificada - Estilo ERP */}
+                {/* Nota informativa sobre restricciones */}
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-start gap-2">
+                        <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs text-blue-800">
+                            <strong>Nota:</strong> El monto base (costo) no es editable ya que proviene del pago al proveedor.
+                            Solo puede modificar el margen de utilidad y el tipo de IVA.
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabla con Tipos de IVA - Estilo ERP */}
                 <div className="border border-slate-200 rounded-sm overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -221,16 +264,19 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                                         Gasto
                                     </th>
-                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
-                                        Costo
+                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
+                                        Costo Base
                                     </th>
-                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
+                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">
                                         Margen %
                                     </th>
                                     <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
-                                        Precio Base
+                                        Precio Venta
                                     </th>
-                                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
+                                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-32">
+                                        Tipo IVA
+                                    </th>
+                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
                                         IVA
                                     </th>
                                     <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
@@ -243,65 +289,44 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
                                 {expenses.map((expense) => {
-                                    const adjustment =
-                                        expenseAdjustments[expense.id] || {};
-                                    const {
-                                        cost,
-                                        basePrice,
-                                        ivaAmount,
-                                        total,
-                                        profit,
-                                    } = calculateValues(expense, adjustment);
-                                    const isBilled =
-                                        expense.is_billed || expense.invoice_id;
+                                    const adjustment = expenseAdjustments[expense.id] || {};
+                                    const { cost, basePrice, ivaAmount, total, profit, ivaType } = calculateValues(expense, adjustment);
+                                    const isBilled = expense.is_billed || expense.invoice_id;
+                                    const isAmountLocked = expense.amount_locked || expense.paid_amount > 0;
 
                                     return (
                                         <tr
                                             key={expense.id}
                                             className={`transition-colors ${
-                                                isBilled
-                                                    ? "bg-slate-100 opacity-60"
-                                                    : "hover:bg-slate-50/70"
+                                                isBilled ? "bg-slate-100 opacity-60" : "hover:bg-slate-50/70"
                                             }`}
                                         >
                                             {/* Gasto */}
                                             <td className="px-3 py-2.5">
                                                 <div className="flex items-center gap-2">
-                                                    <div
-                                                        className={`font-medium ${
-                                                            isBilled
-                                                                ? "text-slate-500"
-                                                                : "text-slate-900"
-                                                        }`}
-                                                    >
+                                                    <div className={`font-medium ${isBilled ? "text-slate-500" : "text-slate-900"}`}>
                                                         {expense.description}
                                                     </div>
                                                     {isBilled && (
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="text-[10px] px-1.5 py-0 bg-slate-200 text-slate-600 border-slate-300"
-                                                        >
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-slate-200 text-slate-600 border-slate-300">
                                                             <FileCheck className="h-3 w-3 mr-0.5" />
-                                                            {expense.invoice_number_client ||
-                                                                "Facturado"}
+                                                            {expense.invoice_number_client || "Facturado"}
                                                         </Badge>
                                                     )}
                                                 </div>
                                                 <div className="text-xs text-slate-500 mt-0.5">
-                                                    {expense.provider_name ||
-                                                        "Proveedor desconocido"}
+                                                    {expense.provider_name || "Proveedor desconocido"}
                                                 </div>
                                             </td>
 
-                                            {/* Costo */}
-                                            <td
-                                                className={`px-3 py-2.5 text-right tabular-nums ${
-                                                    isBilled
-                                                        ? "text-slate-500"
-                                                        : "text-slate-700"
-                                                }`}
-                                            >
-                                                {formatCurrency(cost)}
+                                            {/* Costo Base (No editable) */}
+                                            <td className={`px-3 py-2.5 text-right tabular-nums ${isBilled ? "text-slate-500" : "text-slate-700"}`}>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {isAmountLocked && (
+                                                        <Lock className="h-3 w-3 text-slate-400" title="Monto bloqueado" />
+                                                    )}
+                                                    {formatCurrency(cost)}
+                                                </div>
                                             </td>
 
                                             {/* Margen % Input */}
@@ -312,80 +337,48 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                         min="0"
                                                         step="1"
                                                         className="h-8 w-16 text-right px-1 py-1"
-                                                        value={
-                                                            adjustment.markup_percentage ||
-                                                            ""
-                                                        }
-                                                        onChange={(e) =>
-                                                            updateAdjustment(
-                                                                expense.id,
-                                                                "markup_percentage",
-                                                                e.target.value
-                                                            )
-                                                        }
-                                                        disabled={
-                                                            !isEditable ||
-                                                            isBilled
-                                                        }
+                                                        value={adjustment.markup_percentage || ""}
+                                                        onChange={(e) => updateAdjustment(expense.id, "markup_percentage", e.target.value)}
+                                                        disabled={!isEditable || isBilled}
                                                         placeholder="0"
                                                     />
                                                 </div>
                                             </td>
 
                                             {/* Precio Venta Base */}
-                                            <td
-                                                className={`px-3 py-2.5 text-right font-medium tabular-nums ${
-                                                    isBilled
-                                                        ? "text-slate-500"
-                                                        : "text-slate-900"
-                                                }`}
-                                            >
+                                            <td className={`px-3 py-2.5 text-right font-medium tabular-nums ${isBilled ? "text-slate-500" : "text-slate-900"}`}>
                                                 {formatCurrency(basePrice)}
                                             </td>
 
-                                            {/* Checkbox IVA */}
+                                            {/* Selector Tipo IVA */}
                                             <td className="px-3 py-2.5 text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={
-                                                        !!adjustment.applies_iva
-                                                    }
-                                                    onChange={(e) =>
-                                                        updateAdjustment(
-                                                            expense.id,
-                                                            "applies_iva",
-                                                            e.target.checked
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        !isEditable || isBilled
-                                                    }
-                                                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                                                />
+                                                <select
+                                                    value={adjustment.iva_type || 'exento'}
+                                                    onChange={(e) => updateAdjustment(expense.id, "iva_type", e.target.value)}
+                                                    disabled={!isEditable || isBilled}
+                                                    className="h-8 w-full text-xs border border-slate-300 rounded px-1 py-1 bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                                >
+                                                    {IVA_TYPES.map(type => (
+                                                        <option key={type.value} value={type.value}>
+                                                            {type.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+
+                                            {/* Monto IVA */}
+                                            <td className={`px-3 py-2.5 text-right tabular-nums ${isBilled ? "text-slate-500" : "text-slate-700"}`}>
+                                                {ivaAmount > 0 ? formatCurrency(ivaAmount) : "-"}
                                             </td>
 
                                             {/* Total */}
-                                            <td
-                                                className={`px-3 py-2.5 text-right font-bold tabular-nums ${
-                                                    isBilled
-                                                        ? "text-slate-500"
-                                                        : "text-slate-900"
-                                                }`}
-                                            >
+                                            <td className={`px-3 py-2.5 text-right font-bold tabular-nums ${isBilled ? "text-slate-500" : "text-slate-900"}`}>
                                                 {formatCurrency(total)}
                                             </td>
 
                                             {/* Ganancia */}
-                                            <td
-                                                className={`px-3 py-2.5 text-right text-xs font-medium tabular-nums ${
-                                                    isBilled
-                                                        ? "text-slate-400"
-                                                        : "text-emerald-600"
-                                                }`}
-                                            >
-                                                {profit > 0
-                                                    ? formatCurrency(profit)
-                                                    : "-"}
+                                            <td className={`px-3 py-2.5 text-right text-xs font-medium tabular-nums ${isBilled ? "text-slate-400" : "text-emerald-600"}`}>
+                                                {profit > 0 ? formatCurrency(profit) : "-"}
                                             </td>
                                         </tr>
                                     );
@@ -399,14 +392,13 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                     <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
                                         {formatCurrency(summary.totalCost)}
                                     </td>
-                                    <td colSpan={1}></td>
+                                    <td></td>
                                     <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-900 tabular-nums">
                                         {formatCurrency(summary.totalBase)}
                                     </td>
+                                    <td></td>
                                     <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
-                                        {summary.totalIVA > 0
-                                            ? formatCurrency(summary.totalIVA)
-                                            : "-"}
+                                        {summary.totalIVA > 0 ? formatCurrency(summary.totalIVA) : "-"}
                                     </td>
                                     <td className="px-3 py-2.5 text-right text-sm font-bold text-blue-700 tabular-nums">
                                         {formatCurrency(summary.totalTotal)}

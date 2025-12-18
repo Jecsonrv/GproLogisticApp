@@ -70,79 +70,132 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def billable_items(self, request, pk=None):
         """
-        Get all billable items for the billing wizard.
-        Combines:
-        1. Unbilled OrderCharges (Manual services) - sin factura asociada
-        2. Unbilled Transfers (Expenses) - sin factura asociada
-        
-        Items ya facturados NO aparecen aquí.
+        Obtiene todos los items facturables para el asistente de facturación.
+
+        Combina:
+        1. OrderCharges (Servicios manuales) - sin factura asociada
+        2. Transfers (Gastos reembolsables) - sin factura asociada
+
+        Incluye información detallada sobre:
+        - Tipo de IVA (gravado/exento/no_sujeto)
+        - Estado de facturación
+        - Desglose de montos (neto, IVA, total)
         """
         order = self.get_object()
-        
+
         items = []
-        
-        # 1. Manual Charges (Service Calculator)
-        # SOLO los que NO tienen factura asociada
+
+        # 1. Servicios (OrderCharge) - Calculadora de Servicios
         charges = order.charges.filter(
             invoice__isnull=True,
             is_deleted=False
         ).select_related('service')
-        
+
         for charge in charges:
+            iva_type = getattr(charge, 'iva_type', 'gravado')
             items.append({
                 'id': f'charge_{charge.id}',
                 'original_id': charge.id,
                 'type': 'service',
                 'description': f"{charge.service.name} - {charge.description or ''}",
+                'service_name': charge.service.name,
+                # Desglose de montos para cuadre con DTE
+                'subtotal_neto': float(charge.subtotal),
+                'iva_amount': float(charge.iva_amount),
+                'total': float(charge.total),
+                # Compatibilidad con frontend existente
                 'amount': float(charge.subtotal),
                 'iva': float(charge.iva_amount),
-                'total': float(charge.total),
+                # Información fiscal
+                'iva_type': iva_type,
+                'iva_type_display': charge.get_iva_type_display_short() if hasattr(charge, 'get_iva_type_display_short') else ('IVA 13%' if charge.service.applies_iva else 'Exento'),
+                # Estado
+                'billing_status': getattr(charge, 'billing_status', 'disponible'),
+                'is_editable': charge.is_editable() if hasattr(charge, 'is_editable') else True,
+                # Metadatos
+                'quantity': charge.quantity,
+                'unit_price': float(charge.unit_price),
+                'discount': float(charge.discount),
                 'notes': charge.description,
                 'source_model': 'OrderCharge'
             })
-            
-        # 2. Billable Expenses (Transfers)
-        # SOLO los que NO tienen factura asociada (invoice__isnull=True)
+
+        # 2. Gastos Reembolsables (Transfer) - Calculadora de Gastos
         from apps.transfers.models import Transfer
         from decimal import Decimal
-        
+
         transfers = Transfer.objects.filter(
-            service_order=order, 
+            service_order=order,
             transfer_type__in=['cargos', 'costos', 'terceros'],
-            invoice__isnull=True,  # Solo los NO facturados
+            invoice__isnull=True,
             is_deleted=False
         ).select_related('provider')
-        
+
         for t in transfers:
-            # Calculate billable amount based on stored config
-            markup = t.customer_markup_percentage or Decimal('0.00')
-            applies_iva = t.customer_applies_iva
-            
-            cost = t.amount
-            base_price = cost * (1 + markup / Decimal('100.00'))
-            
-            if applies_iva:
-                iva = base_price * Decimal('0.13')
-            else:
-                iva = Decimal('0.00')
-                
-            total = base_price + iva
-            
+            # Usar métodos del modelo para cálculos consistentes
+            base_price = t.get_customer_base_price()
+            iva_amount = t.get_customer_iva_amount()
+            total = t.get_customer_total()
+            profit = t.get_profit()
+
+            iva_type = getattr(t, 'customer_iva_type', 'exento')
+
             items.append({
                 'id': f'expense_{t.id}',
                 'original_id': t.id,
                 'type': 'expense',
-                'description': f"{t.description} (Gasto: {t.provider.name if t.provider else 'N/A'})",
-                'amount': float(base_price),
-                'iva': float(iva),
+                'description': f"{t.description} ({t.provider.name if t.provider else 'N/A'})",
+                'provider_name': t.provider.name if t.provider else 'N/A',
+                # Desglose de montos para cuadre con DTE
+                'cost_original': float(t.amount),
+                'markup_percentage': float(t.customer_markup_percentage),
+                'subtotal_neto': float(base_price),
+                'iva_amount': float(iva_amount),
                 'total': float(total),
-                'notes': f"Costo original: {t.amount}. Margen: {markup}%",
+                'profit': float(profit),
+                # Compatibilidad con frontend existente
+                'amount': float(base_price),
+                'iva': float(iva_amount),
+                # Información fiscal
+                'iva_type': iva_type,
+                'iva_type_display': t.get_iva_type_display_short(),
+                # Estado y restricciones
+                'billing_status': getattr(t, 'billing_status', 'disponible'),
+                'is_amount_editable': t.is_amount_editable(),
+                'is_config_editable': t.is_billing_config_editable(),
+                'amount_locked': getattr(t, 'amount_locked', False),
+                # Metadatos
+                'notes': f"Costo: ${t.amount} | Margen: {t.customer_markup_percentage}%",
                 'source_model': 'Transfer'
             })
-            
-        return Response(items)
-            
-        return Response(items)
+
+        # Calcular resumen
+        summary = {
+            'services': {
+                'count': len([i for i in items if i['type'] == 'service']),
+                'subtotal': sum(i['subtotal_neto'] for i in items if i['type'] == 'service'),
+                'iva': sum(i['iva_amount'] for i in items if i['type'] == 'service'),
+                'total': sum(i['total'] for i in items if i['type'] == 'service')
+            },
+            'expenses': {
+                'count': len([i for i in items if i['type'] == 'expense']),
+                'subtotal': sum(i['subtotal_neto'] for i in items if i['type'] == 'expense'),
+                'iva': sum(i['iva_amount'] for i in items if i['type'] == 'expense'),
+                'total': sum(i['total'] for i in items if i['type'] == 'expense')
+            },
+            'grand_total': {
+                'subtotal_neto': sum(i['subtotal_neto'] for i in items),
+                'iva_total': sum(i['iva_amount'] for i in items),
+                'total': sum(i['total'] for i in items)
+            }
+        }
+
+        return Response({
+            'items': items,
+            'summary': summary,
+            'order_number': order.order_number,
+            'client_name': order.client.name if order.client else None
+        })
 
     @action(detail=True, methods=['get'])
     def charges(self, request, pk=None):
@@ -228,37 +281,116 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def update_expense_configurations(self, request, pk=None):
-        """Update billing configuration for expenses (Transfers)"""
-        # No check for order status, allowing updates even if closed (or partial)
-        
+        """
+        Actualiza la configuración de cobro para gastos (Transfers) en la Calculadora de Gastos.
+
+        CAMPOS PERMITIDOS POR GASTO:
+        - markup_percentage: Margen de utilidad (%)
+        - iva_type: Tratamiento fiscal (gravado/exento/no_sujeto)
+        - applies_iva: Legacy boolean (se sincroniza con iva_type)
+
+        RESTRICCIONES:
+        - El monto base (amount) NO es editable desde aquí
+        - Si el gasto ya está facturado con DTE, no se puede modificar
+
+        SINCRONIZACIÓN:
+        - Los cambios se reflejan automáticamente en CXC si el gasto está vinculado a una factura
+        """
+        order = self.get_object()
         configs = request.data.get('configs', [])
+
         if not configs:
             return Response({'message': 'No hay configuraciones para guardar'}, status=status.HTTP_200_OK)
 
         try:
             from apps.transfers.models import Transfer
+            from apps.orders.models import OrderHistory
             from decimal import Decimal
             from django.db import transaction
 
             updated_count = 0
+            synced_invoices = set()
+            changes_log = []
+
             with transaction.atomic():
                 for item in configs:
                     transfer_id = item.get('expense_id')
                     if not transfer_id:
                         continue
-                        
-                    markup = Decimal(str(item.get('markup_percentage', 0)))
-                    applies_iva = item.get('applies_iva', False)
 
-                    Transfer.objects.filter(id=transfer_id).update(
-                        customer_markup_percentage=markup,
-                        customer_applies_iva=applies_iva
-                    )
+                    try:
+                        transfer = Transfer.objects.select_for_update().get(
+                            id=transfer_id,
+                            service_order=order
+                        )
+                    except Transfer.DoesNotExist:
+                        continue
+
+                    # Verificar si el gasto puede ser editado
+                    if not transfer.is_billing_config_editable():
+                        changes_log.append({
+                            'transfer_id': transfer_id,
+                            'status': 'error',
+                            'message': 'Gasto con DTE emitido, no editable'
+                        })
+                        continue
+
+                    # Obtener valores anteriores
+                    old_markup = transfer.customer_markup_percentage
+                    old_iva_type = getattr(transfer, 'customer_iva_type', 'exento')
+
+                    # Actualizar valores
+                    new_markup = Decimal(str(item.get('markup_percentage', 0)))
+                    new_applies_iva = item.get('applies_iva', False)
+                    new_iva_type = item.get('iva_type', 'gravado' if new_applies_iva else 'exento')
+
+                    # Aplicar cambios
+                    transfer.customer_markup_percentage = new_markup
+                    transfer.customer_iva_type = new_iva_type
+                    # customer_applies_iva se sincroniza automáticamente en save()
+                    transfer.save()
+
                     updated_count += 1
 
+                    # Registrar cambio
+                    change_entry = {
+                        'transfer_id': transfer_id,
+                        'description': transfer.description[:50],
+                        'old_markup': str(old_markup),
+                        'new_markup': str(new_markup),
+                        'old_iva_type': old_iva_type,
+                        'new_iva_type': new_iva_type
+                    }
+                    changes_log.append(change_entry)
+
+                    # Si el gasto está vinculado a una factura, marcar para sincronizar
+                    if transfer.invoice:
+                        synced_invoices.add(transfer.invoice_id)
+
+                # Sincronizar facturas afectadas (bidireccional)
+                from apps.orders.models import Invoice
+                for invoice_id in synced_invoices:
+                    try:
+                        invoice = Invoice.objects.get(id=invoice_id)
+                        invoice.calculate_totals()
+                    except Invoice.DoesNotExist:
+                        pass
+
+                # Registrar en historial de la OS
+                if updated_count > 0:
+                    OrderHistory.objects.create(
+                        service_order=order,
+                        event_type='updated',
+                        description=f'Configuración de cobro actualizada para {updated_count} gastos',
+                        user=request.user,
+                        metadata={'changes': changes_log}
+                    )
+
             return Response({
-                'message': 'Configuración de gastos guardada correctamente',
-                'updated_count': updated_count
+                'message': f'Configuración de gastos guardada correctamente',
+                'updated_count': updated_count,
+                'synced_invoices': len(synced_invoices),
+                'changes': changes_log
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
