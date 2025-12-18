@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Calculator, Save, RotateCcw } from "lucide-react";
+import {
+    Calculator,
+    Save,
+    RotateCcw,
+    FileCheck,
+    AlertCircle,
+} from "lucide-react";
 import { Button, Card, CardContent, ConfirmDialog, Input, Badge } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -61,7 +67,9 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                 const initialAdjustments = {};
                 billableExpenses.forEach((exp) => {
                     initialAdjustments[exp.id] = {
-                        markup_percentage: parseFloat(exp.customer_markup_percentage || 0),
+                        markup_percentage: parseFloat(
+                            exp.customer_markup_percentage || 0
+                        ),
                         applies_iva: exp.customer_applies_iva || false,
                     };
                 });
@@ -135,16 +143,21 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                 };
             });
 
-            await axios.post(`/orders/service-orders/${orderId}/update_expense_configurations/`, {
-                configs: configs
-            });
+            await axios.post(
+                `/orders/service-orders/${orderId}/update_expense_configurations/`,
+                {
+                    configs: configs,
+                }
+            );
 
             toast.success("Configuración de gastos guardada correctamente");
 
             if (onUpdate) onUpdate();
         } catch (error) {
             console.error("Error saving configs:", error);
-            const errorMsg = error.response?.data?.error || "Error al guardar la configuración";
+            const errorMsg =
+                error.response?.data?.error ||
+                "Error al guardar la configuración";
             toast.error(errorMsg);
         } finally {
             setSaving(false);
@@ -230,23 +243,64 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                             </thead>
                             <tbody className="bg-white divide-y divide-slate-100">
                                 {expenses.map((expense) => {
-                                    const adjustment = expenseAdjustments[expense.id] || {};
-                                    const { cost, basePrice, ivaAmount, total, profit } = calculateValues(expense, adjustment);
+                                    const adjustment =
+                                        expenseAdjustments[expense.id] || {};
+                                    const {
+                                        cost,
+                                        basePrice,
+                                        ivaAmount,
+                                        total,
+                                        profit,
+                                    } = calculateValues(expense, adjustment);
+                                    const isBilled =
+                                        expense.is_billed || expense.invoice_id;
 
                                     return (
-                                        <tr key={expense.id} className="hover:bg-slate-50/70 transition-colors">
+                                        <tr
+                                            key={expense.id}
+                                            className={`transition-colors ${
+                                                isBilled
+                                                    ? "bg-slate-100 opacity-60"
+                                                    : "hover:bg-slate-50/70"
+                                            }`}
+                                        >
                                             {/* Gasto */}
                                             <td className="px-3 py-2.5">
-                                                <div className="font-medium text-slate-900">
-                                                    {expense.description}
+                                                <div className="flex items-center gap-2">
+                                                    <div
+                                                        className={`font-medium ${
+                                                            isBilled
+                                                                ? "text-slate-500"
+                                                                : "text-slate-900"
+                                                        }`}
+                                                    >
+                                                        {expense.description}
+                                                    </div>
+                                                    {isBilled && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="text-[10px] px-1.5 py-0 bg-slate-200 text-slate-600 border-slate-300"
+                                                        >
+                                                            <FileCheck className="h-3 w-3 mr-0.5" />
+                                                            {expense.invoice_number_client ||
+                                                                "Facturado"}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                                 <div className="text-xs text-slate-500 mt-0.5">
-                                                    {expense.provider_name || "Proveedor desconocido"}
+                                                    {expense.provider_name ||
+                                                        "Proveedor desconocido"}
                                                 </div>
                                             </td>
 
                                             {/* Costo */}
-                                            <td className="px-3 py-2.5 text-right text-slate-700 tabular-nums">
+                                            <td
+                                                className={`px-3 py-2.5 text-right tabular-nums ${
+                                                    isBilled
+                                                        ? "text-slate-500"
+                                                        : "text-slate-700"
+                                                }`}
+                                            >
                                                 {formatCurrency(cost)}
                                             </td>
 
@@ -258,16 +312,34 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                         min="0"
                                                         step="1"
                                                         className="h-8 w-16 text-right px-1 py-1"
-                                                        value={adjustment.markup_percentage || ""}
-                                                        onChange={(e) => updateAdjustment(expense.id, "markup_percentage", e.target.value)}
-                                                        disabled={!isEditable}
+                                                        value={
+                                                            adjustment.markup_percentage ||
+                                                            ""
+                                                        }
+                                                        onChange={(e) =>
+                                                            updateAdjustment(
+                                                                expense.id,
+                                                                "markup_percentage",
+                                                                e.target.value
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            !isEditable ||
+                                                            isBilled
+                                                        }
                                                         placeholder="0"
                                                     />
                                                 </div>
                                             </td>
 
                                             {/* Precio Venta Base */}
-                                            <td className="px-3 py-2.5 text-right font-medium text-slate-900 tabular-nums">
+                                            <td
+                                                className={`px-3 py-2.5 text-right font-medium tabular-nums ${
+                                                    isBilled
+                                                        ? "text-slate-500"
+                                                        : "text-slate-900"
+                                                }`}
+                                            >
                                                 {formatCurrency(basePrice)}
                                             </td>
 
@@ -275,21 +347,45 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                             <td className="px-3 py-2.5 text-center">
                                                 <input
                                                     type="checkbox"
-                                                    checked={!!adjustment.applies_iva}
-                                                    onChange={(e) => updateAdjustment(expense.id, "applies_iva", e.target.checked)}
-                                                    disabled={!isEditable}
-                                                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                                                    checked={
+                                                        !!adjustment.applies_iva
+                                                    }
+                                                    onChange={(e) =>
+                                                        updateAdjustment(
+                                                            expense.id,
+                                                            "applies_iva",
+                                                            e.target.checked
+                                                        )
+                                                    }
+                                                    disabled={
+                                                        !isEditable || isBilled
+                                                    }
+                                                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                                 />
                                             </td>
 
                                             {/* Total */}
-                                            <td className="px-3 py-2.5 text-right font-bold text-slate-900 tabular-nums">
+                                            <td
+                                                className={`px-3 py-2.5 text-right font-bold tabular-nums ${
+                                                    isBilled
+                                                        ? "text-slate-500"
+                                                        : "text-slate-900"
+                                                }`}
+                                            >
                                                 {formatCurrency(total)}
                                             </td>
 
                                             {/* Ganancia */}
-                                            <td className="px-3 py-2.5 text-right text-xs font-medium tabular-nums text-emerald-600">
-                                                {profit > 0 ? formatCurrency(profit) : "-"}
+                                            <td
+                                                className={`px-3 py-2.5 text-right text-xs font-medium tabular-nums ${
+                                                    isBilled
+                                                        ? "text-slate-400"
+                                                        : "text-emerald-600"
+                                                }`}
+                                            >
+                                                {profit > 0
+                                                    ? formatCurrency(profit)
+                                                    : "-"}
                                             </td>
                                         </tr>
                                     );
@@ -297,7 +393,9 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                             </tbody>
                             <tfoot className="bg-slate-50 border-t border-slate-200">
                                 <tr>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700">TOTALES:</td>
+                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700">
+                                        TOTALES:
+                                    </td>
                                     <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
                                         {formatCurrency(summary.totalCost)}
                                     </td>
@@ -306,7 +404,9 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                         {formatCurrency(summary.totalBase)}
                                     </td>
                                     <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
-                                        {summary.totalIVA > 0 ? formatCurrency(summary.totalIVA) : "-"}
+                                        {summary.totalIVA > 0
+                                            ? formatCurrency(summary.totalIVA)
+                                            : "-"}
                                     </td>
                                     <td className="px-3 py-2.5 text-right text-sm font-bold text-blue-700 tabular-nums">
                                         {formatCurrency(summary.totalTotal)}

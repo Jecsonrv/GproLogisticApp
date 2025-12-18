@@ -72,49 +72,46 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         """
         Get all billable items for the billing wizard.
         Combines:
-        1. Unbilled OrderCharges (Manual services)
-        2. Unbilled Transfers (Expenses configured to be billed)
+        1. Unbilled OrderCharges (Manual services) - sin factura asociada
+        2. Unbilled Transfers (Expenses) - sin factura asociada
+        
+        Items ya facturados NO aparecen aquí.
         """
         order = self.get_object()
         
         items = []
         
         # 1. Manual Charges (Service Calculator)
-        # Exclude charges already linked to an invoice
-        charges = order.charges.filter(invoice__isnull=True).select_related('service')
+        # SOLO los que NO tienen factura asociada
+        charges = order.charges.filter(
+            invoice__isnull=True,
+            is_deleted=False
+        ).select_related('service')
+        
         for charge in charges:
             items.append({
                 'id': f'charge_{charge.id}',
                 'original_id': charge.id,
                 'type': 'service',
                 'description': f"{charge.service.name} - {charge.description or ''}",
-                'amount': float(charge.subtotal), # Base amount without IVA
+                'amount': float(charge.subtotal),
                 'iva': float(charge.iva_amount),
                 'total': float(charge.total),
                 'notes': charge.description,
                 'source_model': 'OrderCharge'
             })
             
-        # 2. Billable Expenses (Transfer Calculator)
-        # Exclude transfers already linked to an invoice (via some future mechanism) or that are administrative
-        # For now, we just list them. We rely on the frontend to filter or handle duplicates if logic changes.
-        # But wait, we don't have a direct link from Invoice -> Transfer yet.
-        # So we assume if a Transfer is "billed", it was converted to an OrderCharge and that Charge is billed.
-        # BUT the new flow is: Select Transfer in Wizard -> Create Invoice.
-        # This implies we need to know if a Transfer has been billed.
-        # We don't have a field `invoice` on Transfer yet for this flow.
-        # However, for this iteration, we list ALL billable transfers. The user manually selects.
-        # To make it smarter, we should filter out transfers that were already "converted" to charges?
-        # That logic is complex without a direct link.
-        # Let's list all transfers that have a valid markup configuration.
-        
+        # 2. Billable Expenses (Transfers)
+        # SOLO los que NO tienen factura asociada (invoice__isnull=True)
         from apps.transfers.models import Transfer
         from decimal import Decimal
         
         transfers = Transfer.objects.filter(
             service_order=order, 
-            transfer_type__in=['cargos', 'costos', 'terceros']
-        )
+            transfer_type__in=['cargos', 'costos', 'terceros'],
+            invoice__isnull=True,  # Solo los NO facturados
+            is_deleted=False
+        ).select_related('provider')
         
         for t in transfers:
             # Calculate billable amount based on stored config
@@ -131,10 +128,6 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 
             total = base_price + iva
             
-            # Check if this expense has already been converted to a charge?
-            # We can fuzzy match or rely on user. 
-            # Ideally we'd store `related_transfer` on OrderCharge.
-            
             items.append({
                 'id': f'expense_{t.id}',
                 'original_id': t.id,
@@ -146,6 +139,8 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 'notes': f"Costo original: {t.amount}. Margen: {markup}%",
                 'source_model': 'Transfer'
             })
+            
+        return Response(items)
             
         return Response(items)
 

@@ -102,14 +102,26 @@ class ServiceOrder(SoftDeleteModel):
         return total
 
     def get_total_third_party(self):
-        """Calcula el total de gastos facturables al cliente (cargos + terceros legacy) en GTQ"""
+        """
+        Calcula el total de gastos facturables al cliente incluyendo margen e IVA.
+        Usa los valores de customer_markup_percentage y customer_applies_iva del Transfer.
+        """
         total = Decimal('0.00')
-        transfers = self.transfers.filter(transfer_type__in=['cargos', 'terceros'])
+        transfers = self.transfers.filter(transfer_type__in=['cargos', 'terceros', 'costos'])
         for transfer in transfers:
             amount = transfer.amount
             if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
                 amount = amount * transfer.exchange_rate
-            total += amount
+            
+            # Aplicar margen si existe
+            markup = transfer.customer_markup_percentage or Decimal('0.00')
+            base_price = amount * (1 + markup / Decimal('100.00'))
+            
+            # Aplicar IVA si corresponde
+            if transfer.customer_applies_iva:
+                base_price = base_price * Decimal('1.13')
+            
+            total += base_price
         return total
     
     def get_total_direct_costs(self):
@@ -349,6 +361,12 @@ class Invoice(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="Estado")
     payment_condition = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='credito', verbose_name="Condición de Pago")
 
+    # Estado de facturación
+    is_dte_issued = models.BooleanField(default=False, verbose_name="DTE Emitido", 
+        help_text="Marcar cuando se emita la factura real en el sistema fiscal. Una vez marcado, solo se pueden hacer notas de crédito.")
+    dte_number = models.CharField(max_length=100, blank=True, verbose_name="Número DTE Real",
+        help_text="Número de factura emitida en el sistema fiscal externo")
+
     # Archivos
     dte_file = models.FileField(
         upload_to='invoices/dte/',
@@ -449,28 +467,37 @@ class Invoice(models.Model):
 
     def calculate_totals(self):
         """Calcula los totales de servicios y gastos a terceros"""
-        # Sumar solo los cargos asignados a esta factura
+        from decimal import Decimal
+        
+        # 1. Sumar cargos de servicios (OrderCharge) asignados a esta factura
         charges = self.charges.all()
-        self.subtotal_services = sum(c.subtotal for c in charges)
-        self.iva_services = sum(c.iva_amount for c in charges)
-        self.total_services = sum(c.total for c in charges)
-
-        # TODO: Manejar gastos a terceros si se vinculan directamente (por ahora usa lógica legacy o requiere link)
-        # Si los 'transfers' (gastos terceros) no tienen FK a Invoice, este cálculo podría ser incorrecto para parciales.
-        # Por ahora, asumimos que los 'charges' cubren todo lo facturable.
-        # Si se usa el modelo híbrido donde 'transfers' se facturan directamente, necesitaríamos FK en Transfer también.
-        # Pero el nuevo flujo convierte gastos -> charges, así que usar 'charges' es lo correcto.
+        self.subtotal_services = sum(c.subtotal for c in charges) or Decimal('0.00')
+        self.iva_services = sum(c.iva_amount for c in charges) or Decimal('0.00')
+        self.total_services = sum(c.total for c in charges) or Decimal('0.00')
         
-        # Retrocompatibilidad: Si no hay cargos asignados explícitamente, intentar tomar todos los de la OS?
-        # No, para parciales esto rompería. Asumimos que el proceso de facturación ASIGNA los cargos.
+        # 2. Sumar gastos (Transfers) facturados - se quedan en su tabla, no se mueven
+        # Los gastos se calculan con su margen e IVA configurado
+        subtotal_expenses = Decimal('0.00')
+        iva_expenses = Decimal('0.00')
         
-        # Pero para facturas viejas? 
-        # Si charges es vacío y la factura ya existe, tal vez deberíamos mantener el comportamiento anterior?
-        # O mejor, migrar datos. Asumiremos que el flujo "nuevo" es el mandatorio.
+        for transfer in self.billed_transfers.all():
+            # Calcular precio al cliente (costo + margen)
+            cost = transfer.amount
+            markup = transfer.customer_markup_percentage or Decimal('0.00')
+            base_price = cost * (1 + markup / Decimal('100.00'))
+            
+            if transfer.customer_applies_iva:
+                iva = base_price * Decimal('0.13')
+            else:
+                iva = Decimal('0.00')
+            
+            subtotal_expenses += base_price
+            iva_expenses += iva
         
-        self.subtotal_third_party = Decimal('0.00') # Los terceros ahora se convierten en charges tipo "Reembolso"
-
-        self.total_amount = self.total_services + self.subtotal_third_party
+        self.subtotal_third_party = subtotal_expenses
+        
+        # 3. Total general
+        self.total_amount = self.total_services + self.subtotal_third_party + iva_expenses
         self.save()
 
     def days_overdue(self):
@@ -640,3 +667,51 @@ class OrderHistory(models.Model):
     
     def __str__(self):
         return f"{self.service_order.order_number} - {self.get_event_type_display()} - {self.created_at}"
+
+
+class InvoiceEditHistory(models.Model):
+    """Historial de ediciones en pre-facturas (antes de emitir DTE)"""
+    EDIT_TYPE_CHOICES = (
+        ('charge_added', 'Línea Agregada'),
+        ('charge_edited', 'Línea Editada'),
+        ('charge_removed', 'Línea Eliminada'),
+        ('expense_edited', 'Gasto Editado'),
+        ('totals_recalculated', 'Totales Recalculados'),
+        ('dte_marked', 'Marcada como DTE Emitido'),
+    )
+    
+    invoice = models.ForeignKey(
+        Invoice, 
+        on_delete=models.CASCADE, 
+        related_name='edit_history',
+        verbose_name="Factura"
+    )
+    edit_type = models.CharField(
+        max_length=30, 
+        choices=EDIT_TYPE_CHOICES,
+        verbose_name="Tipo de Edición"
+    )
+    description = models.TextField(verbose_name="Descripción del Cambio")
+    
+    # Valores anteriores y nuevos (para auditoría)
+    previous_values = models.JSONField(null=True, blank=True, verbose_name="Valores Anteriores")
+    new_values = models.JSONField(null=True, blank=True, verbose_name="Valores Nuevos")
+    
+    user = models.ForeignKey(
+        'users.User', 
+        on_delete=models.SET_NULL, 
+        null=True,
+        verbose_name="Usuario"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha y Hora")
+    
+    class Meta:
+        verbose_name = "Historial de Edición de Factura"
+        verbose_name_plural = "Historial de Ediciones de Facturas"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['invoice', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.invoice.invoice_number} - {self.get_edit_type_display()} - {self.created_at}"

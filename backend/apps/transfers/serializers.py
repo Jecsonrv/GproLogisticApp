@@ -47,6 +47,11 @@ class TransferListSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     transfer_type_display = serializers.CharField(source='get_transfer_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    # Info de facturación al cliente
+    invoice_id = serializers.IntegerField(source='invoice.id', read_only=True, allow_null=True)
+    invoice_number_client = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
+    is_billed = serializers.SerializerMethodField()
 
     class Meta:
         model = Transfer
@@ -55,6 +60,7 @@ class TransferListSerializer(serializers.ModelSerializer):
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
                   'customer_markup_percentage', 'customer_applies_iva',
+                  'invoice_id', 'invoice_number_client', 'is_billed',
                   'transaction_date', 'payment_date', 'created_at', 'created_by', 'created_by_username', 'created_by_name']
     
     def get_created_by_name(self, obj):
@@ -62,3 +68,7 @@ class TransferListSerializer(serializers.ModelSerializer):
             full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
             return full_name if full_name else obj.created_by.username
         return None
+    
+    def get_is_billed(self, obj):
+        """Indica si este gasto ya fue facturado al cliente"""
+        return obj.invoice_id is not None

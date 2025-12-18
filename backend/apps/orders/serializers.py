@@ -74,6 +74,10 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     customs_agent_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
+    # Información del cliente para facturación
+    client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
+    client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
+    
     # Información de costos
     total_transfers = serializers.SerializerMethodField()
     total_direct_costs = serializers.SerializerMethodField()

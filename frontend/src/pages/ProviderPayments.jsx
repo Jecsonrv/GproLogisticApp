@@ -1889,10 +1889,10 @@ function ProviderPayments() {
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onOpenChange={(open) =>
+                onClose={() =>
                     setDeleteConfirm({
-                        open,
-                        id: open ? deleteConfirm.id : null,
+                        open: false,
+                        id: null,
                     })
                 }
                 title="Eliminar Pago"

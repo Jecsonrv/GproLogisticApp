@@ -14,6 +14,19 @@ export function cn(...inputs) {
 }
 
 /**
+ * Obtiene la fecha de hoy en formato YYYY-MM-DD (ISO)
+ * Útil para inputs de tipo date y para el backend
+ * @returns {string} - Fecha en formato YYYY-MM-DD
+ */
+export function getTodayDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+/**
  * Formatea un número como moneda USD
  * @param {number} value - El valor a formatear
  * @param {object} options - Opciones de formateo
@@ -176,18 +189,7 @@ export function getInitials(name) {
         .slice(0, 2);
 }
 
-/**
- * Obtiene la fecha actual en formato YYYY-MM-DD usando la zona horaria local
- * Evita problemas con toISOString() que usa UTC
- * @returns {string} - Fecha en formato YYYY-MM-DD
- */
-export function getTodayDate() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-}
+
 
 /**
  * Formatea una fecha/hora proveniente del backend (ISO UTC)
@@ -199,10 +201,7 @@ export function getTodayDate() {
 export function formatDateTime(dateString, options = {}) {
     if (!dateString) return "N/A";
 
-    const {
-        includeTime = false,
-        locale = "es-SV",
-    } = options;
+    const { includeTime = false, locale = "es-SV" } = options;
 
     try {
         const date = new Date(dateString);

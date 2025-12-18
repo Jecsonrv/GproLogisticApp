@@ -117,6 +117,11 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     customs_agent_name = serializers.SerializerMethodField()
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     
+    # Información del cliente para facturación
+    client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
+    client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
+    client_credit_limit = serializers.DecimalField(source='client.credit_limit', max_digits=15, decimal_places=2, read_only=True)
+    
     def get_customs_agent_name(self, obj):
         if obj.customs_agent:
             return obj.customs_agent.get_full_name() or obj.customs_agent.username
@@ -144,6 +149,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
         model = ServiceOrder
         fields = [
             'id', 'order_number', 'client', 'client_name',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
             'sub_client', 'sub_client_name',
             'shipment_type', 'shipment_type_name',
             'provider', 'provider_name',
@@ -162,6 +168,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'mes', 'created_at', 'updated_at',
             'closed_at', 'documents', 'charges',
             'client_name', 'sub_client_name', 'shipment_type_name',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
             'provider_name', 'customs_agent_name',
             'created_by_username', 'closed_by_username', 'status_display',
             'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
@@ -274,6 +281,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
+    is_editable = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -282,11 +290,16 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'invoice_type', 'invoice_type_display',
             'issue_date', 'due_date', 'total_amount',
             'paid_amount', 'balance', 'status', 'status_display',
+            'is_dte_issued', 'dte_number', 'is_editable',
             'days_overdue'
         ]
 
     def get_days_overdue(self, obj):
         return obj.days_overdue()
+    
+    def get_is_editable(self, obj):
+        """Una factura es editable si no tiene DTE emitido"""
+        return not obj.is_dte_issued
 
 
 class InvoiceDetailSerializer(serializers.ModelSerializer):
@@ -300,6 +313,11 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     payment_condition_display = serializers.CharField(source='get_payment_condition_display', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     days_overdue = serializers.SerializerMethodField()
+    is_editable = serializers.SerializerMethodField()
+    
+    # Items facturados
+    billed_charges = serializers.SerializerMethodField()
+    billed_expenses = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -309,11 +327,13 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'issue_date', 'due_date',
             'subtotal_services', 'iva_services', 'total_services',
             'subtotal_third_party', 'total_amount',
-            'paid_amount', 'balance',
+            'paid_amount', 'credited_amount', 'balance',
             'status', 'status_display',
             'payment_condition', 'payment_condition_display',
+            'is_dte_issued', 'dte_number', 'is_editable',
             'dte_file', 'pdf_file', 'notes',
-            'payments', 'days_overdue',
+            'payments', 'billed_charges', 'billed_expenses',
+            'days_overdue',
             'created_by', 'created_by_username',
             'created_at', 'updated_at'
         ]
@@ -322,11 +342,61 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'service_order_number', 'service_order_data', 'client_name',
             'status_display', 'invoice_type_display', 'payment_condition_display',
             'created_by_username', 'days_overdue', 'payments',
+            'billed_charges', 'billed_expenses', 'is_editable',
             'created_at', 'updated_at'
         ]
 
     def get_days_overdue(self, obj):
         return obj.days_overdue()
+    
+    def get_is_editable(self, obj):
+        """Una factura es editable si no tiene DTE emitido"""
+        return not obj.is_dte_issued
+    
+    def get_billed_charges(self, obj):
+        """Obtener los cargos/servicios vinculados a esta factura"""
+        charges = obj.charges.all().select_related('service')
+        return [{
+            'id': c.id,
+            'service_id': c.service_id,
+            'service_name': c.service.name,
+            'description': c.description,
+            'quantity': c.quantity,
+            'unit_price': str(c.unit_price),
+            'discount': str(c.discount),
+            'subtotal': str(c.subtotal),
+            'iva_amount': str(c.iva_amount),
+            'total': str(c.total),
+            'applies_iva': c.service.applies_iva
+        } for c in charges]
+    
+    def get_billed_expenses(self, obj):
+        """Obtener los gastos vinculados a esta factura"""
+        from decimal import Decimal
+        transfers = obj.billed_transfers.all().select_related('provider')
+        result = []
+        for t in transfers:
+            markup = t.customer_markup_percentage or Decimal('0.00')
+            cost = t.amount
+            base_price = cost * (1 + markup / Decimal('100.00'))
+            
+            if t.customer_applies_iva:
+                iva = base_price * Decimal('0.13')
+            else:
+                iva = Decimal('0.00')
+            
+            result.append({
+                'id': t.id,
+                'description': t.description,
+                'provider_name': t.provider.name if t.provider else 'N/A',
+                'cost': str(t.amount),
+                'markup_percentage': str(markup),
+                'applies_iva': t.customer_applies_iva,
+                'subtotal': str(base_price),
+                'iva_amount': str(iva),
+                'total': str(base_price + iva)
+            })
+        return result
 
 
 class InvoiceCreateSerializer(serializers.ModelSerializer):

@@ -23,6 +23,7 @@ import {
     Receipt,
     Pencil,
     Trash2,
+    Info,
 } from "lucide-react";
 import {
     Card,
@@ -44,6 +45,7 @@ import { FileUpload, SelectERP, ConfirmDialog } from "../components/ui";
 import api from "../lib/axios";
 import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 import toast from "react-hot-toast";
+import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
 
 /**
  * Invoicing - Módulo de Facturación y CXC
@@ -247,6 +249,11 @@ const Invoicing = () => {
         type: null, // 'invoice' | 'credit-note'
     });
 
+    // Billable items state
+    const [billableItems, setBillableItems] = useState([]);
+    const [selectedItemIds, setSelectedItemIds] = useState([]);
+    const [loadingItems, setLoadingItems] = useState(false);
+
     // Search and Filters
     const [searchQuery, setSearchQuery] = useState("");
     const [filters, setFilters] = useState({
@@ -436,6 +443,60 @@ const Invoicing = () => {
         return count;
     }, [filters]);
 
+    // Calculate totals based on selected items (for invoice generation)
+    const selectedTotals = useMemo(() => {
+        let subtotal = 0;
+        let iva = 0;
+        let total = 0;
+
+        billableItems.forEach((item) => {
+            if (selectedItemIds.includes(item.id)) {
+                subtotal += parseFloat(item.amount || 0);
+                iva += parseFloat(item.iva || 0);
+                total += parseFloat(item.total || 0);
+            }
+        });
+
+        return { subtotal, iva, total };
+    }, [billableItems, selectedItemIds]);
+
+    // Auto-update total amount when selected items change
+    useEffect(() => {
+        if (billableItems.length > 0 && selectedItemIds.length > 0) {
+            const roundedTotal = Math.round(selectedTotals.total * 100) / 100;
+            setGenerateForm((prev) => ({
+                ...prev,
+                total_amount: roundedTotal.toFixed(2),
+            }));
+        }
+    }, [selectedTotals, billableItems.length, selectedItemIds.length]);
+
+    // Fetch billable items for a service order
+    const fetchBillableItems = async (orderId) => {
+        if (!orderId) {
+            setBillableItems([]);
+            setSelectedItemIds([]);
+            return;
+        }
+
+        try {
+            setLoadingItems(true);
+            const response = await api.get(
+                `/orders/service-orders/${orderId}/billable_items/`
+            );
+            setBillableItems(response.data);
+            // Select all items by default
+            setSelectedItemIds(response.data.map((item) => item.id));
+        } catch (error) {
+            console.error("Error fetching billable items:", error);
+            toast.error("Error al cargar items facturables");
+            setBillableItems([]);
+            setSelectedItemIds([]);
+        } finally {
+            setLoadingItems(false);
+        }
+    };
+
     // Handlers
     const handleServiceOrderSelect = (orderId) => {
         const selectedOrder = allServiceOrders.find((o) => o.id === orderId);
@@ -448,6 +509,8 @@ const Invoicing = () => {
                 total_amount: "",
                 due_date: "",
             });
+            setBillableItems([]);
+            setSelectedItemIds([]);
             return;
         }
 
@@ -467,6 +530,9 @@ const Invoicing = () => {
             total_amount: selectedOrder.total_amount || "",
             due_date: dueDate,
         });
+
+        // Fetch billable items for this order
+        fetchBillableItems(orderId);
     };
 
     const handleOpenEditCNModal = (nc) => {
@@ -643,22 +709,43 @@ const Invoicing = () => {
     };
 
     const handleGenerateInvoice = async () => {
-        if (
-            !generateForm.service_order ||
-            !generateForm.invoice_number ||
-            !generateForm.total_amount
-        ) {
-            toast.error("Complete todos los campos requeridos");
+        if (!generateForm.service_order) {
+            toast.error("Debe seleccionar una orden de servicio");
+            return;
+        }
+
+        if (selectedItemIds.length === 0) {
+            toast.error("Debe seleccionar al menos un item para facturar");
             return;
         }
 
         try {
+            // Separate items by type
+            const selectedItems = billableItems.filter((item) =>
+                selectedItemIds.includes(item.id)
+            );
+            const chargeIds = selectedItems
+                .filter((item) => item.type === "service")
+                .map((item) => item.original_id);
+            const transferIds = selectedItems
+                .filter((item) => item.type === "expense")
+                .map((item) => item.original_id);
+
             const formData = new FormData();
             formData.append("service_order", generateForm.service_order);
-            formData.append("invoice_number", generateForm.invoice_number);
+
+            // Only append invoice_number if it has a value
+            if (generateForm.invoice_number && generateForm.invoice_number.trim() !== "") {
+                formData.append("invoice_number", generateForm.invoice_number.trim());
+            }
+
             formData.append("invoice_type", generateForm.invoice_type);
             formData.append("issue_date", generateForm.invoice_date);
             formData.append("total_amount", generateForm.total_amount);
+
+            // Add selected item IDs - each as separate entries
+            chargeIds.forEach((id) => formData.append("charge_ids", id));
+            transferIds.forEach((id) => formData.append("transfer_ids", id));
 
             if (generateForm.due_date) {
                 formData.append("due_date", generateForm.due_date);
@@ -667,12 +754,23 @@ const Invoicing = () => {
                 formData.append("pdf_file", generateForm.invoice_file);
             }
 
+            // Debug: Log what we're sending
+            console.log("Sending invoice with:");
+            console.log("- Service Order:", generateForm.service_order);
+            console.log("- Charge IDs:", chargeIds);
+            console.log("- Transfer IDs:", transferIds);
+            console.log("- Total Amount:", generateForm.total_amount);
+
             const response = await api.post("/orders/invoices/", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
+            console.log("Invoice created successfully:", response.data);
+
+            const invoiceNumber = response.data.invoice_number || "sin número";
             toast.success(
-                `Factura ${response.data.invoice_number} registrada exitosamente`
+                `Pre-factura ${invoiceNumber} registrada exitosamente. Puede editar los items antes de marcar como DTE emitido.`,
+                { duration: 5000 }
             );
             fetchInvoices();
             fetchSummary();
@@ -699,6 +797,8 @@ const Invoicing = () => {
             total_amount: "",
             invoice_file: null,
         });
+        setBillableItems([]);
+        setSelectedItemIds([]);
     };
 
     const clearFilters = () => {
@@ -1172,7 +1272,7 @@ const Invoicing = () => {
                     </Button>
                     <Button onClick={() => setIsGenerateModalOpen(true)}>
                         <Plus className="h-4 w-4 mr-1.5" />
-                        Nueva Factura
+                        Nueva Pre-factura
                     </Button>
                 </div>
             </div>
@@ -1881,20 +1981,15 @@ const Invoicing = () => {
                     setIsGenerateModalOpen(false);
                     resetGenerateForm();
                 }}
-                title="Registrar Factura de Venta"
+                title="Registrar Pre-factura (Editable)"
                 size="2xl"
             >
-                <div className="space-y-4">
-                    {/* Step 1: Service Order */}
-                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-semibold">
-                                1
-                            </div>
-                            <h3 className="text-sm font-semibold text-slate-900">
-                                Seleccionar Orden de Servicio
-                            </h3>
-                        </div>
+                <div className="space-y-5">
+                    {/* Service Order Selection */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                        <h3 className="text-sm font-semibold text-slate-900 mb-3">
+                            Orden de Servicio
+                        </h3>
 
                         <SelectERP
                             label="Orden de Servicio"
@@ -1932,32 +2027,195 @@ const Invoicing = () => {
                         )}
                     </div>
 
-                    {/* Step 2: Invoice Details */}
+                    {/* Items to Bill */}
                     {generateForm.service_order && (
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-semibold">
-                                    2
+                        <div className="bg-white border border-slate-200 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+                                Items a Facturar
+                            </h3>
+
+                            {loadingItems ? (
+                                <div className="text-center py-6">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-2"></div>
+                                    <p className="text-sm text-slate-500">
+                                        Cargando items disponibles...
+                                    </p>
                                 </div>
-                                <h3 className="text-sm font-semibold text-slate-900">
-                                    Información de la Factura
-                                </h3>
-                            </div>
+                            ) : billableItems.length === 0 ? (
+                                <div className="text-center py-6 bg-amber-50 rounded-lg border border-amber-200">
+                                    <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+                                    <p className="text-sm text-amber-700 font-medium">
+                                        No hay items disponibles para facturar en esta orden
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Items Table */}
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white mb-3">
+                                        <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                                                    <tr>
+                                                        <th className="w-10 p-3 text-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={
+                                                                    selectedItemIds.length === billableItems.length &&
+                                                                    billableItems.length > 0
+                                                                }
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedItemIds(billableItems.map((i) => i.id));
+                                                                    } else {
+                                                                        setSelectedItemIds([]);
+                                                                    }
+                                                                }}
+                                                                className="h-4 w-4 rounded border-slate-300"
+                                                            />
+                                                        </th>
+                                                        <th className="text-left p-3 font-semibold text-slate-700 w-20">
+                                                            Tipo
+                                                        </th>
+                                                        <th className="text-left p-3 font-semibold text-slate-700">
+                                                            Descripción
+                                                        </th>
+                                                        <th className="text-right p-3 font-semibold text-slate-700 w-28">
+                                                            Subtotal
+                                                        </th>
+                                                        <th className="text-right p-3 font-semibold text-slate-700 w-24">
+                                                            IVA
+                                                        </th>
+                                                        <th className="text-right p-3 font-semibold text-slate-700 w-32">
+                                                            Total
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {billableItems.map((item, index) => {
+                                                        const isSelected = selectedItemIds.includes(item.id);
+                                                        return (
+                                                            <tr
+                                                                key={item.id}
+                                                                className={cn(
+                                                                    "border-b border-slate-100 transition-colors cursor-pointer",
+                                                                    isSelected
+                                                                        ? "bg-brand-50"
+                                                                        : "hover:bg-slate-50"
+                                                                )}
+                                                                onClick={() => {
+                                                                    setSelectedItemIds((prev) =>
+                                                                        prev.includes(item.id)
+                                                                            ? prev.filter((id) => id !== item.id)
+                                                                            : [...prev, item.id]
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <td className="p-3 text-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isSelected}
+                                                                        onChange={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedItemIds((prev) =>
+                                                                                prev.includes(item.id)
+                                                                                    ? prev.filter((id) => id !== item.id)
+                                                                                    : [...prev, item.id]
+                                                                            );
+                                                                        }}
+                                                                        className="h-4 w-4 rounded border-slate-300"
+                                                                    />
+                                                                </td>
+                                                                <td className="p-3">
+                                                                    <Badge
+                                                                        variant={
+                                                                            item.type === "service"
+                                                                                ? "default"
+                                                                                : "secondary"
+                                                                        }
+                                                                        className="text-xs"
+                                                                    >
+                                                                        {item.type === "service" ? "Servicio" : "Gasto"}
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="p-3 text-slate-900">
+                                                                    {item.description}
+                                                                </td>
+                                                                <td className="p-3 text-right text-slate-900 font-medium tabular-nums">
+                                                                    {formatCurrency(item.amount)}
+                                                                </td>
+                                                                <td className="p-3 text-right text-slate-600 tabular-nums">
+                                                                    {item.iva > 0 ? formatCurrency(item.iva) : "-"}
+                                                                </td>
+                                                                <td className="p-3 text-right text-slate-900 font-semibold tabular-nums">
+                                                                    {formatCurrency(item.total)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    {/* Totals Summary */}
+                                    {selectedItemIds.length > 0 && (
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className="text-sm font-medium text-slate-600">
+                                                    {selectedItemIds.length} de {billableItems.length} item(s) seleccionado(s)
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+                                                    <div className="text-xs text-slate-500 mb-1">Subtotal</div>
+                                                    <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                                        {formatCurrency(selectedTotals.subtotal)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
+                                                    <div className="text-xs text-slate-500 mb-1">IVA 13%</div>
+                                                    <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                                        {formatCurrency(selectedTotals.iva)}
+                                                    </div>
+                                                </div>
+                                                <div className="text-center p-3 bg-brand-50 rounded-lg border-2 border-brand-300">
+                                                    <div className="text-xs text-brand-600 font-semibold mb-1">TOTAL</div>
+                                                    <div className="text-xl font-bold text-brand-700 tabular-nums">
+                                                        {formatCurrency(selectedTotals.total)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Invoice Details */}
+                    {generateForm.service_order && selectedItemIds.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-slate-900 mb-3">
+                                Información de la Factura
+                            </h3>
 
                             <div className="space-y-3">
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Input
-                                        label="Número de Factura / CCF *"
-                                        value={generateForm.invoice_number}
-                                        onChange={(e) =>
-                                            setGenerateForm({
-                                                ...generateForm,
-                                                invoice_number: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Ej: 001-001-0000001234"
-                                        required
-                                    />
+                                    <div>
+                                        <Input
+                                            label="Número de Factura / CCF"
+                                            value={generateForm.invoice_number}
+                                            onChange={(e) =>
+                                                setGenerateForm({
+                                                    ...generateForm,
+                                                    invoice_number: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Auto: PRE-00001-2025"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Dejar en blanco para auto-generar
+                                        </p>
+                                    </div>
 
                                     <SelectERP
                                         label="Tipo de Documento *"
@@ -2050,36 +2308,35 @@ const Invoicing = () => {
                                     </div>
                                 </div>
 
-                                <Input
-                                    label="Monto Total *"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={generateForm.total_amount}
-                                    onChange={(e) =>
-                                        setGenerateForm({
-                                            ...generateForm,
-                                            total_amount: e.target.value,
-                                        })
-                                    }
-                                    placeholder="0.00"
-                                    required
-                                />
+                                <div>
+                                    <Input
+                                        label="Monto Total (Calculado Automáticamente)"
+                                        type="text"
+                                        value={
+                                            generateForm.total_amount
+                                                ? formatCurrency(
+                                                      parseFloat(generateForm.total_amount)
+                                                  )
+                                                : "$0.00"
+                                        }
+                                        disabled
+                                        className="bg-slate-100 cursor-not-allowed"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                        <Info className="w-3 h-3" />
+                                        El monto se calcula automáticamente según los items seleccionados
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Step 3: Attachment */}
-                    {generateForm.service_order && (
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-6 h-6 rounded-full bg-slate-400 text-white flex items-center justify-center text-xs font-semibold">
-                                    3
-                                </div>
-                                <h3 className="text-sm font-semibold text-slate-900">
-                                    Adjuntar Documento (Opcional)
-                                </h3>
-                            </div>
+                    {/* Attachment */}
+                    {generateForm.service_order && selectedItemIds.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-lg p-4">
+                            <h3 className="text-sm font-medium text-slate-700 mb-3">
+                                Adjuntar Documento <span className="text-slate-400">(Opcional)</span>
+                            </h3>
 
                             <FileUpload
                                 accept=".pdf,.jpg,.jpeg,.png"
@@ -2122,12 +2379,11 @@ const Invoicing = () => {
                         onClick={handleGenerateInvoice}
                         disabled={
                             !generateForm.service_order ||
-                            !generateForm.invoice_number ||
-                            !generateForm.total_amount
+                            selectedItemIds.length === 0
                         }
                     >
                         <Upload className="w-4 h-4 mr-1.5" />
-                        Registrar Factura
+                        Registrar Pre-factura
                     </Button>
                 </ModalFooter>
             </Modal>
@@ -2434,6 +2690,16 @@ const Invoicing = () => {
                                 </p>
                             </div>
                         </div>
+
+                        {/* Items Facturados con Editor */}
+                        <InvoiceItemsEditor
+                            invoice={selectedInvoice}
+                            onUpdate={() => {
+                                handleViewInvoiceDetails(selectedInvoice.id);
+                                fetchInvoices();
+                                fetchSummary();
+                            }}
+                        />
 
                         {/* Payment History */}
                         <div className="pt-2">

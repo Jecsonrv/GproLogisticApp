@@ -9,7 +9,8 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from .models import Invoice, InvoicePayment, ServiceOrder, CreditNote
-from .serializers import InvoiceSerializer, InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
+from .serializers import InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
+from .serializers_new import InvoiceDetailSerializer, InvoiceCreateSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
 
 # Import distributed lock utilities (only active when Redis is configured)
@@ -25,7 +26,7 @@ except ImportError:
 class InvoiceViewSet(viewsets.ModelViewSet):
     """ViewSet for managing invoices (CXC)"""
     permission_classes = [IsOperativo]
-    serializer_class = InvoiceSerializer
+    serializer_class = InvoiceDetailSerializer
     filterset_fields = ['status']
     search_fields = ['invoice_number', 'service_order__client__name', 'ccf']
     ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance']
@@ -34,7 +35,25 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return InvoiceListSerializer
-        return InvoiceSerializer
+        if self.action == 'create':
+            return InvoiceCreateSerializer
+        return InvoiceDetailSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Override create to ensure response includes invoice_number and linked items"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        # Get the created invoice with the auto-generated invoice_number
+        # Refresh from DB to get auto-generated fields
+        invoice = serializer.instance
+        invoice.refresh_from_db()
+
+        # Use detail serializer for response to include all fields
+        response_serializer = InvoiceDetailSerializer(invoice)
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         """Create invoice from service order with distributed lock"""
@@ -47,6 +66,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         def create_invoice():
             total_amount = Decimal(str(self.request.data.get('total_amount', 0)))
             invoice_number = self.request.data.get('invoice_number', '')
+
+            # If invoice_number is empty or just whitespace, set to empty string
+            # so the model's save() method will auto-generate it
+            if invoice_number and isinstance(invoice_number, str):
+                invoice_number = invoice_number.strip()
+                if not invoice_number:
+                    invoice_number = ''
 
             # Get dates
             from datetime import datetime
@@ -74,7 +100,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # Create invoice with values
             invoice_data = {
                 'created_by': self.request.user,
-                'invoice_number': invoice_number,
+                'invoice_number': invoice_number if invoice_number else '',
                 'issue_date': issue_date,
                 'due_date': due_date,
                 'total_amount': total_amount,
@@ -91,65 +117,65 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             invoice = serializer.save(**invoice_data)
 
             # 1. Link selected MANUAL charges to this invoice
-            charge_ids = self.request.data.get('charge_ids', [])
-            if charge_ids:
-                from .models import OrderCharge
-                OrderCharge.objects.filter(
-                    id__in=charge_ids, 
-                    service_order=service_order,
-                    invoice__isnull=True 
-                ).update(invoice=invoice)
-            
-            # 2. Convert selected TRANSFERS (Expenses) to OrderCharges and link to invoice
-            transfer_ids = self.request.data.get('transfer_ids', [])
-            if transfer_ids:
-                from apps.transfers.models import Transfer
-                from apps.catalogs.models import Service
-                from .models import OrderCharge
-                
-                # Find generic service
-                service, _ = Service.objects.get_or_create(
-                    name='Gasto Reembolsable',
-                    defaults={
-                        'description': 'Cargo generado automáticamente desde calculadora de gastos',
-                        'default_price': 0, 
-                        'applies_iva': False, 
-                        'is_active': True
-                    }
-                )
-                
-                transfers = Transfer.objects.filter(id__in=transfer_ids)
-                
-                for t in transfers:
-                    markup = t.customer_markup_percentage or Decimal('0.00')
-                    applies_iva = t.customer_applies_iva
-                    
-                    cost = t.amount
-                    base_price = cost * (1 + markup / Decimal('100.00'))
-                    
-                    if applies_iva:
-                        iva = base_price * Decimal('0.13')
-                        total = base_price + iva
-                    else:
-                        iva = Decimal('0.00')
-                        total = base_price
-                        
-                    # Create charge linked to invoice
-                    OrderCharge.objects.create(
-                        service_order=service_order,
-                        service=service,
-                        invoice=invoice, # Direct link!
-                        description=f"{t.description} (Ref: {t.provider.name if t.provider else ''})",
-                        quantity=1,
-                        unit_price=base_price,
-                        discount=Decimal('0.00'),
-                        subtotal=base_price,
-                        iva_amount=iva,
-                        total=total,
-                        _current_user=self.request.user
-                    )
+            # Use getlist() for FormData arrays, fallback to get() for JSON
+            charge_ids_raw = self.request.data.getlist('charge_ids', []) if hasattr(self.request.data, 'getlist') else self.request.data.get('charge_ids', [])
 
-            # Recalculate totals based on all linked charges
+            # Debug logging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Raw charge_ids received: {charge_ids_raw}")
+
+            # Convert to integers, filtering out empty strings and None
+            charge_ids = []
+            if charge_ids_raw:
+                from .models import OrderCharge
+                for id_val in charge_ids_raw:
+                    if id_val and str(id_val).strip():
+                        try:
+                            charge_ids.append(int(id_val))
+                        except (ValueError, TypeError):
+                            logger.warning(f"Invalid charge_id: {id_val}")
+
+                logger.info(f"Processed charge_ids: {charge_ids}")
+
+                if charge_ids:
+                    updated = OrderCharge.objects.filter(
+                        id__in=charge_ids,
+                        service_order=service_order,
+                        invoice__isnull=True
+                    ).update(invoice=invoice)
+                    logger.info(f"Updated {updated} charges with invoice {invoice.id}")
+
+            # 2. Link selected TRANSFERS (Expenses) directly to invoice (without creating OrderCharges)
+            # Los gastos se quedan en su tabla, solo se marcan como facturados
+            # Use getlist() for FormData arrays, fallback to get() for JSON
+            transfer_ids_raw = self.request.data.getlist('transfer_ids', []) if hasattr(self.request.data, 'getlist') else self.request.data.get('transfer_ids', [])
+
+            logger.info(f"Raw transfer_ids received: {transfer_ids_raw}")
+
+            # Convert to integers, filtering out empty strings and None
+            transfer_ids = []
+            if transfer_ids_raw:
+                from apps.transfers.models import Transfer
+                for id_val in transfer_ids_raw:
+                    if id_val and str(id_val).strip():
+                        try:
+                            transfer_ids.append(int(id_val))
+                        except (ValueError, TypeError):
+                            logger.warning(f"Invalid transfer_id: {id_val}")
+
+                logger.info(f"Processed transfer_ids: {transfer_ids}")
+
+                if transfer_ids:
+                    # Marcar los transfers como facturados (sin moverlos a OrderCharge)
+                    updated = Transfer.objects.filter(
+                        id__in=transfer_ids,
+                        service_order=service_order,
+                        invoice__isnull=True  # Solo los no facturados
+                    ).update(invoice=invoice)
+                    logger.info(f"Updated {updated} transfers with invoice {invoice.id}")
+
+            # Recalculate totals based on linked charges AND transfers
             invoice.calculate_totals()
 
             # Mark service order as invoiced (billing started)
@@ -237,6 +263,414 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @action(detail=True, methods=['post'])
+    def mark_as_dte(self, request, pk=None):
+        """
+        Marca una pre-factura como DTE emitido.
+        Una vez marcada, solo se pueden hacer notas de crédito.
+        """
+        invoice = self.get_object()
+        
+        if invoice.is_dte_issued:
+            return Response(
+                {'error': 'Esta factura ya fue marcada como DTE emitido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        dte_number = request.data.get('dte_number', '')
+        
+        # Registrar en historial
+        from .models import InvoiceEditHistory
+        InvoiceEditHistory.objects.create(
+            invoice=invoice,
+            edit_type='dte_marked',
+            description=f'Factura marcada como DTE emitido. Número DTE: {dte_number or "N/A"}',
+            previous_values={'is_dte_issued': False, 'invoice_number': invoice.invoice_number},
+            new_values={'is_dte_issued': True, 'dte_number': dte_number},
+            user=request.user
+        )
+        
+        invoice.is_dte_issued = True
+        invoice.dte_number = dte_number
+        invoice.save()
+        
+        return Response({
+            'message': 'Factura marcada como DTE emitido correctamente.',
+            'invoice_number': invoice.invoice_number,
+            'dte_number': dte_number
+        })
+
+    @action(detail=True, methods=['patch'])
+    def edit_expense(self, request, pk=None):
+        """
+        Editar un gasto facturado (solo si es pre-factura).
+        Permite modificar: costo, margen, aplica IVA.
+        Los cambios se reflejan tanto en la factura como en la OS.
+        """
+        invoice = self.get_object()
+        
+        if invoice.is_dte_issued:
+            return Response(
+                {'error': 'No se puede editar. Esta factura ya tiene DTE emitido. Use notas de crédito.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        transfer_id = request.data.get('transfer_id')
+        if not transfer_id:
+            return Response(
+                {'error': 'Se requiere transfer_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from apps.transfers.models import Transfer
+        try:
+            transfer = Transfer.objects.get(id=transfer_id, invoice=invoice)
+        except Transfer.DoesNotExist:
+            return Response(
+                {'error': 'Gasto no encontrado en esta factura'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Guardar valores anteriores para historial
+        previous_values = {
+            'amount': str(transfer.amount),
+            'customer_markup_percentage': str(transfer.customer_markup_percentage),
+            'customer_applies_iva': transfer.customer_applies_iva
+        }
+        
+        # Actualizar campos si se proporcionan
+        if 'amount' in request.data:
+            transfer.amount = Decimal(str(request.data['amount']))
+        if 'customer_markup_percentage' in request.data:
+            transfer.customer_markup_percentage = Decimal(str(request.data['customer_markup_percentage']))
+        if 'customer_applies_iva' in request.data:
+            transfer.customer_applies_iva = request.data['customer_applies_iva']
+        
+        transfer.save()
+        
+        # Registrar en historial
+        from .models import InvoiceEditHistory
+        InvoiceEditHistory.objects.create(
+            invoice=invoice,
+            edit_type='expense_edited',
+            description=f'Gasto editado: {transfer.description}',
+            previous_values=previous_values,
+            new_values={
+                'amount': str(transfer.amount),
+                'customer_markup_percentage': str(transfer.customer_markup_percentage),
+                'customer_applies_iva': transfer.customer_applies_iva
+            },
+            user=request.user
+        )
+        
+        # Recalcular totales de la factura
+        invoice.calculate_totals()
+        
+        return Response({
+            'message': 'Gasto actualizado correctamente',
+            'transfer_id': transfer.id
+        })
+
+    @action(detail=True, methods=['patch'])
+    def edit_charge(self, request, pk=None):
+        """
+        Editar un cargo/servicio facturado (solo si es pre-factura).
+        Los cambios se reflejan tanto en la factura como en la OS.
+        """
+        invoice = self.get_object()
+        
+        if invoice.is_dte_issued:
+            return Response(
+                {'error': 'No se puede editar. Esta factura ya tiene DTE emitido. Use notas de crédito.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        charge_id = request.data.get('charge_id')
+        if not charge_id:
+            return Response(
+                {'error': 'Se requiere charge_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .models import OrderCharge
+        try:
+            charge = OrderCharge.objects.get(id=charge_id, invoice=invoice)
+        except OrderCharge.DoesNotExist:
+            return Response(
+                {'error': 'Cargo no encontrado en esta factura'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Guardar valores anteriores para historial
+        previous_values = {
+            'quantity': charge.quantity,
+            'unit_price': str(charge.unit_price),
+            'discount': str(charge.discount),
+            'description': charge.description
+        }
+        
+        # Actualizar campos si se proporcionan
+        if 'quantity' in request.data:
+            charge.quantity = int(request.data['quantity'])
+        if 'unit_price' in request.data:
+            charge.unit_price = Decimal(str(request.data['unit_price']))
+        if 'discount' in request.data:
+            charge.discount = Decimal(str(request.data['discount']))
+        if 'description' in request.data:
+            charge.description = request.data['description']
+        
+        # El save() del modelo recalcula subtotal, iva_amount, total
+        charge.save()
+        
+        # Registrar en historial
+        from .models import InvoiceEditHistory
+        InvoiceEditHistory.objects.create(
+            invoice=invoice,
+            edit_type='charge_edited',
+            description=f'Cargo editado: {charge.service.name}',
+            previous_values=previous_values,
+            new_values={
+                'quantity': charge.quantity,
+                'unit_price': str(charge.unit_price),
+                'discount': str(charge.discount),
+                'description': charge.description
+            },
+            user=request.user
+        )
+        
+        # Recalcular totales de la factura
+        invoice.calculate_totals()
+        
+        return Response({
+            'message': 'Cargo actualizado correctamente',
+            'charge_id': charge.id
+        })
+
+    @action(detail=True, methods=['post'])
+    def remove_item(self, request, pk=None):
+        """
+        Quita un item de la factura (servicio o gasto).
+        El item vuelve a estar disponible para facturar.
+        Solo funciona si es pre-factura.
+        """
+        invoice = self.get_object()
+        
+        if invoice.is_dte_issued:
+            return Response(
+                {'error': 'No se puede editar. Esta factura ya tiene DTE emitido. Use notas de crédito.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        item_type = request.data.get('item_type')  # 'charge' o 'expense'
+        item_id = request.data.get('item_id')
+        
+        if not item_type or not item_id:
+            return Response(
+                {'error': 'Se requiere item_type (charge/expense) e item_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .models import InvoiceEditHistory
+        
+        if item_type == 'charge':
+            from .models import OrderCharge
+            try:
+                charge = OrderCharge.objects.get(id=item_id, invoice=invoice)
+                # Desvincular de la factura (no eliminar, vuelve a estar disponible)
+                description = f'{charge.service.name} - {charge.description}'
+                charge.invoice = None
+                charge.save()
+                
+                InvoiceEditHistory.objects.create(
+                    invoice=invoice,
+                    edit_type='charge_removed',
+                    description=f'Cargo removido: {description}',
+                    previous_values={'charge_id': item_id, 'linked_to_invoice': True},
+                    new_values={'linked_to_invoice': False},
+                    user=request.user
+                )
+            except OrderCharge.DoesNotExist:
+                return Response({'error': 'Cargo no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+                
+        elif item_type == 'expense':
+            from apps.transfers.models import Transfer
+            try:
+                transfer = Transfer.objects.get(id=item_id, invoice=invoice)
+                description = transfer.description
+                # Desvincular de la factura
+                transfer.invoice = None
+                transfer.save()
+                
+                InvoiceEditHistory.objects.create(
+                    invoice=invoice,
+                    edit_type='charge_removed',
+                    description=f'Gasto removido: {description}',
+                    previous_values={'transfer_id': item_id, 'linked_to_invoice': True},
+                    new_values={'linked_to_invoice': False},
+                    user=request.user
+                )
+            except Transfer.DoesNotExist:
+                return Response({'error': 'Gasto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'item_type debe ser "charge" o "expense"'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Recalcular totales
+        invoice.calculate_totals()
+        
+        return Response({
+            'message': f'Item removido de la factura. Ahora está disponible para facturar nuevamente.'
+        })
+
+    @action(detail=True, methods=['post'])
+    def add_items(self, request, pk=None):
+        """
+        Agregar items a una factura existente (solo si es pre-factura).
+        Útil para vincular items a facturas existentes que no tienen items vinculados.
+        """
+        invoice = self.get_object()
+        
+        if invoice.is_dte_issued:
+            return Response(
+                {'error': 'No se puede modificar. Esta factura ya tiene DTE emitido.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        charge_ids = request.data.get('charge_ids', [])
+        transfer_ids = request.data.get('transfer_ids', [])
+        
+        if not charge_ids and not transfer_ids:
+            return Response(
+                {'error': 'Debe proporcionar charge_ids o transfer_ids'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        service_order = invoice.service_order
+        added_charges = 0
+        added_expenses = 0
+        
+        # Vincular cargos
+        if charge_ids:
+            from .models import OrderCharge
+            result = OrderCharge.objects.filter(
+                id__in=charge_ids,
+                service_order=service_order,
+                invoice__isnull=True
+            ).update(invoice=invoice)
+            added_charges = result
+        
+        # Vincular gastos
+        if transfer_ids:
+            from apps.transfers.models import Transfer
+            result = Transfer.objects.filter(
+                id__in=transfer_ids,
+                service_order=service_order,
+                invoice__isnull=True
+            ).update(invoice=invoice)
+            added_expenses = result
+        
+        # Recalcular totales
+        invoice.calculate_totals()
+        
+        # Registrar en historial
+        from .models import InvoiceEditHistory
+        InvoiceEditHistory.objects.create(
+            invoice=invoice,
+            edit_type='charge_added',
+            description=f'Items agregados: {added_charges} servicios, {added_expenses} gastos',
+            new_values={'charge_ids': charge_ids, 'transfer_ids': transfer_ids},
+            user=request.user
+        )
+        
+        return Response({
+            'message': f'Items agregados correctamente. {added_charges} servicios, {added_expenses} gastos.',
+            'added_charges': added_charges,
+            'added_expenses': added_expenses
+        })
+
+    @action(detail=True, methods=['get'])
+    def available_items(self, request, pk=None):
+        """
+        Obtener items disponibles para agregar a esta factura.
+        Solo muestra items de la misma OS que aún no están facturados.
+        """
+        invoice = self.get_object()
+        service_order = invoice.service_order
+        
+        items = []
+        
+        # Cargos no facturados
+        from .models import OrderCharge
+        charges = OrderCharge.objects.filter(
+            service_order=service_order,
+            invoice__isnull=True,
+            is_deleted=False
+        ).select_related('service')
+        
+        for charge in charges:
+            items.append({
+                'id': charge.id,
+                'type': 'charge',
+                'description': f"{charge.service.name} - {charge.description or ''}",
+                'amount': float(charge.subtotal),
+                'iva': float(charge.iva_amount),
+                'total': float(charge.total)
+            })
+        
+        # Gastos no facturados
+        from apps.transfers.models import Transfer
+        from decimal import Decimal
+        
+        transfers = Transfer.objects.filter(
+            service_order=service_order,
+            transfer_type__in=['cargos', 'costos', 'terceros'],
+            invoice__isnull=True,
+            is_deleted=False
+        ).select_related('provider')
+        
+        for t in transfers:
+            markup = t.customer_markup_percentage or Decimal('0.00')
+            cost = t.amount
+            base_price = cost * (1 + markup / Decimal('100.00'))
+            
+            if t.customer_applies_iva:
+                iva = base_price * Decimal('0.13')
+            else:
+                iva = Decimal('0.00')
+            
+            items.append({
+                'id': t.id,
+                'type': 'expense',
+                'description': f"{t.description} ({t.provider.name if t.provider else 'N/A'})",
+                'amount': float(base_price),
+                'iva': float(iva),
+                'total': float(base_price + iva)
+            })
+        
+        return Response(items)
+
+    @action(detail=True, methods=['get'])
+    def edit_history(self, request, pk=None):
+        """Obtener el historial de ediciones de una factura"""
+        invoice = self.get_object()
+        
+        from .models import InvoiceEditHistory
+        history = InvoiceEditHistory.objects.filter(invoice=invoice).select_related('user')
+        
+        data = []
+        for h in history:
+            data.append({
+                'id': h.id,
+                'edit_type': h.edit_type,
+                'edit_type_display': h.get_edit_type_display(),
+                'description': h.description,
+                'previous_values': h.previous_values,
+                'new_values': h.new_values,
+                'user': h.user.get_full_name() if h.user else 'Sistema',
+                'created_at': h.created_at.isoformat()
+            })
+        
+        return Response(data)
 
     @action(detail=False, methods=['get'])
     def summary(self, request):

@@ -93,6 +93,17 @@ class Transfer(SoftDeleteModel):
         verbose_name="Margen Cobro Cliente %"
     )
     customer_applies_iva = models.BooleanField(default=False, verbose_name="Aplica IVA Cliente")
+    
+    # Referencia a factura (si ya fue facturado al cliente)
+    invoice = models.ForeignKey(
+        'orders.Invoice', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='billed_transfers',
+        verbose_name="Factura Asociada",
+        help_text="Factura donde se cobró este gasto al cliente"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

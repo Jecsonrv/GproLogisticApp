@@ -9,6 +9,7 @@ import {
     Plus,
     AlertCircle,
     Edit,
+    FileCheck,
 } from "lucide-react";
 import {
     Badge,
@@ -38,6 +39,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showBillingWizard, setShowBillingWizard] = useState(false);
+    const [showWithIva, setShowWithIva] = useState(true); // Toggle para mostrar con/sin IVA
 
     // Data for dropdowns
     const [services, setServices] = useState([]);
@@ -286,7 +288,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             </div>
 
             {/* Billing Wizard */}
-            <BillingWizard 
+            <BillingWizard
                 isOpen={showBillingWizard}
                 onClose={() => setShowBillingWizard(false)}
                 serviceOrder={order}
@@ -437,17 +439,52 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                             </div>
 
                             <div className="mt-8 pt-6 border-t border-slate-100">
-                                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                                    Resumen Financiero
-                                </h3>
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-semibold text-slate-900">
+                                        Resumen Financiero
+                                    </h3>
+                                    {/* Toggle Neto / Con IVA */}
+                                    <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                                        <button
+                                            onClick={() =>
+                                                setShowWithIva(false)
+                                            }
+                                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                                !showWithIva
+                                                    ? "bg-white text-slate-900 shadow-sm"
+                                                    : "text-slate-600 hover:text-slate-900"
+                                            }`}
+                                        >
+                                            Neto
+                                        </button>
+                                        <button
+                                            onClick={() => setShowWithIva(true)}
+                                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                                showWithIva
+                                                    ? "bg-white text-slate-900 shadow-sm"
+                                                    : "text-slate-600 hover:text-slate-900"
+                                            }`}
+                                        >
+                                            Con IVA
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                            Servicios (Ingresos)
+                                            Servicios{" "}
+                                            {showWithIva
+                                                ? "(con IVA)"
+                                                : "(Neto)"}
                                         </div>
                                         <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
                                             {formatCurrency(
-                                                order.total_services || 0
+                                                showWithIva
+                                                    ? order.total_services || 0
+                                                    : parseFloat(
+                                                          order.total_services ||
+                                                              0
+                                                      ) / 1.13
                                             )}
                                         </div>
                                     </div>
@@ -461,13 +498,21 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                            Total General
+                                    <div className="bg-gradient-to-r from-brand-50 to-blue-50 p-4 rounded-lg border border-brand-200 hover:shadow-sm transition-shadow">
+                                        <div className="text-xs font-medium text-brand-600 uppercase tracking-wide">
+                                            Total a Facturar{" "}
+                                            {showWithIva
+                                                ? "(con IVA)"
+                                                : "(Neto)"}
                                         </div>
-                                        <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
+                                        <div className="text-2xl font-bold text-brand-700 mt-1.5 tabular-nums">
                                             {formatCurrency(
-                                                order.total_amount || 0
+                                                showWithIva
+                                                    ? order.total_amount || 0
+                                                    : parseFloat(
+                                                          order.total_amount ||
+                                                              0
+                                                      ) / 1.13
                                             )}
                                         </div>
                                     </div>
@@ -708,85 +753,151 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="bg-white divide-y divide-slate-100">
-                                                    {charges.map((charge) => (
-                                                        <tr
-                                                            key={charge.id}
-                                                            className="hover:bg-slate-50/70 transition-colors duration-75"
-                                                        >
-                                                            <td className="px-3 py-2.5">
-                                                                <div className="text-sm font-medium text-slate-900">
-                                                                    {charge.service_code
-                                                                        ? `${charge.service_code} - `
-                                                                        : ""}
-                                                                    {
-                                                                        charge.service_name
-                                                                    }
-                                                                </div>
-                                                                {charge.notes && (
-                                                                    <div
-                                                                        className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]"
-                                                                        title={
-                                                                            charge.notes
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            charge.notes
-                                                                        }
+                                                    {charges.map((charge) => {
+                                                        const isBilled =
+                                                            charge.invoice_id ||
+                                                            charge.invoice_number;
+                                                        return (
+                                                            <tr
+                                                                key={charge.id}
+                                                                className={`transition-colors duration-75 ${
+                                                                    isBilled
+                                                                        ? "bg-slate-100 opacity-60"
+                                                                        : "hover:bg-slate-50/70"
+                                                                }`}
+                                                            >
+                                                                <td className="px-3 py-2.5">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div
+                                                                            className={`text-sm font-medium ${
+                                                                                isBilled
+                                                                                    ? "text-slate-500"
+                                                                                    : "text-slate-900"
+                                                                            }`}
+                                                                        >
+                                                                            {charge.service_code
+                                                                                ? `${charge.service_code} - `
+                                                                                : ""}
+                                                                            {
+                                                                                charge.service_name
+                                                                            }
+                                                                        </div>
+                                                                        {isBilled && (
+                                                                            <Badge
+                                                                                variant="outline"
+                                                                                className="text-[10px] px-1.5 py-0 bg-slate-200 text-slate-600 border-slate-300"
+                                                                            >
+                                                                                <FileCheck className="h-3 w-3 mr-0.5" />
+                                                                                {charge.invoice_number ||
+                                                                                    "Facturado"}
+                                                                            </Badge>
+                                                                        )}
                                                                     </div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
-                                                                {
-                                                                    charge.quantity
-                                                                }
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
-                                                                {formatCurrency(
-                                                                    charge.unit_price
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-right text-sm text-slate-700 tabular-nums">
-                                                                {charge.discount >
-                                                                0
-                                                                    ? `${charge.discount}%`
-                                                                    : "-"}
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-center text-sm text-slate-700 tabular-nums">
-                                                                {parseFloat(
-                                                                    charge.iva_amount
-                                                                ) > 0 ? (
-                                                                    formatCurrency(
-                                                                        charge.iva_amount
-                                                                    )
-                                                                ) : (
-                                                                    <span className="text-slate-300">
-                                                                        -
-                                                                    </span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
-                                                                {formatCurrency(
-                                                                    charge.total
-                                                                )}
-                                                            </td>
-                                                            {order.status ===
-                                                                "abierta" && (
-                                                                <td className="px-3 py-2.5 text-center">
-                                                                    <button
-                                                                        onClick={() =>
-                                                                            handleDeleteCharge(
-                                                                                charge.id
-                                                                            )
-                                                                        }
-                                                                        className="text-slate-400 hover:text-danger-600 transition-colors p-1 rounded hover:bg-danger-50"
-                                                                        title="Eliminar"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </button>
+                                                                    {charge.notes && (
+                                                                        <div
+                                                                            className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]"
+                                                                            title={
+                                                                                charge.notes
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                charge.notes
+                                                                            }
+                                                                        </div>
+                                                                    )}
                                                                 </td>
-                                                            )}
-                                                        </tr>
-                                                    ))}
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-right text-sm tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {
+                                                                        charge.quantity
+                                                                    }
+                                                                </td>
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-right text-sm tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {formatCurrency(
+                                                                        charge.unit_price
+                                                                    )}
+                                                                </td>
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-right text-sm tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {charge.discount >
+                                                                    0
+                                                                        ? `${charge.discount}%`
+                                                                        : "-"}
+                                                                </td>
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-center text-sm tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {parseFloat(
+                                                                        charge.iva_amount
+                                                                    ) > 0 ? (
+                                                                        formatCurrency(
+                                                                            charge.iva_amount
+                                                                        )
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-right text-sm font-semibold tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-900"
+                                                                    }`}
+                                                                >
+                                                                    {formatCurrency(
+                                                                        charge.total
+                                                                    )}
+                                                                </td>
+                                                                {order.status ===
+                                                                    "abierta" && (
+                                                                    <td className="px-3 py-2.5 text-center">
+                                                                        {!isBilled ? (
+                                                                            <button
+                                                                                onClick={() =>
+                                                                                    handleDeleteCharge(
+                                                                                        charge.id
+                                                                                    )
+                                                                                }
+                                                                                className="text-slate-400 hover:text-danger-600 transition-colors p-1 rounded hover:bg-danger-50"
+                                                                                title="Eliminar"
+                                                                            >
+                                                                                <Trash2 className="h-4 w-4" />
+                                                                            </button>
+                                                                        ) : (
+                                                                            <span
+                                                                                className="text-slate-300 text-xs"
+                                                                                title="No se puede eliminar - Ya facturado"
+                                                                            >
+                                                                                -
+                                                                            </span>
+                                                                        )}
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                                 <tfoot className="bg-slate-50 border-t border-slate-200">
                                                     <tr>
