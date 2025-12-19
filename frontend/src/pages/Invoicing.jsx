@@ -484,9 +484,11 @@ const Invoicing = () => {
             const response = await api.get(
                 `/orders/service-orders/${orderId}/billable_items/`
             );
-            setBillableItems(response.data);
+            // El endpoint devuelve {items: [], summary: {}}
+            const items = response.data.items || [];
+            setBillableItems(items);
             // Select all items by default
-            setSelectedItemIds(response.data.map((item) => item.id));
+            setSelectedItemIds(items.map((item) => item.id));
         } catch (error) {
             console.error("Error fetching billable items:", error);
             toast.error("Error al cargar items facturables");
@@ -648,7 +650,6 @@ const Invoicing = () => {
     const handleUpdateInvoice = async () => {
         if (
             !editForm.invoice_number ||
-            !editForm.total_amount ||
             !editForm.issue_date
         ) {
             toast.error("Complete los campos requeridos");
@@ -660,7 +661,6 @@ const Invoicing = () => {
             formData.append("invoice_number", editForm.invoice_number);
             formData.append("invoice_type", editForm.invoice_type);
             formData.append("issue_date", editForm.issue_date);
-            formData.append("total_amount", editForm.total_amount);
             formData.append("notes", editForm.notes);
 
             if (editForm.due_date) {
@@ -735,8 +735,14 @@ const Invoicing = () => {
             formData.append("service_order", generateForm.service_order);
 
             // Only append invoice_number if it has a value
-            if (generateForm.invoice_number && generateForm.invoice_number.trim() !== "") {
-                formData.append("invoice_number", generateForm.invoice_number.trim());
+            if (
+                generateForm.invoice_number &&
+                generateForm.invoice_number.trim() !== ""
+            ) {
+                formData.append(
+                    "invoice_number",
+                    generateForm.invoice_number.trim()
+                );
             }
 
             formData.append("invoice_type", generateForm.invoice_type);
@@ -1191,8 +1197,7 @@ const Invoicing = () => {
                         size="sm"
                         onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedInvoice(row);
-                            setIsDetailModalOpen(true);
+                            handleViewInvoiceDetails(row.id);
                         }}
                         title="Ver Detalle"
                         className="text-gray-500 hover:text-blue-600"
@@ -1554,8 +1559,7 @@ const Invoicing = () => {
                             loading={loading}
                             searchable={false}
                             onRowClick={(row) => {
-                                setSelectedInvoice(row);
-                                setIsDetailModalOpen(true);
+                                handleViewInvoiceDetails(row.id);
                             }}
                             emptyMessage="No se encontraron facturas"
                         />
@@ -2045,143 +2049,219 @@ const Invoicing = () => {
                                 <div className="text-center py-6 bg-amber-50 rounded-lg border border-amber-200">
                                     <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
                                     <p className="text-sm text-amber-700 font-medium">
-                                        No hay items disponibles para facturar en esta orden
+                                        No hay items disponibles para facturar
+                                        en esta orden
                                     </p>
                                 </div>
                             ) : (
                                 <>
                                     {/* Items Table */}
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white mb-3">
+                                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white mb-4 shadow-sm">
                                         <div className="overflow-x-auto max-h-80 overflow-y-auto">
                                             <table className="w-full text-sm">
-                                                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                                                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                                                     <tr>
-                                                        <th className="w-10 p-3 text-center">
+                                                        <th className="w-10 p-2.5 text-center">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={
-                                                                    selectedItemIds.length === billableItems.length &&
-                                                                    billableItems.length > 0
+                                                                    selectedItemIds.length ===
+                                                                        billableItems.length &&
+                                                                    billableItems.length >
+                                                                        0
                                                                 }
-                                                                onChange={(e) => {
-                                                                    if (e.target.checked) {
-                                                                        setSelectedItemIds(billableItems.map((i) => i.id));
+                                                                onChange={(
+                                                                    e
+                                                                ) => {
+                                                                    if (
+                                                                        e.target
+                                                                            .checked
+                                                                    ) {
+                                                                        setSelectedItemIds(
+                                                                            billableItems.map(
+                                                                                (
+                                                                                    i
+                                                                                ) =>
+                                                                                    i.id
+                                                                            )
+                                                                        );
                                                                     } else {
-                                                                        setSelectedItemIds([]);
+                                                                        setSelectedItemIds(
+                                                                            []
+                                                                        );
                                                                     }
                                                                 }}
-                                                                className="h-4 w-4 rounded border-slate-300"
+                                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                                             />
                                                         </th>
-                                                        <th className="text-left p-3 font-semibold text-slate-700 w-20">
+                                                        <th className="text-left p-2.5 font-bold text-slate-600 uppercase text-[10px] tracking-wider w-20">
                                                             Tipo
                                                         </th>
-                                                        <th className="text-left p-3 font-semibold text-slate-700">
+                                                        <th className="text-left p-2.5 font-bold text-slate-600 uppercase text-[10px] tracking-wider">
                                                             Descripción
                                                         </th>
-                                                        <th className="text-right p-3 font-semibold text-slate-700 w-28">
+                                                        <th className="text-right p-2.5 font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
                                                             Subtotal
                                                         </th>
-                                                        <th className="text-right p-3 font-semibold text-slate-700 w-24">
+                                                        <th className="text-right p-2.5 font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
                                                             IVA
                                                         </th>
-                                                        <th className="text-right p-3 font-semibold text-slate-700 w-32">
+                                                        <th className="text-right p-2.5 font-bold text-slate-600 uppercase text-[10px] tracking-wider w-32">
                                                             Total
                                                         </th>
                                                     </tr>
                                                 </thead>
-                                                <tbody>
-                                                    {billableItems.map((item, index) => {
-                                                        const isSelected = selectedItemIds.includes(item.id);
-                                                        return (
-                                                            <tr
-                                                                key={item.id}
-                                                                className={cn(
-                                                                    "border-b border-slate-100 transition-colors cursor-pointer",
-                                                                    isSelected
-                                                                        ? "bg-brand-50"
-                                                                        : "hover:bg-slate-50"
-                                                                )}
-                                                                onClick={() => {
-                                                                    setSelectedItemIds((prev) =>
-                                                                        prev.includes(item.id)
-                                                                            ? prev.filter((id) => id !== item.id)
-                                                                            : [...prev, item.id]
-                                                                    );
-                                                                }}
-                                                            >
-                                                                <td className="p-3 text-center">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={isSelected}
-                                                                        onChange={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setSelectedItemIds((prev) =>
-                                                                                prev.includes(item.id)
-                                                                                    ? prev.filter((id) => id !== item.id)
-                                                                                    : [...prev, item.id]
-                                                                            );
-                                                                        }}
-                                                                        className="h-4 w-4 rounded border-slate-300"
-                                                                    />
-                                                                </td>
-                                                                <td className="p-3">
-                                                                    <Badge
-                                                                        variant={
-                                                                            item.type === "service"
-                                                                                ? "default"
-                                                                                : "secondary"
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {billableItems.map(
+                                                        (item) => {
+                                                            const isSelected =
+                                                                selectedItemIds.includes(
+                                                                    item.id
+                                                                );
+                                                            return (
+                                                                <tr
+                                                                    key={
+                                                                        item.id
+                                                                    }
+                                                                    className={cn(
+                                                                        "transition-colors cursor-pointer group",
+                                                                        isSelected
+                                                                            ? "bg-blue-50/40"
+                                                                            : "hover:bg-slate-50"
+                                                                    )}
+                                                                    onClick={() => {
+                                                                        setSelectedItemIds(
+                                                                            (
+                                                                                prev
+                                                                            ) =>
+                                                                                prev.includes(
+                                                                                    item.id
+                                                                                )
+                                                                                    ? prev.filter(
+                                                                                          (
+                                                                                              id
+                                                                                          ) =>
+                                                                                              id !==
+                                                                                              item.id
+                                                                                      )
+                                                                                    : [
+                                                                                          ...prev,
+                                                                                          item.id,
+                                                                                      ]
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <td className="p-2.5 text-center">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={
+                                                                                isSelected
+                                                                            }
+                                                                            onChange={(
+                                                                                e
+                                                                            ) => {
+                                                                                e.stopPropagation();
+                                                                                setSelectedItemIds(
+                                                                                    (
+                                                                                        prev
+                                                                                    ) =>
+                                                                                        prev.includes(
+                                                                                            item.id
+                                                                                        )
+                                                                                            ? prev.filter(
+                                                                                                  (
+                                                                                                      id
+                                                                                                  ) =>
+                                                                                                      id !==
+                                                                                                      item.id
+                                                                                              )
+                                                                                            : [
+                                                                                                  ...prev,
+                                                                                                  item.id,
+                                                                                              ]
+                                                                                );
+                                                                            }}
+                                                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                                        />
+                                                                    </td>
+                                                                    <td className="p-2.5">
+                                                                        <Badge
+                                                                            variant={
+                                                                                item.type ===
+                                                                                "service"
+                                                                                    ? "default"
+                                                                                    : "secondary"
+                                                                            }
+                                                                            className="text-[10px] px-1.5 py-0 uppercase"
+                                                                        >
+                                                                            {item.type ===
+                                                                            "service"
+                                                                                ? "Servicio"
+                                                                                : "Gasto"}
+                                                                        </Badge>
+                                                                    </td>
+                                                                    <td className="p-2.5 text-slate-700 font-medium">
+                                                                        {
+                                                                            item.description
                                                                         }
-                                                                        className="text-xs"
-                                                                    >
-                                                                        {item.type === "service" ? "Servicio" : "Gasto"}
-                                                                    </Badge>
-                                                                </td>
-                                                                <td className="p-3 text-slate-900">
-                                                                    {item.description}
-                                                                </td>
-                                                                <td className="p-3 text-right text-slate-900 font-medium tabular-nums">
-                                                                    {formatCurrency(item.amount)}
-                                                                </td>
-                                                                <td className="p-3 text-right text-slate-600 tabular-nums">
-                                                                    {item.iva > 0 ? formatCurrency(item.iva) : "-"}
-                                                                </td>
-                                                                <td className="p-3 text-right text-slate-900 font-semibold tabular-nums">
-                                                                    {formatCurrency(item.total)}
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
+                                                                    </td>
+                                                                    <td className="p-2.5 text-right text-slate-600 tabular-nums">
+                                                                        {formatCurrency(
+                                                                            item.amount
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="p-2.5 text-right text-slate-500 tabular-nums">
+                                                                        {item.iva >
+                                                                        0
+                                                                            ? formatCurrency(
+                                                                                  item.iva
+                                                                              )
+                                                                            : "-"}
+                                                                    </td>
+                                                                    <td className="p-2.5 text-right text-slate-900 font-bold tabular-nums">
+                                                                        {formatCurrency(
+                                                                            item.total
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        }
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </div>
                                     {/* Totals Summary */}
                                     {selectedItemIds.length > 0 && (
-                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                                            <div className="flex items-center justify-between mb-3">
-                                                <span className="text-sm font-medium text-slate-600">
-                                                    {selectedItemIds.length} de {billableItems.length} item(s) seleccionado(s)
+                                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <span className="text-sm font-semibold text-slate-700">
+                                                    Resumen de Selección
+                                                </span>
+                                                <span className="text-xs bg-white px-2 py-1 rounded border border-slate-200 text-slate-500 font-medium">
+                                                    {selectedItemIds.length} de{" "}
+                                                    {billableItems.length}{" "}
+                                                    items
                                                 </span>
                                             </div>
                                             <div className="grid grid-cols-3 gap-4">
-                                                <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
-                                                    <div className="text-xs text-slate-500 mb-1">Subtotal</div>
-                                                    <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Subtotal</span>
+                                                    <span className="text-lg font-semibold text-slate-700 tabular-nums">
                                                         {formatCurrency(selectedTotals.subtotal)}
-                                                    </div>
+                                                    </span>
                                                 </div>
-                                                <div className="text-center p-3 bg-white rounded-lg border border-slate-200">
-                                                    <div className="text-xs text-slate-500 mb-1">IVA 13%</div>
-                                                    <div className="text-lg font-bold text-slate-900 tabular-nums">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">IVA Total</span>
+                                                    <span className="text-lg font-semibold text-slate-700 tabular-nums">
                                                         {formatCurrency(selectedTotals.iva)}
-                                                    </div>
+                                                    </span>
                                                 </div>
-                                                <div className="text-center p-3 bg-brand-50 rounded-lg border-2 border-brand-300">
-                                                    <div className="text-xs text-brand-600 font-semibold mb-1">TOTAL</div>
-                                                    <div className="text-xl font-bold text-brand-700 tabular-nums">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-1">Total Facturar</span>
+                                                    <span className="text-2xl font-black text-slate-900 tabular-nums">
                                                         {formatCurrency(selectedTotals.total)}
-                                                    </div>
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -2192,177 +2272,192 @@ const Invoicing = () => {
                     )}
 
                     {/* Invoice Details */}
-                    {generateForm.service_order && selectedItemIds.length > 0 && (
-                        <div className="bg-white border border-slate-200 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-slate-900 mb-3">
-                                Información de la Factura
-                            </h3>
+                    {generateForm.service_order &&
+                        selectedItemIds.length > 0 && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-3">
+                                    Información de la Factura
+                                </h3>
 
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <Input
-                                            label="Número de Factura / CCF"
-                                            value={generateForm.invoice_number}
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <Input
+                                                label="Número de Factura / CCF"
+                                                value={
+                                                    generateForm.invoice_number
+                                                }
+                                                onChange={(e) =>
+                                                    setGenerateForm({
+                                                        ...generateForm,
+                                                        invoice_number:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                placeholder="Auto: PRE-00001-2025"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Dejar en blanco para
+                                                auto-generar
+                                            </p>
+                                        </div>
+
+                                        <SelectERP
+                                            label="Tipo de Documento *"
+                                            value={generateForm.invoice_type}
                                             onChange={(e) =>
                                                 setGenerateForm({
                                                     ...generateForm,
-                                                    invoice_number: e.target.value,
+                                                    invoice_type:
+                                                        e.target.value,
                                                 })
                                             }
-                                            placeholder="Auto: PRE-00001-2025"
+                                            options={INVOICE_TYPE_OPTIONS}
+                                            required
                                         />
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Dejar en blanco para auto-generar
-                                        </p>
                                     </div>
 
-                                    <SelectERP
-                                        label="Tipo de Documento *"
-                                        value={generateForm.invoice_type}
-                                        onChange={(e) =>
-                                            setGenerateForm({
-                                                ...generateForm,
-                                                invoice_type: e.target.value,
-                                            })
-                                        }
-                                        options={INVOICE_TYPE_OPTIONS}
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Input
-                                        label="Fecha de Emisión *"
-                                        type="date"
-                                        value={generateForm.invoice_date}
-                                        onChange={(e) => {
-                                            const newDate = e.target.value;
-                                            setGenerateForm((prev) => {
-                                                let newDueDate = prev.due_date;
-                                                if (prev.service_order) {
-                                                    const selectedOrder =
-                                                        allServiceOrders.find(
-                                                            (o) =>
-                                                                o.id ===
-                                                                prev.service_order
-                                                        );
-                                                    if (selectedOrder) {
-                                                        const client =
-                                                            clients.find(
-                                                                (c) =>
-                                                                    c.id ===
-                                                                    selectedOrder.client
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Input
+                                            label="Fecha de Emisión *"
+                                            type="date"
+                                            value={generateForm.invoice_date}
+                                            onChange={(e) => {
+                                                const newDate = e.target.value;
+                                                setGenerateForm((prev) => {
+                                                    let newDueDate =
+                                                        prev.due_date;
+                                                    if (prev.service_order) {
+                                                        const selectedOrder =
+                                                            allServiceOrders.find(
+                                                                (o) =>
+                                                                    o.id ===
+                                                                    prev.service_order
                                                             );
-                                                        if (
-                                                            client &&
-                                                            client.credit_days >
-                                                                0
-                                                        ) {
-                                                            const invoiceDate =
-                                                                new Date(
-                                                                    newDate
+                                                        if (selectedOrder) {
+                                                            const client =
+                                                                clients.find(
+                                                                    (c) =>
+                                                                        c.id ===
+                                                                        selectedOrder.client
                                                                 );
-                                                            invoiceDate.setDate(
-                                                                invoiceDate.getDate() +
-                                                                    client.credit_days
-                                                            );
-                                                            newDueDate =
-                                                                invoiceDate
-                                                                    .toISOString()
-                                                                    .split(
-                                                                        "T"
-                                                                    )[0];
+                                                            if (
+                                                                client &&
+                                                                client.credit_days >
+                                                                    0
+                                                            ) {
+                                                                const invoiceDate =
+                                                                    new Date(
+                                                                        newDate
+                                                                    );
+                                                                invoiceDate.setDate(
+                                                                    invoiceDate.getDate() +
+                                                                        client.credit_days
+                                                                );
+                                                                newDueDate =
+                                                                    invoiceDate
+                                                                        .toISOString()
+                                                                        .split(
+                                                                            "T"
+                                                                        )[0];
+                                                            }
                                                         }
                                                     }
+                                                    return {
+                                                        ...prev,
+                                                        invoice_date: newDate,
+                                                        due_date: newDueDate,
+                                                    };
+                                                });
+                                            }}
+                                            required
+                                        />
+
+                                        <div>
+                                            <Input
+                                                label="Fecha de Vencimiento"
+                                                type="date"
+                                                value={generateForm.due_date}
+                                                onChange={(e) =>
+                                                    setGenerateForm({
+                                                        ...generateForm,
+                                                        due_date:
+                                                            e.target.value,
+                                                    })
                                                 }
-                                                return {
-                                                    ...prev,
-                                                    invoice_date: newDate,
-                                                    due_date: newDueDate,
-                                                };
-                                            });
-                                        }}
-                                        required
-                                    />
+                                            />
+                                            {generateForm.due_date && (
+                                                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                                                    <CheckCircle className="w-3 h-3" />
+                                                    Calculada según días de
+                                                    crédito del cliente
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
 
                                     <div>
                                         <Input
-                                            label="Fecha de Vencimiento"
-                                            type="date"
-                                            value={generateForm.due_date}
-                                            onChange={(e) =>
-                                                setGenerateForm({
-                                                    ...generateForm,
-                                                    due_date: e.target.value,
-                                                })
+                                            label="Monto Total (Calculado Automáticamente)"
+                                            type="text"
+                                            value={
+                                                generateForm.total_amount
+                                                    ? formatCurrency(
+                                                          parseFloat(
+                                                              generateForm.total_amount
+                                                          )
+                                                      )
+                                                    : "$0.00"
                                             }
+                                            disabled
+                                            className="bg-slate-100 cursor-not-allowed"
                                         />
-                                        {generateForm.due_date && (
-                                            <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
-                                                <CheckCircle className="w-3 h-3" />
-                                                Calculada según días de crédito
-                                                del cliente
-                                            </p>
-                                        )}
+                                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                            <Info className="w-3 h-3" />
+                                            El monto se calcula automáticamente
+                                            según los items seleccionados
+                                        </p>
                                     </div>
                                 </div>
-
-                                <div>
-                                    <Input
-                                        label="Monto Total (Calculado Automáticamente)"
-                                        type="text"
-                                        value={
-                                            generateForm.total_amount
-                                                ? formatCurrency(
-                                                      parseFloat(generateForm.total_amount)
-                                                  )
-                                                : "$0.00"
-                                        }
-                                        disabled
-                                        className="bg-slate-100 cursor-not-allowed"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                        <Info className="w-3 h-3" />
-                                        El monto se calcula automáticamente según los items seleccionados
-                                    </p>
-                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
                     {/* Attachment */}
-                    {generateForm.service_order && selectedItemIds.length > 0 && (
-                        <div className="bg-white border border-slate-200 rounded-lg p-4">
-                            <h3 className="text-sm font-medium text-slate-700 mb-3">
-                                Adjuntar Documento <span className="text-slate-400">(Opcional)</span>
-                            </h3>
-
-                            <FileUpload
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onFileChange={(file) =>
-                                    setGenerateForm({
-                                        ...generateForm,
-                                        invoice_file: file,
-                                    })
-                                }
-                                label="Subir Factura PDF"
-                                helperText="Formatos aceptados: PDF, JPG, PNG (máx. 5MB)"
-                            />
-
-                            {generateForm.invoice_file && (
-                                <div className="mt-2 flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg p-2.5 border border-slate-200">
-                                    <CheckCircle className="w-4 h-4 text-emerald-600" />
-                                    <span className="text-slate-600">
-                                        Archivo:
+                    {generateForm.service_order &&
+                        selectedItemIds.length > 0 && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                <h3 className="text-sm font-medium text-slate-700 mb-3">
+                                    Adjuntar Documento{" "}
+                                    <span className="text-slate-400">
+                                        (Opcional)
                                     </span>
-                                    <span className="font-medium text-slate-900">
-                                        {generateForm.invoice_file.name}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                </h3>
+
+                                <FileUpload
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    onFileChange={(file) =>
+                                        setGenerateForm({
+                                            ...generateForm,
+                                            invoice_file: file,
+                                        })
+                                    }
+                                    label="Subir Factura PDF"
+                                    helperText="Formatos aceptados: PDF, JPG, PNG (máx. 5MB)"
+                                />
+
+                                {generateForm.invoice_file && (
+                                    <div className="mt-2 flex items-center gap-2 text-sm text-slate-700 bg-white rounded-lg p-2.5 border border-slate-200">
+                                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                                        <span className="text-slate-600">
+                                            Archivo:
+                                        </span>
+                                        <span className="font-medium text-slate-900">
+                                            {generateForm.invoice_file.name}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                 </div>
 
                 <ModalFooter>
@@ -2470,20 +2565,18 @@ const Invoicing = () => {
                             </div>
 
                             <Input
-                                label="Monto Total *"
+                                label="Monto Total (Calculado)"
                                 type="number"
                                 step="0.01"
                                 min="0"
                                 value={editForm.total_amount}
-                                onChange={(e) =>
-                                    setEditForm({
-                                        ...editForm,
-                                        total_amount: e.target.value,
-                                    })
-                                }
                                 placeholder="0.00"
-                                required
+                                disabled
+                                className="bg-slate-100 cursor-not-allowed opacity-75"
                             />
+                            <p className="text-xs text-slate-500 -mt-2">
+                                El monto se calcula automáticamente según los items. Edite los items en el detalle para cambiarlo.
+                            </p>
 
                             <Input
                                 label="Notas"
@@ -2547,7 +2640,6 @@ const Invoicing = () => {
                         onClick={handleUpdateInvoice}
                         disabled={
                             !editForm.invoice_number ||
-                            !editForm.total_amount ||
                             !editForm.issue_date
                         }
                     >
@@ -2696,6 +2788,13 @@ const Invoicing = () => {
                             invoice={selectedInvoice}
                             onUpdate={() => {
                                 handleViewInvoiceDetails(selectedInvoice.id);
+                                fetchInvoices();
+                                fetchSummary();
+                            }}
+                            onDeleted={() => {
+                                // Cerrar modal y refrescar listas
+                                setIsDetailModalOpen(false);
+                                setSelectedInvoice(null);
                                 fetchInvoices();
                                 fetchSummary();
                             }}

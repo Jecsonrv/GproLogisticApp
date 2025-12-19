@@ -367,7 +367,8 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'subtotal': str(c.subtotal),
             'iva_amount': str(c.iva_amount),
             'total': str(c.total),
-            'applies_iva': c.service.applies_iva
+            'iva_type': c.iva_type,
+            'applies_iva': c.iva_type == 'gravado'
         } for c in charges]
     
     def get_billed_expenses(self, obj):

@@ -333,8 +333,15 @@ class OrderCharge(SoftDeleteModel):
         Sincroniza el tratamiento fiscal desde el servicio si no está especificado.
         Actualiza el estado de facturación según la vinculación con factura.
         """
+        # Permitir bypass de validación para operaciones de facturación
+        skip_order_validation = kwargs.pop('skip_order_validation', False)
+        
         # Validación: No permitir modificar cargos de órdenes cerradas o facturadas
-        if self.service_order.status == 'cerrada' or self.service_order.facturado:
+        # EXCEPTO cuando se está vinculando/desvinculando de una factura (skip_order_validation=True)
+        # Y EXCEPTO cuando se edita desde la pre-factura (el cargo tiene factura y esta no tiene DTE)
+        is_pre_invoice_edit = self.invoice and not self.invoice.is_dte_issued
+
+        if not skip_order_validation and not is_pre_invoice_edit and (self.service_order.status == 'cerrada' or self.service_order.facturado):
             if self.is_deleted and not self.service_order.facturado:
                 pass  # Permitir borrar cargo de orden cerrada
             elif not self.is_deleted:

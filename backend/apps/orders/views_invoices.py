@@ -130,9 +130,30 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if charge_ids_raw:
                 from .models import OrderCharge
                 for id_val in charge_ids_raw:
-                    if id_val and str(id_val).strip():
+                    # Handle potential list if nested (shouldn't happen but defensive)
+                    if isinstance(id_val, list):
+                        for sub_val in id_val:
+                            if sub_val and str(sub_val).strip():
+                                try:
+                                    # Handle comma-separated strings
+                                    if isinstance(sub_val, str) and ',' in sub_val:
+                                        for part in sub_val.split(','):
+                                            if part.strip():
+                                                charge_ids.append(int(part.strip()))
+                                    else:
+                                        charge_ids.append(int(sub_val))
+                                except (ValueError, TypeError):
+                                    logger.warning(f"Invalid charge_id: {sub_val}")
+                    # Handle single value
+                    elif id_val and str(id_val).strip():
                         try:
-                            charge_ids.append(int(id_val))
+                            # Handle comma-separated strings
+                            if isinstance(id_val, str) and ',' in id_val:
+                                for part in id_val.split(','):
+                                    if part.strip():
+                                        charge_ids.append(int(part.strip()))
+                            else:
+                                charge_ids.append(int(id_val))
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid charge_id: {id_val}")
 
@@ -143,7 +164,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                         id__in=charge_ids,
                         service_order=service_order,
                         invoice__isnull=True
-                    ).update(invoice=invoice)
+                    ).update(invoice=invoice, billing_status='facturado')
                     logger.info(f"Updated {updated} charges with invoice {invoice.id}")
 
             # 2. Link selected TRANSFERS (Expenses) directly to invoice (without creating OrderCharges)
@@ -158,9 +179,28 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if transfer_ids_raw:
                 from apps.transfers.models import Transfer
                 for id_val in transfer_ids_raw:
-                    if id_val and str(id_val).strip():
+                    # Handle potential list
+                    if isinstance(id_val, list):
+                        for sub_val in id_val:
+                            if sub_val and str(sub_val).strip():
+                                try:
+                                    if isinstance(sub_val, str) and ',' in sub_val:
+                                        for part in sub_val.split(','):
+                                            if part.strip():
+                                                transfer_ids.append(int(part.strip()))
+                                    else:
+                                        transfer_ids.append(int(sub_val))
+                                except (ValueError, TypeError):
+                                    logger.warning(f"Invalid transfer_id: {sub_val}")
+                    # Handle single value
+                    elif id_val and str(id_val).strip():
                         try:
-                            transfer_ids.append(int(id_val))
+                            if isinstance(id_val, str) and ',' in id_val:
+                                for part in id_val.split(','):
+                                    if part.strip():
+                                        transfer_ids.append(int(part.strip()))
+                            else:
+                                transfer_ids.append(int(id_val))
                         except (ValueError, TypeError):
                             logger.warning(f"Invalid transfer_id: {id_val}")
 
@@ -172,7 +212,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                         id__in=transfer_ids,
                         service_order=service_order,
                         invoice__isnull=True  # Solo los no facturados
-                    ).update(invoice=invoice)
+                    ).update(invoice=invoice, billing_status='facturado')
                     logger.info(f"Updated {updated} transfers with invoice {invoice.id}")
 
             # Recalculate totals based on linked charges AND transfers
@@ -287,12 +327,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             edit_type='dte_marked',
             description=f'Factura marcada como DTE emitido. Número DTE: {dte_number or "N/A"}',
             previous_values={'is_dte_issued': False, 'invoice_number': invoice.invoice_number},
-            new_values={'is_dte_issued': True, 'dte_number': dte_number},
+            new_values={'is_dte_issued': True, 'dte_number': dte_number, 'invoice_number': dte_number},
             user=request.user
         )
         
         invoice.is_dte_issued = True
         invoice.dte_number = dte_number
+        if dte_number:
+            invoice.invoice_number = dte_number
         invoice.save()
         
         return Response({
@@ -455,7 +497,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'quantity': charge.quantity,
             'unit_price': str(charge.unit_price),
             'discount': str(charge.discount),
-            'description': charge.description
+            'iva_type': charge.iva_type
         }
         
         # Actualizar campos si se proporcionan
@@ -464,9 +506,21 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if 'unit_price' in request.data:
             charge.unit_price = Decimal(str(request.data['unit_price']))
         if 'discount' in request.data:
-            charge.discount = Decimal(str(request.data['discount']))
+            discount_val = request.data['discount']
+            if discount_val == '' or discount_val is None:
+                charge.discount = Decimal('0.00')
+            else:
+                try:
+                    charge.discount = Decimal(str(discount_val))
+                except (ValueError, TypeError, Exception):
+                    charge.discount = Decimal('0.00')
         if 'description' in request.data:
             charge.description = request.data['description']
+        if 'iva_type' in request.data:
+            charge.iva_type = request.data['iva_type']
+        if 'applies_iva' in request.data:
+            # Toggle logic for simple boolean from frontend
+            charge.iva_type = 'gravado' if request.data['applies_iva'] else 'exento'
         
         # El save() del modelo recalcula subtotal, iva_amount, total
         charge.save()
@@ -482,7 +536,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 'quantity': charge.quantity,
                 'unit_price': str(charge.unit_price),
                 'discount': str(charge.discount),
-                'description': charge.description
+                'iva_type': charge.iva_type
             },
             user=request.user
         )
@@ -546,7 +600,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     # Desvincular de la factura (vuelve a estar disponible)
                     charge.invoice = None
                     charge.billing_status = 'disponible'
-                    charge.save()
+                    charge.save(skip_order_validation=True)  # Permitir modificación para desvinculación
 
                     InvoiceEditHistory.objects.create(
                         invoice=invoice,
@@ -607,10 +661,21 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # Verificar si la factura quedó vacía
             charges_count = invoice.charges.filter(is_deleted=False).count()
             expenses_count = invoice.billed_transfers.filter(is_deleted=False).count()
+            
+            # Si la factura quedó sin items, eliminarla automáticamente
+            if charges_count == 0 and expenses_count == 0:
+                invoice_number = invoice.invoice_number
+                invoice.delete()
+                return Response({
+                    'message': f'Pre-factura {invoice_number} eliminada porque no tenía más items.',
+                    'invoice_deleted': True,
+                    'item_returned_to_os': True
+                })
 
         return Response({
             'message': f'Item removido de la factura. Ahora está disponible para facturar nuevamente.',
             'item_returned_to_os': True,
+            'invoice_deleted': False,
             'invoice_items_remaining': {
                 'charges': charges_count,
                 'expenses': expenses_count

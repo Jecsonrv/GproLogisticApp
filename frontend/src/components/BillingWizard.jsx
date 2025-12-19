@@ -97,9 +97,11 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             const response = await axios.get(
                 `/orders/service-orders/${serviceOrder.id}/billable_items/`
             );
-            setCharges(response.data);
+            // El endpoint devuelve {items: [], summary: {}}
+            const items = response.data.items || [];
+            setCharges(items);
             // Select all by default
-            setSelectedChargeIds(response.data.map((c) => c.id));
+            setSelectedChargeIds(items.map((c) => c.id));
         } catch (error) {
             console.error("Error fetching charges:", error);
             toast.error("Error al cargar los cargos disponibles");
@@ -123,13 +125,16 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         let iva = 0;
         let total = 0;
 
-        charges.forEach((charge) => {
-            if (selectedChargeIds.includes(charge.id)) {
-                subtotal += parseFloat(charge.amount);
-                iva += parseFloat(charge.iva);
-                total += parseFloat(charge.total);
-            }
-        });
+        // Validar que charges sea un array
+        if (Array.isArray(charges)) {
+            charges.forEach((charge) => {
+                if (selectedChargeIds.includes(charge.id)) {
+                    subtotal += parseFloat(charge.amount);
+                    iva += parseFloat(charge.iva);
+                    total += parseFloat(charge.total);
+                }
+            });
+        }
 
         return { subtotal, iva, total };
     }, [charges, selectedChargeIds]);
@@ -241,137 +246,145 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     </p>
                                 </div>
                             ) : (
-                                <div className="border rounded-md overflow-hidden">
-                                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                                        <thead className="bg-slate-50">
-                                            <tr>
-                                                <th className="px-4 py-3 w-10 text-center">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            selectedChargeIds.length ===
-                                                                charges.length &&
-                                                            charges.length > 0
-                                                        }
-                                                        onChange={(e) => {
-                                                            if (
-                                                                e.target.checked
-                                                            ) {
-                                                                setSelectedChargeIds(
-                                                                    charges.map(
-                                                                        (c) =>
-                                                                            c.id
-                                                                    )
-                                                                );
-                                                            } else {
-                                                                setSelectedChargeIds(
-                                                                    []
-                                                                );
-                                                            }
-                                                        }}
-                                                        className="rounded border-slate-300"
-                                                    />
-                                                </th>
-                                                <th className="px-4 py-3 text-left font-semibold text-slate-600">
-                                                    Servicio / Descripción
-                                                </th>
-                                                <th className="px-4 py-3 text-right font-semibold text-slate-600">
-                                                    Monto
-                                                </th>
-                                                <th className="px-4 py-3 text-right font-semibold text-slate-600">
-                                                    IVA
-                                                </th>
-                                                <th className="px-4 py-3 text-right font-semibold text-slate-600">
-                                                    Total
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-slate-100">
-                                            {charges.map((charge) => (
-                                                <tr
-                                                    key={charge.id}
-                                                    className={
-                                                        selectedChargeIds.includes(
-                                                            charge.id
-                                                        )
-                                                            ? "bg-blue-50/30"
-                                                            : ""
-                                                    }
-                                                >
-                                                    <td className="px-4 py-3 text-center">
+                                <div className="border border-slate-200 rounded-md overflow-hidden bg-white mb-4 shadow-sm">
+                                    <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                                            <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200">
+                                                <tr>
+                                                    <th className="px-4 py-2.5 w-10 text-center">
                                                         <input
                                                             type="checkbox"
-                                                            checked={selectedChargeIds.includes(
-                                                                charge.id
-                                                            )}
-                                                            onChange={() =>
-                                                                handleChargeToggle(
-                                                                    charge.id
-                                                                )
+                                                            checked={
+                                                                selectedChargeIds.length ===
+                                                                    charges.length &&
+                                                                charges.length > 0
                                                             }
-                                                            className="rounded border-slate-300"
+                                                            onChange={(e) => {
+                                                                if (
+                                                                    e.target.checked
+                                                                ) {
+                                                                    setSelectedChargeIds(
+                                                                        charges.map(
+                                                                            (c) =>
+                                                                                c.id
+                                                                        )
+                                                                    );
+                                                                } else {
+                                                                    setSelectedChargeIds(
+                                                                        []
+                                                                    );
+                                                                }
+                                                            }}
+                                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                                         />
-                                                    </td>
-                                                    <td className="px-4 py-3 text-slate-900">
-                                                        <div className="font-medium">
-                                                            {charge.description}
-                                                        </div>
-                                                        {charge.notes && (
-                                                            <div className="text-xs text-slate-500 truncate max-w-md">
-                                                                {charge.notes}
+                                                    </th>
+                                                    <th className="px-4 py-2.5 text-left font-bold text-slate-600 uppercase text-[10px] tracking-wider">
+                                                        Servicio / Descripción
+                                                    </th>
+                                                    <th className="px-4 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
+                                                        Monto
+                                                    </th>
+                                                    <th className="px-4 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                                        IVA
+                                                    </th>
+                                                    <th className="px-4 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-32">
+                                                        Total
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-100">
+                                                {charges.map((charge) => (
+                                                    <tr
+                                                        key={charge.id}
+                                                        className={cn(
+                                                            "transition-colors cursor-pointer group",
+                                                            selectedChargeIds.includes(
+                                                                charge.id
+                                                            )
+                                                                ? "bg-blue-50/40"
+                                                                : "hover:bg-slate-50"
+                                                        )}
+                                                        onClick={() => handleChargeToggle(charge.id)}
+                                                    >
+                                                        <td className="px-4 py-2.5 text-center">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedChargeIds.includes(
+                                                                    charge.id
+                                                                )}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleChargeToggle(charge.id);
+                                                                }}
+                                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge
+                                                                    variant={
+                                                                        charge.type ===
+                                                                        "service"
+                                                                            ? "default"
+                                                                            : "secondary"
+                                                                    }
+                                                                    className="text-[10px] px-1.5 py-0 uppercase"
+                                                                >
+                                                                    {charge.type === "service" ? "Servicio" : "Gasto"}
+                                                                </Badge>
+                                                                <span className="font-medium text-slate-700">{charge.description}</span>
                                                             </div>
-                                                        )}
-                                                        <div className="text-[10px] text-slate-400 uppercase mt-0.5">
-                                                            {charge.type ===
-                                                            "service"
-                                                                ? "Servicio"
-                                                                : "Gasto"}
-                                                        </div>
+                                                            {charge.notes && (
+                                                                <div className="text-[11px] text-slate-500 mt-0.5 ml-14 truncate max-w-md">
+                                                                    {charge.notes}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
+                                                            {formatCurrency(
+                                                                charge.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                                                            {formatCurrency(
+                                                                charge.iva
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right tabular-nums font-bold text-slate-900">
+                                                            {formatCurrency(
+                                                                charge.total
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-slate-50 border-t border-slate-200">
+                                                <tr>
+                                                    <td
+                                                        colSpan={2}
+                                                        className="px-4 py-3 text-right font-semibold text-slate-700 text-sm"
+                                                    >
+                                                        Total Seleccionado:
                                                     </td>
-                                                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                                                    <td className="px-4 py-3 text-right font-medium text-slate-600 tabular-nums text-sm">
                                                         {formatCurrency(
-                                                            charge.amount
+                                                            selectedTotals.subtotal
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                                                    <td className="px-4 py-3 text-right font-medium text-slate-600 tabular-nums text-sm">
                                                         {formatCurrency(
-                                                            charge.iva
+                                                            selectedTotals.iva
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-900">
+                                                    <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums text-lg">
                                                         {formatCurrency(
-                                                            charge.total
+                                                            selectedTotals.total
                                                         )}
                                                     </td>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot className="bg-slate-50 border-t border-slate-200">
-                                            <tr>
-                                                <td
-                                                    colSpan={2}
-                                                    className="px-4 py-3 text-right font-semibold text-slate-700"
-                                                >
-                                                    Total Seleccionado:
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-medium text-slate-700">
-                                                    {formatCurrency(
-                                                        selectedTotals.subtotal
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-medium text-slate-700">
-                                                    {formatCurrency(
-                                                        selectedTotals.iva
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-blue-700 text-lg">
-                                                    {formatCurrency(
-                                                        selectedTotals.total
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                                            </tfoot>
+                                        </table>
+                                    </div>
                                 </div>
                             )}
                         </div>

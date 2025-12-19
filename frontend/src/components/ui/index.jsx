@@ -10,6 +10,7 @@ export { default as EmptyState } from "./EmptyState";
 // Feedback
 export { default as Modal, ModalFooter } from "./Modal";
 export { default as ConfirmDialog } from "./ConfirmDialog";
+export { default as PromptDialog } from "./PromptDialog";
 export { default as Spinner, LoadingState, LoadingOverlay } from "./Spinner";
 export {
     Skeleton,

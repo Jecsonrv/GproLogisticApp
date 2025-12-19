@@ -115,6 +115,16 @@ class Service(models.Model):
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name="Precio por Defecto (Sin IVA)"
     )
+    iva_type = models.CharField(
+        max_length=20,
+        choices=(
+            ('gravado', 'Gravado (13% IVA)'),
+            ('exento', 'Exento'),
+            ('no_sujeto', 'No Sujeto')
+        ),
+        default='gravado',
+        verbose_name="Tratamiento Fiscal"
+    )
     applies_iva = models.BooleanField(default=True, verbose_name="Aplica IVA")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
