@@ -142,6 +142,17 @@ class Service(models.Model):
     def __str__(self):
         return f"#{self.id} - {self.name}"
 
+    def save(self, *args, **kwargs):
+        # Sincronizar applies_iva con iva_type
+        if not self.applies_iva and self.iva_type == 'gravado':
+            self.iva_type = 'no_sujeto'
+        elif self.iva_type != 'gravado':
+            self.applies_iva = False
+        else:
+            self.applies_iva = True
+            
+        super().save(*args, **kwargs)
+
     def get_price_with_iva(self):
         """Calcula el precio con IVA (13% en El Salvador)"""
         if self.applies_iva:
@@ -168,6 +179,18 @@ class ClientServicePrice(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name="Precio Personalizado (Sin IVA)"
+    )
+    iva_type = models.CharField(
+        max_length=20,
+        choices=(
+            ('gravado', 'Gravado (13% IVA)'),
+            ('exento', 'Exento'),
+            ('no_sujeto', 'No Sujeto')
+        ),
+        null=True,
+        blank=True,
+        verbose_name="Tratamiento Fiscal Personalizado",
+        help_text="Si se deja vacío, se usará la configuración del servicio general."
     )
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     notes = models.TextField(blank=True, verbose_name="Notas")

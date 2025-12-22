@@ -5,8 +5,8 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q, Sum
 from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
-from .models import Transfer
-from .serializers import TransferSerializer, TransferListSerializer
+from .models import Transfer, TransferPayment, BatchPayment
+from .serializers import TransferSerializer, TransferListSerializer, BatchPaymentSerializer, BatchPaymentDetailSerializer
 from apps.users.permissions import IsAnyOperativo, IsOperativo2OrAdmin, TransferApprovalPermission, IsOperativo
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -139,7 +139,7 @@ class TransferViewSet(viewsets.ModelViewSet):
             ws.cell(row=row, column=4, value=float(transfer.amount))
             ws.cell(row=row, column=5, value=transfer.description)
             ws.cell(row=row, column=6, value=transfer.service_order.order_number if transfer.service_order else '')
-            ws.cell(row=row, column=7, value=transfer.provider.name if transfer.provider else '')
+            ws.cell(row=row, column=7, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '')
             ws.cell(row=row, column=8, value=transfer.get_payment_method_display() if transfer.payment_method else '')
             ws.cell(row=row, column=9, value=transfer.invoice_number)
             ws.cell(row=row, column=10, value=transfer.payment_date.strftime('%Y-%m-%d') if transfer.payment_date else '')
@@ -461,5 +461,237 @@ class TransferViewSet(viewsets.ModelViewSet):
         transfer_data['total_payments_count'] = len(regular_payments)
         transfer_data['total_credit_notes_count'] = len(credit_notes)
         transfer_data['credited_amount'] = str(sum(Decimal(cn['amount']) for cn in credit_notes))
-        
+
         return Response(transfer_data)
+
+
+class BatchPaymentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar pagos agrupados a proveedores.
+
+    Endpoints principales:
+    - POST /batch-payments/create_batch_payment/ - Crear pago múltiple con distribución FIFO
+    - GET /batch-payments/ - Listar todos los pagos agrupados
+    - GET /batch-payments/{id}/ - Detalle de un pago agrupado
+    - DELETE /batch-payments/{id}/ - Eliminar pago agrupado (revierte pagos individuales)
+    """
+    queryset = BatchPayment.objects.select_related(
+        'provider', 'bank', 'created_by'
+    ).all()
+    serializer_class = BatchPaymentSerializer
+    permission_classes = [IsOperativo]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return BatchPaymentDetailSerializer
+        return BatchPaymentSerializer
+
+    @action(detail=False, methods=['post'], permission_classes=[IsOperativo])
+    def create_batch_payment(self, request):
+        """
+        Crea un pago agrupado que distribuye el monto entre múltiples facturas usando FIFO.
+
+        Body esperado:
+        {
+            "transfer_ids": [1, 2, 3],  // IDs de los Transfers a pagar
+            "total_amount": "5000.00",
+            "payment_method": "transferencia",
+            "payment_date": "2025-12-21",
+            "bank": 1,  // opcional
+            "reference_number": "TRANS-12345",
+            "notes": "Pago quincenal proveedores",
+            "proof_file": <archivo>  // opcional
+        }
+        """
+        from django.db import transaction
+        from decimal import Decimal
+        import json
+
+        # Validar datos requeridos
+        transfer_ids_str = request.data.get('transfer_ids', '[]')
+        try:
+            transfer_ids = json.loads(transfer_ids_str) if isinstance(transfer_ids_str, str) else transfer_ids_str
+        except:
+            transfer_ids = []
+
+        total_amount_str = request.data.get('total_amount')
+        payment_method = request.data.get('payment_method')
+        payment_date = request.data.get('payment_date')
+
+        if not transfer_ids or len(transfer_ids) == 0:
+            return Response(
+                {'error': 'Debe seleccionar al menos una factura'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not total_amount_str or not payment_method or not payment_date:
+            return Response(
+                {'error': 'Monto, método de pago y fecha son requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            total_amount = Decimal(str(total_amount_str))
+            if total_amount <= 0:
+                return Response(
+                    {'error': 'El monto debe ser mayor a cero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Monto inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Obtener Transfers y validar
+        transfers = Transfer.objects.filter(
+            id__in=transfer_ids,
+            is_deleted=False
+        ).select_related('provider', 'service_order').order_by('transaction_date', 'id')  # FIFO
+
+        if transfers.count() != len(transfer_ids):
+            return Response(
+                {'error': 'Algunas facturas no existen o fueron eliminadas'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar que todas sean del mismo proveedor
+        providers = transfers.values_list('provider', flat=True).distinct()
+        if len(providers) > 1 or None in providers:
+            return Response(
+                {'error': 'Todas las facturas deben ser del mismo proveedor'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        provider_id = providers[0]
+
+        # Validar que las facturas estén en estado aprobado
+        non_approved = transfers.exclude(status__in=['aprobado', 'parcial'])
+        if non_approved.exists():
+            return Response(
+                {'error': f'Solo se pueden pagar facturas en estado "Aprobado" o "Pago Parcial". Facturas no aprobadas: {", ".join([str(t.id) for t in non_approved])}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar que haya saldo suficiente
+        total_balance = sum(t.balance for t in transfers)
+        if total_amount > total_balance:
+            return Response(
+                {'error': f'El monto a pagar (${total_amount}) excede el saldo total pendiente (${total_balance})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Crear el pago agrupado con transacción atómica
+        try:
+            with transaction.atomic():
+                # Crear BatchPayment
+                batch_payment = BatchPayment(
+                    provider_id=provider_id,
+                    total_amount=total_amount,
+                    payment_method=payment_method,
+                    payment_date=payment_date,
+                    bank_id=request.data.get('bank'),
+                    reference_number=request.data.get('reference_number', ''),
+                    notes=request.data.get('notes', ''),
+                    created_by=request.user
+                )
+
+                # Manejar archivo de comprobante
+                if 'proof_file' in request.FILES:
+                    batch_payment.proof_file = request.FILES['proof_file']
+
+                batch_payment.save()
+
+                # Distribuir el monto usando FIFO
+                remaining_amount = total_amount
+                payments_created = []
+                service_orders_affected = set()
+
+                for transfer in transfers:
+                    if remaining_amount <= 0:
+                        break
+
+                    # Determinar cuánto pagar a esta factura
+                    amount_to_pay = min(remaining_amount, transfer.balance)
+
+                    if amount_to_pay > 0:
+                        # Crear TransferPayment
+                        transfer_payment = TransferPayment(
+                            transfer=transfer,
+                            batch_payment=batch_payment,
+                            amount=amount_to_pay,
+                            payment_date=payment_date,
+                            payment_method=payment_method,
+                            reference_number=request.data.get('reference_number', ''),
+                            notes=f"Pago agrupado {batch_payment.batch_number}",
+                            created_by=request.user
+                        )
+
+                        # Si hay comprobante, asignarlo también al pago individual
+                        if batch_payment.proof_file:
+                            transfer_payment.proof_file = batch_payment.proof_file
+
+                        transfer_payment.save()
+                        payments_created.append(transfer_payment)
+
+                        # Registrar OS afectada
+                        if transfer.service_order:
+                            service_orders_affected.add(transfer.service_order)
+
+                        # Decrementar monto restante
+                        remaining_amount -= amount_to_pay
+
+                # Sincronizar comprobante con OrderDocuments de todas las OS afectadas
+                if batch_payment.proof_file and service_orders_affected:
+                    from apps.orders.models import OrderDocument
+
+                    for service_order in service_orders_affected:
+                        # Crear un OrderDocument por cada OS con el comprobante del lote
+                        OrderDocument.objects.create(
+                            order=service_order,
+                            document_type='factura_costo',
+                            file=batch_payment.proof_file,
+                            description=f"Comprobante Pago Lote {batch_payment.batch_number} - {batch_payment.provider.name}",
+                            uploaded_by=request.user
+                        )
+
+                # Serializar respuesta
+                serializer = BatchPaymentDetailSerializer(batch_payment)
+
+                return Response({
+                    'message': f'Pago agrupado creado exitosamente. {len(payments_created)} facturas pagadas.',
+                    'batch_payment': serializer.data,
+                    'payments_created': len(payments_created),
+                    'service_orders_affected': len(service_orders_affected),
+                    'remaining_amount': str(remaining_amount)
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response(
+                {'error': f'Error al crear el pago agrupado: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina un pago agrupado y revierte todos los pagos individuales asociados.
+        Usa soft delete para mantener historial.
+        """
+        batch_payment = self.get_object()
+
+        try:
+            with transaction.atomic():
+                # Los TransferPayment se eliminarán en cascada por el on_delete=CASCADE
+                # Esto disparará el signal post_delete que recalculará los paid_amount de los Transfers
+                batch_payment.delete()  # Soft delete
+
+                return Response(
+                    {'message': 'Pago agrupado eliminado correctamente. Los pagos individuales fueron revertidos.'},
+                    status=status.HTTP_204_NO_CONTENT
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Error al eliminar el pago agrupado: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

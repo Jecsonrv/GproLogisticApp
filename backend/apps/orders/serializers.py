@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db.models import Sum
 from .models import ServiceOrder, OrderDocument, Invoice, InvoicePayment, OrderCharge, CreditNote
 from apps.transfers.models import Transfer
+from apps.users.models import Notification
 
 class OrderDocumentSerializer(serializers.ModelSerializer):
     file_size = serializers.SerializerMethodField()
@@ -77,6 +78,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     # Información del cliente para facturación
     client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
     client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
+    client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
     
     # Información de costos
     total_transfers = serializers.SerializerMethodField()
@@ -135,17 +137,23 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         return obj.transfers.filter(transfer_type__in=['propios', 'costos']).aggregate(Sum('amount'))['amount__sum'] or 0
 
     def validate_client(self, value):
-        """Validar límite de crédito del cliente usando el método actualizado"""
+        """
+        Validar límite de crédito del cliente.
+        En lugar de prohibir la creación, se notifica a los administradores.
+        """
         client = value
         if client.payment_condition == 'credito':
             # Usar los métodos del modelo Client que calculan correctamente basándose en Invoice.balance
             credit_available = client.get_credit_available()
-            credit_used = client.get_credit_used()
-
             if credit_available <= 0:
-                raise serializers.ValidationError(
-                    f"El cliente ha excedido su límite de crédito de ${client.credit_limit}. "
-                    f"Crédito usado: ${credit_used}"
+                credit_used = client.get_credit_used()
+                Notification.notify_all_admins(
+                    title="Límite de Crédito Excedido",
+                    message=f"El cliente {client.name} ha excedido su límite de crédito (${client.credit_limit}). "
+                            f"Crédito usado: ${credit_used:.2f}. Se ha permitido la creación de la OS.",
+                    notification_type='warning',
+                    category='client',
+                    related_object=client
                 )
         return value
 
@@ -172,11 +180,13 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
-    """Serializer for invoices"""
+    """Serializer for invoices with full fiscal details"""
     client_name = serializers.SerializerMethodField()
     client_id = serializers.SerializerMethodField()
+    client_is_gran_contribuyente = serializers.SerializerMethodField()
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
     credit_notes = CreditNoteSerializer(many=True, read_only=True)
@@ -188,15 +198,21 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'invoice_type', 'service_order', 'service_order_number',
-            'client_id', 'client_name', 'issue_date', 'due_date',
+            'id', 'invoice_number', 'invoice_type', 'invoice_type_display', 'service_order', 'service_order_number',
+            'client_id', 'client_name', 'client_is_gran_contribuyente', 'issue_date', 'due_date',
+            # Desglose fiscal completo
             'subtotal_services', 'iva_services', 'total_services',
-            'subtotal_third_party', 'total_amount', 'paid_amount', 'credited_amount', 'balance',
+            'subtotal_third_party', 'subtotal_neto', 'iva_total',
+            'retencion', 'total_amount',
+            # Gestión de pagos
+            'paid_amount', 'credited_amount', 'balance',
             'status', 'status_display', 'payment_condition',
+            # Documentación y notas
             'notes', 'payments', 'credit_notes', 'days_overdue', 'ccf', 'pdf_file', 'dte_file',
+            'is_dte_issued', 'is_editable',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ('paid_amount', 'credited_amount', 'balance', 'created_at', 'updated_at')
+        read_only_fields = ('paid_amount', 'credited_amount', 'balance', 'subtotal_neto', 'iva_total', 'retencion', 'created_at', 'updated_at')
 
     def get_client_name(self, obj):
         if obj.service_order and obj.service_order.client:
@@ -208,6 +224,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
             return obj.service_order.client.id
         return None
 
+    def get_client_is_gran_contribuyente(self, obj):
+        """Indica si el cliente es Gran Contribuyente (aplica retención 1%)"""
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.is_gran_contribuyente
+        return False
+
     def get_days_overdue(self, obj):
         from django.utils import timezone
         if obj.due_date and obj.balance > 0:
@@ -215,24 +237,33 @@ class InvoiceSerializer(serializers.ModelSerializer):
             return days if days > 0 else 0
         return 0
 
+    def get_is_editable(self, obj):
+        """Una factura es editable si no tiene DTE emitido"""
+        return not obj.is_dte_issued
+
 
 class InvoiceListSerializer(serializers.ModelSerializer):
-    """Simplified serializer for invoice lists"""
+    """Optimized serializer for invoice lists with fiscal summary"""
     client_name = serializers.SerializerMethodField()
     client_id = serializers.SerializerMethodField()
+    client_is_gran_contribuyente = serializers.SerializerMethodField()
     service_order = serializers.IntegerField(source='service_order.id', read_only=True)
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
+    is_editable = serializers.SerializerMethodField()
     payments = InvoicePaymentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'invoice_type', 'service_order', 'service_order_number',
-            'client_id', 'client_name', 'issue_date', 'due_date',
-            'total_amount', 'paid_amount', 'credited_amount', 'balance', 'status',
-            'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes'
+            'id', 'invoice_number', 'invoice_type', 'invoice_type_display', 'service_order', 'service_order_number',
+            'client_id', 'client_name', 'client_is_gran_contribuyente', 'issue_date', 'due_date',
+            'subtotal_neto', 'iva_total', 'retencion', 'total_amount',
+            'paid_amount', 'credited_amount', 'balance', 'status',
+            'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes',
+            'is_dte_issued', 'is_editable'
         ]
 
     def get_client_name(self, obj):
@@ -245,9 +276,19 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             return obj.service_order.client.id
         return None
 
+    def get_client_is_gran_contribuyente(self, obj):
+        """Indica si el cliente es Gran Contribuyente (aplica retención 1%)"""
+        if obj.service_order and obj.service_order.client:
+            return obj.service_order.client.is_gran_contribuyente
+        return False
+
     def get_days_overdue(self, obj):
         from django.utils import timezone
         if obj.due_date and obj.balance > 0:
             days = (timezone.now().date() - obj.due_date).days
             return days if days > 0 else 0
         return 0
+
+    def get_is_editable(self, obj):
+        """Una factura es editable si no tiene DTE emitido"""
+        return not obj.is_dte_issued

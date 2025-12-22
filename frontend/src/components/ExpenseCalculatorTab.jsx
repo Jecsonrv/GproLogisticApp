@@ -37,7 +37,6 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
     // Tipos de IVA según normativa salvadoreña
     const IVA_TYPES = [
         { value: "gravado", label: "Gravado (13%)", rate: 0.13 },
-        { value: "exento", label: "Exento", rate: 0 },
         { value: "no_sujeto", label: "No Sujeto", rate: 0 },
     ];
 
@@ -85,7 +84,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                 const initialAdjustments = {};
                 billableExpenses.forEach((exp) => {
                     // Determinar tipo de IVA: usar customer_iva_type si existe, sino derivar de applies_iva
-                    let ivaType = exp.customer_iva_type || "exento";
+                    let ivaType = exp.customer_iva_type || "no_sujeto";
                     if (!exp.customer_iva_type && exp.customer_applies_iva) {
                         ivaType = "gravado";
                     }
@@ -345,6 +344,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                 </div>
                                                 <div className="text-xs text-slate-500 mt-0.5">
                                                     {expense.provider_name ||
+                                                        expense.beneficiary_name ||
                                                         "Proveedor desconocido"}
                                                 </div>
                                             </td>
@@ -466,7 +466,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                 className={`px-3 py-2.5 text-right text-xs font-medium tabular-nums ${
                                                     isBilled
                                                         ? "text-slate-400"
-                                                        : "text-emerald-600"
+                                                        : "text-slate-600"
                                                 }`}
                                             >
                                                 {profit > 0
@@ -477,28 +477,28 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                     );
                                 })}
                             </tbody>
-                            <tfoot className="bg-slate-50 border-t border-slate-200">
+                            <tfoot className="bg-slate-50 border-t-2 border-slate-300">
                                 <tr>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700">
+                                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-slate-700">
                                         TOTALES:
                                     </td>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
+                                    <td className="px-3 py-2.5 text-right text-sm font-medium text-slate-700 tabular-nums">
                                         {formatCurrency(summary.totalCost)}
                                     </td>
                                     <td></td>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-900 tabular-nums">
+                                    <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
                                         {formatCurrency(summary.totalBase)}
                                     </td>
                                     <td></td>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-slate-700 tabular-nums">
+                                    <td className="px-3 py-2.5 text-right text-sm font-medium text-slate-700 tabular-nums">
                                         {summary.totalIVA > 0
                                             ? formatCurrency(summary.totalIVA)
                                             : "-"}
                                     </td>
-                                    <td className="px-3 py-2.5 text-right text-sm font-bold text-blue-700 tabular-nums">
+                                    <td className="px-3 py-2.5 text-right text-base font-bold text-slate-900 tabular-nums">
                                         {formatCurrency(summary.totalTotal)}
                                     </td>
-                                    <td className="px-3 py-2.5 text-right text-xs font-bold text-emerald-600 tabular-nums">
+                                    <td className="px-3 py-2.5 text-right text-sm font-medium text-slate-600 tabular-nums">
                                         {formatCurrency(summary.totalProfit)}
                                     </td>
                                 </tr>

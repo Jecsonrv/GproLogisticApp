@@ -40,8 +40,7 @@ class Transfer(SoftDeleteModel):
     # Tipos de tratamiento fiscal para cobro al cliente
     IVA_TYPE_CHOICES = (
         ('gravado', 'Gravado (13% IVA)'),
-        ('exento', 'Exento'),
-        ('no_sujeto', 'No Sujeto'),
+        ('no_sujeto', 'No Sujeto (Exportación)'),
     )
 
     # Estado de facturación del item
@@ -129,7 +128,7 @@ class Transfer(SoftDeleteModel):
     customer_iva_type = models.CharField(
         max_length=20,
         choices=IVA_TYPE_CHOICES,
-        default='exento',  # Por defecto exento hasta que el usuario lo configure
+        default='no_sujeto',  # Por defecto no sujeto (exportación/servicios internacionales)
         verbose_name="Tratamiento Fiscal Cliente",
         help_text="Tipo de IVA a aplicar al cobrar este gasto al cliente"
     )
@@ -281,7 +280,6 @@ class Transfer(SoftDeleteModel):
         """Retorna etiqueta corta para UI"""
         labels = {
             'gravado': 'IVA 13%',
-            'exento': 'Exento',
             'no_sujeto': 'No Sujeto'
         }
         return labels.get(self.customer_iva_type, 'N/A')
@@ -318,6 +316,7 @@ class Transfer(SoftDeleteModel):
 class TransferPayment(SoftDeleteModel):
     """Pagos parciales realizados a una transferencia (gasto)"""
     transfer = models.ForeignKey(Transfer, on_delete=models.CASCADE, related_name='payments', verbose_name="Transferencia/Gasto")
+    batch_payment = models.ForeignKey('BatchPayment', on_delete=models.CASCADE, null=True, blank=True, related_name='transfer_payments', verbose_name="Pago Agrupado")
     amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto Pagado")
     payment_date = models.DateField(default=timezone.now, verbose_name="Fecha de Pago")
     payment_method = models.CharField(max_length=20, choices=Transfer.PAYMENT_METHOD_CHOICES, verbose_name="Método de Pago")
@@ -354,3 +353,135 @@ class TransferPayment(SoftDeleteModel):
         payments = transfer.payments.filter(is_deleted=False)
         transfer.paid_amount = sum(p.amount for p in payments)
         transfer.save()
+
+
+class BatchPayment(SoftDeleteModel):
+    """
+    Pago agrupado que distribuye un monto entre múltiples transferencias.
+    Permite pagar varias facturas de un mismo proveedor en una sola transacción.
+    """
+    # Número de lote autoincrementable
+    batch_number = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        verbose_name="Número de Lote"
+    )
+
+    # Proveedor (todas las facturas deben ser del mismo proveedor)
+    provider = models.ForeignKey(
+        Provider,
+        on_delete=models.PROTECT,
+        verbose_name="Proveedor"
+    )
+
+    # Información del pago
+    total_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Total del Pago"
+    )
+    payment_method = models.CharField(
+        max_length=20,
+        choices=Transfer.PAYMENT_METHOD_CHOICES,
+        verbose_name="Método de Pago"
+    )
+    payment_date = models.DateField(
+        default=timezone.now,
+        verbose_name="Fecha de Pago"
+    )
+
+    # Banco (solo si aplica por el método de pago)
+    bank = models.ForeignKey(
+        Bank,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Banco"
+    )
+
+    # Referencia bancaria (número de transferencia, cheque, etc.)
+    reference_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Número de Referencia"
+    )
+
+    # Comprobante único compartido
+    proof_file = models.FileField(
+        upload_to='transfers/batch_payments/',
+        null=True,
+        blank=True,
+        verbose_name="Comprobante de Pago",
+        validators=[validate_document_file],
+        help_text="Este comprobante se asociará a todas las facturas incluidas en el lote"
+    )
+
+    # Notas
+    notes = models.TextField(blank=True, verbose_name="Observaciones")
+
+    # Auditoría
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Registrado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Pago Agrupado"
+        verbose_name_plural = "Pagos Agrupados"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['provider', 'payment_date']),
+            models.Index(fields=['batch_number']),
+        ]
+
+    def __str__(self):
+        return f"Lote {self.batch_number} - {self.provider.name} - ${self.total_amount}"
+
+    def save(self, *args, **kwargs):
+        # Generar número de lote automático: BP-YYYY-NNNN
+        if not self.batch_number:
+            from django.db import transaction
+            from django.db.models import Max
+            import re
+
+            current_year = timezone.now().year
+
+            with transaction.atomic():
+                # Buscar el máximo número del año actual
+                result = BatchPayment.all_objects.select_for_update().filter(
+                    batch_number__regex=rf'^BP-{current_year}-\d{{4}}$'
+                ).aggregate(
+                    max_num=Max('batch_number')
+                )
+
+                if result['max_num']:
+                    try:
+                        last_num = int(result['max_num'].split('-')[-1])
+                        new_num = last_num + 1
+                    except (ValueError, IndexError):
+                        new_num = 1
+                else:
+                    new_num = 1
+
+                self.batch_number = f'BP-{current_year}-{new_num:04d}'
+
+        super().save(*args, **kwargs)
+
+    def get_transfers_count(self):
+        """Retorna el número de facturas incluidas en este pago"""
+        return self.transfer_payments.filter(is_deleted=False).count()
+
+    def get_service_orders(self):
+        """Retorna lista de OS únicas afectadas por este pago"""
+        from apps.orders.models import ServiceOrder
+        return ServiceOrder.objects.filter(
+            transfers__payments__batch_payment=self,
+            transfers__payments__is_deleted=False
+        ).distinct()

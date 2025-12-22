@@ -232,13 +232,11 @@ class OrderCharge(SoftDeleteModel):
 
     Tratamiento fiscal según normativa salvadoreña:
     - GRAVADO: Se aplica IVA 13%
-    - EXENTO: No se aplica IVA por exención legal
-    - NO_SUJETO: No se aplica IVA (exportaciones)
+    - NO_SUJETO: No se aplica IVA (fuera del ámbito de aplicación de la ley)
     """
     # Tipos de tratamiento fiscal
     IVA_TYPE_CHOICES = (
         ('gravado', 'Gravado (13% IVA)'),
-        ('exento', 'Exento'),
         ('no_sujeto', 'No Sujeto'),
     )
 
@@ -410,7 +408,7 @@ class Invoice(models.Model):
     INVOICE_TYPE_CHOICES = (
         ('DTE', 'DTE (Documento Tributario Electrónico)'),
         ('FEX', 'FEX (Factura de Exportación)'),
-        ('CCF', 'CCF (Comprobante de Crédito Fiscal)'),
+        ('INTL', 'Factura Internacional'),
     )
 
     STATUS_CHOICES = (
@@ -537,17 +535,18 @@ class Invoice(models.Model):
         self.subtotal_neto = self.subtotal_services + self.subtotal_third_party
         self.iva_total = self.iva_services + (self.iva_third_party if hasattr(self, 'iva_third_party') else Decimal('0.00'))
 
-        # Calcular retención del 1% para Grandes Contribuyentes con CCF
-        # SOLO si el subtotal neto (sin IVA) supera $100.00 (Art. 162 Código Tributario El Salvador)
+        # Calcular retención del 1% para Grandes Contribuyentes con DTE
+        # IMPORTANTE: La retención se aplica SOLO sobre SERVICIOS, NO sobre gastos reembolsables a terceros
+        # Aplica solo si el subtotal de servicios (sin IVA) supera $100.00 (Art. 162 Código Tributario El Salvador)
         RETENCION_THRESHOLD = Decimal('100.00')
         RETENCION_RATE = Decimal('0.01')
 
         client = self.service_order.client
         if (client.is_gran_contribuyente and
-            self.invoice_type == 'CCF' and
-            self.subtotal_neto > RETENCION_THRESHOLD):
-            # Retención del 1% sobre el subtotal neto (sin IVA)
-            self.retencion = self.subtotal_neto * RETENCION_RATE
+            self.invoice_type == 'DTE' and
+            self.subtotal_services > RETENCION_THRESHOLD):
+            # Retención del 1% sobre SOLO el subtotal de servicios (sin IVA, sin gastos terceros)
+            self.retencion = self.subtotal_services * RETENCION_RATE
         else:
             self.retencion = Decimal('0.00')
 

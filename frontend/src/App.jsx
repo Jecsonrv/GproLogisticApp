@@ -17,7 +17,6 @@ const ClientForm = lazy(() => import("./pages/ClientForm"));
 const ServiceOrders = lazy(() => import("./pages/ServiceOrders"));
 const ServiceOrderDetail = lazy(() => import("./pages/ServiceOrderDetail"));
 const Services = lazy(() => import("./pages/Services"));
-const ClientPricing = lazy(() => import("./pages/ClientPricing"));
 const Invoicing = lazy(() => import("./pages/Invoicing"));
 const ProviderPayments = lazy(() => import("./pages/ProviderPayments"));
 const Users = lazy(() => import("./pages/Users"));
@@ -83,10 +82,6 @@ function App() {
                             element={<ServiceOrderDetail />}
                         />
                         <Route path="services" element={<Services />} />
-                        <Route
-                            path="client-pricing"
-                            element={<ClientPricing />}
-                        />
                         <Route path="invoicing" element={<Invoicing />} />
                         <Route
                             path="provider-payments"

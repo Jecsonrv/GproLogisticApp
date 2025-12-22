@@ -242,6 +242,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
         try:
             from apps.catalogs.models import Service
+            from decimal import Decimal
             try:
                 service = Service.objects.get(id=service_id)
             except (ValueError, TypeError):
@@ -250,14 +251,31 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Convertir valores numéricos correctamente (pueden venir como strings desde el frontend)
+            try:
+                quantity = int(request.data.get('quantity', 1))
+                unit_price = Decimal(str(request.data.get('unit_price', service.default_price)))
+                discount = Decimal(str(request.data.get('discount', 0)))
+            except (ValueError, TypeError) as e:
+                return Response(
+                    {'error': f'Valores numéricos inválidos: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # The frontend sends 'notes' but model has 'description'.
+            # Validar iva_type
+            iva_type = request.data.get('iva_type', 'gravado')
+            if iva_type not in ['gravado', 'no_sujeto']:
+                iva_type = 'gravado'
+
             charge = OrderCharge.objects.create(
                 service_order=order,
                 service=service,
-                quantity=request.data.get('quantity', 1),
-                unit_price=request.data.get('unit_price', service.default_price),
-                discount=request.data.get('discount', 0),
-                description=request.data.get('notes', '')
+                quantity=quantity,
+                unit_price=unit_price,
+                discount=discount,
+                description=request.data.get('notes', ''),
+                iva_type=iva_type
             )
             
             # Set current user for signal
@@ -271,6 +289,82 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         except Service.DoesNotExist:
             return Response(
                 {'error': 'Servicio no encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=True, methods=['patch'])
+    def update_charge(self, request, pk=None):
+        """
+        Actualiza un cargo existente.
+        Permite modificar: quantity, unit_price, discount, notes, iva_type
+        NO permite cambiar el servicio (service)
+        """
+        order = self.get_object()
+
+        if order.status != 'abierta':
+            return Response(
+                {'error': 'Solo se pueden actualizar cargos en órdenes abiertas'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        charge_id = request.data.get('charge_id')
+        if not charge_id:
+            return Response(
+                {'error': 'Se requiere el ID del cargo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            charge = OrderCharge.objects.get(id=charge_id, service_order=order)
+
+            # Verificar que el cargo no esté facturado
+            if charge.invoice_id:
+                return Response(
+                    {'error': 'No se puede editar un cargo que ya está facturado'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validar y convertir valores numéricos
+            from decimal import Decimal
+            try:
+                quantity = int(request.data.get('quantity', charge.quantity))
+                unit_price = Decimal(str(request.data.get('unit_price', charge.unit_price)))
+                discount = Decimal(str(request.data.get('discount', charge.discount)))
+            except (ValueError, TypeError) as e:
+                return Response(
+                    {'error': f'Valores numéricos inválidos: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validar iva_type
+            iva_type = request.data.get('iva_type', charge.iva_type)
+            if iva_type not in ['gravado', 'no_sujeto']:
+                iva_type = 'gravado'
+
+            # Actualizar campos
+            charge.quantity = quantity
+            charge.unit_price = unit_price
+            charge.discount = discount
+            charge.description = request.data.get('notes', charge.description)
+            charge.iva_type = iva_type
+
+            # Set current user for signal
+            charge._current_user = request.user
+            charge.save()
+
+            return Response({
+                'id': charge.id,
+                'message': 'Cargo actualizado exitosamente'
+            }, status=status.HTTP_200_OK)
+
+        except OrderCharge.DoesNotExist:
+            return Response(
+                {'error': 'Cargo no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:

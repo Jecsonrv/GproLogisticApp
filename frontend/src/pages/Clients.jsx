@@ -358,68 +358,85 @@ function Clients() {
             header: "",
             accessor: "actions",
             render: (row) => (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
+                <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            as={Button}
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
                         >
                             <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                            onClick={() => viewClientDetails(row)}
-                        >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() => navigate(`/clients/${row.id}/edit`)}
-                        >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() =>
-                                navigate(`/account-statements?client=${row.id}`)
-                            }
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Estado de cuenta
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            onClick={() =>
-                                navigate(`/client-pricing?client=${row.id}`)
-                            }
-                        >
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Precios personalizados
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => toggleClientStatus(row)}
-                            className={
-                                row.is_active
-                                    ? "text-amber-600"
-                                    : "text-emerald-600"
-                            }
-                        >
-                            {row.is_active ? (
-                                <>
-                                    <XCircle className="h-4 w-4 mr-2" />
-                                    Desactivar
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle className="h-4 w-4 mr-2" />
-                                    Activar
-                                </>
-                            )}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    viewClientDetails(row);
+                                }}
+                            >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Ver detalles
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/clients/${row.id}/edit`);
+                                }}
+                            >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/account-statements?client=${row.id}`);
+                                }}
+                            >
+                                <FileText className="h-4 w-4 mr-2" />
+                                Estado de cuenta
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/services?tab=custom&client=${row.id}`);
+                                }}
+                            >
+                                <CreditCard className="h-4 w-4 mr-2" />
+                                Precios personalizados
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleClientStatus(row);
+                                }}
+                                className={
+                                    row.is_active
+                                        ? "text-amber-600"
+                                        : "text-emerald-600"
+                                }
+                            >
+                                {row.is_active ? (
+                                    <>
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Desactivar
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        Activar
+                                    </>
+                                )}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             ),
         },
     ];

@@ -105,7 +105,7 @@ class ServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = [
             'id', 'name', 'description',
-            'default_price', 'price_with_iva', 'applies_iva',
+            'default_price', 'price_with_iva', 'applies_iva', 'iva_type',
             'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'price_with_iva']
@@ -126,7 +126,7 @@ class ClientServicePriceSerializer(serializers.ModelSerializer):
         model = ClientServicePrice
         fields = [
             'id', 'client', 'client_name', 'service', 'service_name',
-            'service_id', 'custom_price', 'price_with_iva',
+            'service_id', 'custom_price', 'iva_type', 'price_with_iva',
             'is_active', 'notes', 'effective_date',
             'created_at', 'updated_at'
         ]

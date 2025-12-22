@@ -5,6 +5,7 @@ import {
     Banknote,
     FileText,
     AlertTriangle,
+    AlertCircle,
     CheckCircle,
     Clock,
     Eye,
@@ -24,6 +25,7 @@ import {
     Pencil,
     Trash2,
     Info,
+    MoreHorizontal,
 } from "lucide-react";
 import {
     Card,
@@ -41,7 +43,7 @@ import { Label } from "../components/ui/Label";
 import Modal, { ModalFooter } from "../components/ui/Modal";
 import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
-import { FileUpload, SelectERP, ConfirmDialog } from "../components/ui";
+import { FileUpload, SelectERP, ConfirmDialog, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from "../components/ui";
 import api from "../lib/axios";
 import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 import toast from "react-hot-toast";
@@ -53,58 +55,54 @@ import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
  * Enfocado en gestión administrativa de facturación (no fiscal)
  */
 
-// Configuración de estados de factura
+
+// Configuración de estados de factura - Paleta Mate Profesional
 const INVOICE_STATUS_CONFIG = {
     pending: {
         label: "Pendiente",
-        variant: "warning",
-        bgColor: "bg-amber-50",
-        textColor: "text-amber-700",
-        borderColor: "border-amber-200",
-        dotColor: "bg-amber-500",
+        bgColor: "bg-slate-50",
+        textColor: "text-slate-700",
+        borderColor: "border-slate-200",
+        dotColor: "bg-slate-400",
     },
     partial: {
         label: "Pago Parcial",
-        variant: "info",
-        bgColor: "bg-blue-50",
+        bgColor: "bg-blue-50/50",
         textColor: "text-blue-700",
         borderColor: "border-blue-200",
         dotColor: "bg-blue-500",
     },
     paid: {
         label: "Pagada",
-        variant: "success",
-        bgColor: "bg-emerald-50",
+        bgColor: "bg-emerald-50/50",
         textColor: "text-emerald-700",
         borderColor: "border-emerald-200",
         dotColor: "bg-emerald-500",
     },
     overdue: {
         label: "Vencida",
-        variant: "danger",
-        bgColor: "bg-red-50",
-        textColor: "text-red-700",
-        borderColor: "border-red-200",
-        dotColor: "bg-red-500",
+        bgColor: "bg-rose-50",
+        textColor: "text-rose-700",
+        borderColor: "border-rose-200",
+        dotColor: "bg-rose-500",
     },
     cancelled: {
         label: "Anulada",
-        variant: "default",
-        bgColor: "bg-slate-50",
-        textColor: "text-slate-600",
-        borderColor: "border-slate-200",
+        bgColor: "bg-slate-100",
+        textColor: "text-slate-500",
+        borderColor: "border-slate-300",
         dotColor: "bg-slate-400",
     },
 };
 
-// Componente de Badge de Estado
+// Componente de Badge de Estado - Estilo Sobrio
 const InvoiceStatusBadge = ({ status }) => {
     const config =
         INVOICE_STATUS_CONFIG[status] || INVOICE_STATUS_CONFIG.pending;
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border",
+                "inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md border shadow-sm",
                 config.bgColor,
                 config.textColor,
                 config.borderColor
@@ -120,94 +118,24 @@ const InvoiceStatusBadge = ({ status }) => {
 const INVOICE_TYPE_OPTIONS = [
     { id: "DTE", name: "DTE - Documento Tributario Electrónico" },
     { id: "FEX", name: "FEX - Factura de Exportación" },
-    { id: "CCF", name: "CCF - Comprobante de Crédito Fiscal" },
+    { id: "INTL", name: "Factura Internacional" },
 ];
 
-// Badge de Tipo de Factura
+// Badge de Tipo de Factura - Estilo Minimalista
 const InvoiceTypeBadge = ({ type }) => {
     const config = {
-        DTE: {
-            label: "DTE",
-            bgColor: "bg-blue-50",
-            textColor: "text-blue-700",
-            borderColor: "border-blue-200",
-        },
-        FEX: {
-            label: "FEX",
-            bgColor: "bg-purple-50",
-            textColor: "text-purple-700",
-            borderColor: "border-purple-200",
-        },
-        CCF: {
-            label: "CCF",
-            bgColor: "bg-emerald-50",
-            textColor: "text-emerald-700",
-            borderColor: "border-emerald-200",
-        },
+        DTE: { label: "DTE", className: "text-slate-700 bg-slate-100 border-slate-300" },
+        FEX: { label: "FEX", className: "text-indigo-700 bg-indigo-50 border-indigo-200" },
+        INTL: { label: "INTL", className: "text-teal-700 bg-teal-50 border-teal-200" },
     };
     const c = config[type] || config.DTE;
     return (
-        <span
-            className={cn(
-                "inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded border",
-                c.bgColor,
-                c.textColor,
-                c.borderColor
-            )}
-        >
+        <span className={cn("inline-flex items-center px-1.5 py-0 text-[10px] font-black tracking-widest uppercase rounded border", c.className)}>
             {c.label}
         </span>
     );
 };
 
-// Componente KPI Card - Estilo limpio similar a Service Orders
-const KPICard = ({
-    title,
-    value,
-    subtitle,
-    icon: Icon,
-    variant = "default",
-}) => {
-    const variants = {
-        default: "text-slate-900",
-        primary: "text-brand-600",
-        success: "text-emerald-600",
-        warning: "text-amber-600",
-        danger: "text-red-600",
-    };
-
-    return (
-        <Card>
-            <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                            {title}
-                        </p>
-                        <p
-                            className={cn(
-                                "text-2xl font-semibold mt-1.5",
-                                variants[variant]
-                            )}
-                        >
-                            {value}
-                        </p>
-                        {subtitle && (
-                            <p className="text-xs text-slate-400 mt-1">
-                                {subtitle}
-                            </p>
-                        )}
-                    </div>
-                    {Icon && (
-                        <div className="p-3 bg-gray-50 rounded-lg">
-                            <Icon className="w-5 h-5 text-gray-400" />
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-    );
-};
 
 const Invoicing = () => {
     const navigate = useNavigate();
@@ -894,50 +822,48 @@ const Invoicing = () => {
     // Credit Note columns
     const ncColumns = [
         {
-            header: "Número NC",
+            header: "No. Nota de Crédito",
             accessor: "note_number",
             render: (row) => (
-                <span className="font-mono font-medium text-purple-700 text-sm">
-                    {row.note_number}
-                </span>
-            ),
-        },
-        {
-            header: "Factura",
-            accessor: "invoice_number",
-            render: (row) => (
-                <div>
-                    <button
-                        onClick={() => handleViewInvoiceDetails(row.invoice_id)}
-                        className="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
-                    >
-                        {row.invoice_number}
-                    </button>
-                    <div className="text-xs text-slate-500">
-                        {row.client_name}
-                    </div>
+                <div className="flex flex-col">
+                    <span className="font-mono font-bold text-purple-700 text-sm">
+                        {row.note_number}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                        REF: {formatDate(row.issue_date, { format: 'short' })}
+                    </span>
                 </div>
             ),
         },
         {
-            header: "Fecha",
-            accessor: "issue_date",
+            header: "Factura Afectada",
+            accessor: "invoice_number",
             render: (row) => (
-                <span className="text-sm text-slate-700">
-                    {formatDate(row.issue_date, { format: "short" })}
-                </span>
+                <div className="flex flex-col">
+                    <button
+                        onClick={() => handleViewInvoiceDetails(row.invoice_id)}
+                        className="font-mono text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline text-left"
+                    >
+                        {row.invoice_number}
+                    </button>
+                    <span className="text-[11px] text-slate-600 font-semibold truncate max-w-[150px]" title={row.client_name}>
+                        {row.client_name}
+                    </span>
+                </div>
             ),
         },
         {
-            header: "Motivo",
+            header: "Motivo / Razón",
             accessor: "reason",
             render: (row) => (
-                <span
-                    className="text-sm text-slate-600 max-w-xs truncate block"
-                    title={row.reason}
-                >
-                    {row.reason}
-                </span>
+                <div className="max-w-xs">
+                    <span
+                        className="text-xs text-slate-600 italic line-clamp-2"
+                        title={row.reason}
+                    >
+                        "{row.reason}"
+                    </span>
+                </div>
             ),
         },
         {
@@ -945,7 +871,7 @@ const Invoicing = () => {
             accessor: "amount",
             render: (row) => (
                 <div className="text-right">
-                    <span className="font-semibold text-purple-700 tabular-nums">
+                    <span className="font-black text-purple-700 tabular-nums text-sm">
                         -{formatCurrency(row.amount)}
                     </span>
                 </div>
@@ -954,18 +880,17 @@ const Invoicing = () => {
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-24 text-right",
             render: (row) => (
                 <div className="flex items-center justify-end gap-1">
                     {row.pdf_file && (
                         <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon-xs"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(row.pdf_file, "_blank");
                             }}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            className="text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                             title="Ver PDF"
                         >
                             <FileText className="h-4 w-4" />
@@ -973,19 +898,19 @@ const Invoicing = () => {
                     )}
                     <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-xs"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleOpenEditCNModal(row);
                         }}
-                        className="text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                        className="text-slate-400 hover:text-amber-600 hover:bg-amber-50"
                         title="Editar Nota de Crédito"
                     >
                         <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-xs"
                         onClick={(e) => {
                             e.stopPropagation();
                             setDeleteConfirm({
@@ -994,7 +919,7 @@ const Invoicing = () => {
                                 type: "credit-note",
                             });
                         }}
-                        className="text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        className="text-slate-400 hover:text-red-600 hover:bg-red-50"
                         title="Eliminar Nota de Crédito"
                     >
                         <Trash2 className="h-4 w-4" />
@@ -1004,15 +929,15 @@ const Invoicing = () => {
         },
     ];
 
-    // Table columns
+    // Table columns - Estructura Original con Refinamiento Profesional
     const columns = [
         {
-            header: "Doc.",
+            header: "Documento",
             accessor: "invoice_number",
             render: (row) => (
-                <div>
+                <div className="py-1">
                     <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-brand-600 text-sm">
+                        <span className="font-mono font-bold text-slate-900 text-xs tracking-tighter">
                             {row.invoice_number}
                         </span>
                         <InvoiceTypeBadge type={row.invoice_type} />
@@ -1021,11 +946,9 @@ const Invoicing = () => {
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(
-                                    `/service-orders/${row.service_order}`
-                                );
+                                navigate(`/service-orders/${row.service_order}`);
                             }}
-                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-0.5 font-medium block text-left"
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-medium block text-left mt-0.5"
                         >
                             OS: {row.service_order_number}
                         </button>
@@ -1037,12 +960,12 @@ const Invoicing = () => {
             header: "Cliente",
             accessor: "client_name",
             render: (row) => (
-                <div>
-                    <div className="font-medium text-slate-900 text-sm">
+                <div className="py-1 max-w-[200px]">
+                    <div className="font-bold text-slate-700 text-xs truncate" title={row.client_name}>
                         {row.client_name}
                     </div>
                     {row.ccf && (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-[10px] text-slate-400 font-mono tracking-tighter">
                             CCF: {row.ccf}
                         </div>
                     )}
@@ -1053,7 +976,7 @@ const Invoicing = () => {
             header: "Emisión",
             accessor: "issue_date",
             render: (row) => (
-                <div className="text-sm text-slate-700">
+                <div className="text-[11px] text-slate-500 font-medium tabular-nums py-1">
                     {row.issue_date
                         ? new Date(
                               row.issue_date + "T00:00:00"
@@ -1070,15 +993,15 @@ const Invoicing = () => {
             header: "Vencimiento",
             accessor: "due_date",
             render: (row) => (
-                <div>
+                <div className="py-1">
                     {row.due_date ? (
                         <>
                             <div
                                 className={cn(
-                                    "text-sm font-medium",
+                                    "text-[11px] font-semibold tabular-nums",
                                     row.days_overdue > 0
-                                        ? "text-red-600"
-                                        : "text-slate-700"
+                                        ? "text-rose-600"
+                                        : "text-slate-500"
                                 )}
                             >
                                 {new Date(
@@ -1090,27 +1013,32 @@ const Invoicing = () => {
                                 })}
                             </div>
                             {row.days_overdue > 0 && (
-                                <div className="text-xs text-red-600 font-medium">
-                                    {row.days_overdue} días vencida
+                                <div className="text-[9px] text-rose-600 font-bold uppercase tracking-tight">
+                                    {row.days_overdue}d vencida
                                 </div>
                             )}
                         </>
                     ) : (
-                        <span className="text-xs text-slate-400">
-                            Sin vencimiento
+                        <span className="text-[10px] text-slate-400 font-medium italic">
+                            Sin fecha
                         </span>
                     )}
                 </div>
             ),
         },
         {
-            header: "Total",
+            header: "Importe Total",
             accessor: "total_amount",
             render: (row) => (
-                <div className="text-right">
-                    <div className="font-semibold text-slate-900 tabular-nums">
+                <div className="text-right py-1">
+                    <div className="font-bold text-slate-900 tabular-nums text-xs">
                         {formatCurrency(row.total_amount)}
                     </div>
+                    {row.retencion > 0 && (
+                        <div className="text-[9px] text-amber-700 font-bold tabular-nums bg-amber-50 px-1 rounded border border-amber-100 inline-block">
+                            -{formatCurrency(row.retencion)}
+                        </div>
+                    )}
                 </div>
             ),
         },
@@ -1118,9 +1046,12 @@ const Invoicing = () => {
             header: "Pagado",
             accessor: "paid_amount",
             render: (row) => (
-                <div className="text-right">
-                    <div className="text-sm text-emerald-600 tabular-nums font-medium">
-                        {formatCurrency(row.paid_amount || 0)}
+                <div className="text-right py-1">
+                    <div className={cn(
+                        "text-[11px] font-bold tabular-nums",
+                        row.paid_amount > 0 ? "text-emerald-600" : "text-slate-300"
+                    )}>
+                        {row.paid_amount > 0 ? formatCurrency(row.paid_amount) : "—"}
                     </div>
                 </div>
             ),
@@ -1129,13 +1060,13 @@ const Invoicing = () => {
             header: "Saldo",
             accessor: "balance",
             render: (row) => (
-                <div className="text-right">
+                <div className="text-right py-1">
                     <div
                         className={cn(
-                            "font-bold tabular-nums",
-                            parseFloat(row.balance) > 0
-                                ? "text-red-600"
-                                : "text-emerald-600"
+                            "font-bold tabular-nums text-sm",
+                            parseFloat(row.balance) > 0.01
+                                ? "text-rose-700"
+                                : "text-slate-400"
                         )}
                     >
                         {formatCurrency(row.balance)}
@@ -1150,83 +1081,62 @@ const Invoicing = () => {
             render: (row) => <InvoiceStatusBadge status={row.status} />,
         },
         {
-            header: "Factura PDF",
-            accessor: "pdf_file",
-            className: "w-16 text-center",
-            headerClassName: "text-center",
-            render: (row) =>
-                row.pdf_file ? (
-                    <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(row.pdf_file, "_blank");
-                        }}
-                        title="Ver Factura (PDF)"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                    >
-                        <FileText className="h-4 w-4" />
-                    </Button>
-                ) : (
-                    <span className="text-gray-400 text-xs">—</span>
-                ),
-        },
-        {
             header: "Acciones",
             sortable: false,
             render: (row) => (
-                <div className="flex items-center justify-end gap-1">
-                    {parseFloat(row.balance) > 0 &&
+                <div className="flex items-center justify-end gap-0.5">
+                    {parseFloat(row.balance) > 0.01 &&
                         row.status !== "cancelled" && (
                             <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon-xs"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     handleOpenPaymentModal(row);
                                 }}
                                 title="Registrar Pago"
-                                className="text-gray-500 hover:text-emerald-600"
+                                className="text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 h-7 w-7"
                             >
-                                <Banknote className="w-4 h-4" />
+                                <Banknote className="w-3.5 h-3.5" />
                             </Button>
                         )}
                     <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-xs"
                         onClick={(e) => {
                             e.stopPropagation();
                             handleViewInvoiceDetails(row.id);
                         }}
                         title="Ver Detalle"
-                        className="text-gray-500 hover:text-blue-600"
+                        className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 h-7 w-7"
                     >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-3.5 h-3.5" />
                     </Button>
+                    {!row.is_dte_issued && (
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditModal(row);
+                            }}
+                            title="Editar Factura"
+                            className="text-slate-400 hover:text-amber-600 hover:bg-amber-50 h-7 w-7"
+                        >
+                            <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
                     <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenEditModal(row);
-                        }}
-                        title="Editar Factura"
-                        className="text-gray-500 hover:text-amber-600"
-                    >
-                        <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
+                        size="icon-xs"
                         onClick={(e) => {
                             e.stopPropagation();
                             setDeleteConfirm({ open: true, id: row.id });
                         }}
                         title="Eliminar"
-                        className="text-gray-400 hover:text-red-600"
+                        className="text-slate-400 hover:text-red-600 hover:bg-red-50 h-7 w-7"
                     >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                 </div>
             ),
@@ -1235,15 +1145,14 @@ const Invoicing = () => {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
+            {/* Header Original Restaurado */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">
                         Cuentas por Cobrar (CXC)
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Control administrativo de facturación, abonos y saldos
-                        pendientes
+                        Control administrativo de facturación, abonos y saldos pendientes
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1282,45 +1191,40 @@ const Invoicing = () => {
                 </div>
             </div>
 
-            {/* KPI Cards */}
+            {/* KPI Cards Estándar */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <KPICard
+                <StatCard
                     title="Total Facturado"
                     value={formatCurrency(summary.total_invoiced)}
                     icon={Receipt}
-                    variant="primary"
                 />
-                <KPICard
+                <StatCard
                     title="Saldo Pendiente"
                     value={formatCurrency(summary.total_pending)}
-                    subtitle={`${summary.pending_count || 0} facturas`}
+                    description={`${summary.pending_count || 0} facturas`}
                     icon={DollarSign}
-                    variant="warning"
                 />
-                <KPICard
+                <StatCard
                     title="Total Cobrado"
                     value={formatCurrency(summary.total_collected)}
-                    subtitle={`${summary.paid_count || 0} pagadas`}
+                    description={`${summary.paid_count || 0} pagadas`}
                     icon={CheckCircle}
-                    variant="success"
                 />
-                <KPICard
+                <StatCard
                     title="Cuentas Vencidas"
                     value={formatCurrency(summary.total_overdue)}
-                    subtitle={`${summary.overdue_count || 0} vencidas`}
+                    description={`${summary.overdue_count || 0} vencidas`}
                     icon={AlertTriangle}
-                    variant="danger"
                 />
-                <KPICard
+                <StatCard
                     title="Pagos Parciales"
                     value={summary.partial_count || 0}
-                    subtitle="En proceso de cobro"
+                    description="En proceso de cobro"
                     icon={CalendarClock}
-                    variant="default"
                 />
             </div>
 
-            {/* Tabs */}
+            {/* Tabs Estilo Original */}
             <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg w-fit">
                 <button
                     onClick={() => setActiveTab("invoices")}
@@ -1346,12 +1250,12 @@ const Invoicing = () => {
                 </button>
             </div>
 
-            {/* Search and Filters Card */}
+            {/* Search and Filters Card Original */}
             {activeTab === "invoices" && (
                 <Card>
                     <CardHeader className="pb-4">
                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                            {/* Search Bar - Rediseñada */}
+                            {/* Search Bar */}
                             <div className="flex items-center gap-3 flex-1 max-w-2xl">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1394,7 +1298,6 @@ const Invoicing = () => {
                                 </Button>
                             </div>
 
-                            {/* Quick Stats */}
                             <div className="flex items-center gap-4 text-sm">
                                 <span className="text-slate-500">
                                     Mostrando{" "}
@@ -1415,7 +1318,6 @@ const Invoicing = () => {
                     {isFiltersOpen && (
                         <CardContent className="pt-0 pb-4 border-t border-slate-100">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg mt-4">
-                                {/* Cliente */}
                                 <div>
                                     <SelectERP
                                         label="Cliente"
@@ -1436,7 +1338,6 @@ const Invoicing = () => {
                                     />
                                 </div>
 
-                                {/* Estado */}
                                 <div>
                                     <SelectERP
                                         label="Estado"
@@ -1471,7 +1372,6 @@ const Invoicing = () => {
                                     />
                                 </div>
 
-                                {/* Fecha de Emisión */}
                                 <div>
                                     <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
                                         Fecha de Emisión
@@ -1501,40 +1401,8 @@ const Invoicing = () => {
                                         />
                                     </div>
                                 </div>
-
-                                {/* Fecha de Vencimiento */}
-                                <div>
-                                    <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
-                                        Fecha de Vencimiento
-                                    </Label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input
-                                            type="date"
-                                            value={filters.dueDateFrom}
-                                            onChange={(e) =>
-                                                setFilters({
-                                                    ...filters,
-                                                    dueDateFrom: e.target.value,
-                                                })
-                                            }
-                                            placeholder="Desde"
-                                        />
-                                        <Input
-                                            type="date"
-                                            value={filters.dueDateTo}
-                                            onChange={(e) =>
-                                                setFilters({
-                                                    ...filters,
-                                                    dueDateTo: e.target.value,
-                                                })
-                                            }
-                                            placeholder="Hasta"
-                                        />
-                                    </div>
-                                </div>
                             </div>
 
-                            {/* Clear Filters */}
                             {activeFiltersCount > 0 && (
                                 <div className="flex justify-end mt-3">
                                     <Button
@@ -1551,7 +1419,6 @@ const Invoicing = () => {
                         </CardContent>
                     )}
 
-                    {/* Table */}
                     <CardContent className="px-5 pb-5 pt-0">
                         <DataTable
                             data={filteredInvoices}
@@ -1567,7 +1434,6 @@ const Invoicing = () => {
                 </Card>
             )}
 
-            {/* Credit Notes View */}
             {activeTab === "credit-notes" && (
                 <Card>
                     <CardHeader>
@@ -2659,7 +2525,7 @@ const Invoicing = () => {
                 {selectedInvoice && (
                     <div className="space-y-5">
                         {/* Header Info */}
-                        <div className="grid grid-cols-2 gap-6 p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="grid grid-cols-2 gap-6 p-5 bg-white rounded-md border border-slate-200 shadow-sm">
                             <div>
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                     Cliente
@@ -2667,6 +2533,12 @@ const Invoicing = () => {
                                 <p className="text-base font-medium text-slate-900">
                                     {selectedInvoice.client_name}
                                 </p>
+                                {selectedInvoice.client_is_gran_contribuyente && (
+                                    <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs font-medium text-amber-700">
+                                        <Building2 className="w-3 h-3" />
+                                        Gran Contribuyente (Ret. 1%)
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
@@ -2744,7 +2616,80 @@ const Invoicing = () => {
                             )}
                         </div>
 
-                        {/* Financial Summary */}
+                        {/* Desglose Fiscal Completo */}
+                        <div className="bg-slate-50 p-5 rounded-md border border-slate-300">
+                            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-300">
+                                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                                    <Receipt className="w-4 h-4" />
+                                    Desglose Fiscal
+                                </h4>
+                            </div>
+
+                            <div className="space-y-2">
+                                {/* Subtotales */}
+                                {selectedInvoice.subtotal_services > 0 && (
+                                    <div className="flex justify-between text-sm py-1">
+                                        <span className="text-slate-600 font-medium">Subtotal Servicios:</span>
+                                        <span className="font-medium text-slate-900 tabular-nums">
+                                            {formatCurrency(selectedInvoice.subtotal_services)}
+                                        </span>
+                                    </div>
+                                )}
+                                {selectedInvoice.subtotal_third_party > 0 && (
+                                    <div className="flex justify-between text-sm py-1">
+                                        <span className="text-slate-600 font-medium">Gastos Reembolsables:</span>
+                                        <span className="font-medium text-slate-900 tabular-nums">
+                                            {formatCurrency(selectedInvoice.subtotal_third_party)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between text-sm py-1.5 border-t border-slate-300 mt-2">
+                                    <span className="text-slate-700 font-semibold">Subtotal:</span>
+                                    <span className="font-semibold text-slate-900 tabular-nums">
+                                        {formatCurrency(selectedInvoice.subtotal_neto)}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between text-sm py-1">
+                                    <span className="text-slate-600 font-medium">IVA 13%:</span>
+                                    <span className="font-medium text-slate-900 tabular-nums">
+                                        {formatCurrency(selectedInvoice.iva_total)}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between text-sm py-1.5 border-t border-slate-300 mt-2">
+                                    <span className="text-slate-800 font-semibold">Total Bruto:</span>
+                                    <span className="font-semibold text-slate-900 tabular-nums">
+                                        {formatCurrency(selectedInvoice.total_amount)}
+                                    </span>
+                                </div>
+
+                                {/* Retención 1% */}
+                                {selectedInvoice.retencion && parseFloat(selectedInvoice.retencion) > 0 && (
+                                    <>
+                                        <div className="flex justify-between text-sm py-1 border-t border-slate-300 mt-2">
+                                            <span className="font-medium flex items-center gap-1 text-slate-600">
+                                                <AlertCircle className="w-3 h-3" />
+                                                Retención 1% (Gran Contribuyente):
+                                            </span>
+                                            <span className="font-medium tabular-nums text-slate-700">
+                                                - {formatCurrency(selectedInvoice.retencion)}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex justify-between text-base py-2.5 border-t-2 border-slate-400 mt-3 bg-slate-100 -mx-5 px-5">
+                                            <span className="font-bold text-slate-800 uppercase text-sm">Total a Pagar:</span>
+                                            <span className="tabular-nums font-bold text-slate-900">
+                                                {formatCurrency(selectedInvoice.total_amount - selectedInvoice.retencion)}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Financial Summary - Pagos y Saldo */}
                         <div className="grid grid-cols-3 gap-4">
                             <div className="px-4 py-3 bg-white border border-slate-200 rounded-lg shadow-sm">
                                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">

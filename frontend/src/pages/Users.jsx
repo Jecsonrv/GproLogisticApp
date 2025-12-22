@@ -266,18 +266,24 @@ function Users() {
         {
             header: "Acciones",
             render: (row) => (
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openEditModal(row)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(row);
+                        }}
                     >
                         Editar
                     </Button>
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openChangePasswordModal(row)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openChangePasswordModal(row);
+                        }}
                     >
                         Cambiar Contraseña
                     </Button>
@@ -285,7 +291,10 @@ function Users() {
                         <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleDelete(row.id)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(row.id);
+                            }}
                         >
                             Eliminar
                         </Button>

@@ -11,6 +11,7 @@ from .models import (
 from apps.transfers.models import Transfer
 from apps.catalogs.models import Service
 from apps.clients.models import Client
+from apps.users.models import Notification
 
 
 class OrderDocumentSerializer(serializers.ModelSerializer):
@@ -54,18 +55,27 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
 class OrderChargeSerializer(serializers.ModelSerializer):
     """Serializer para cobros de una OS"""
     service_name = serializers.CharField(source='service.name', read_only=True)
+    service_code = serializers.CharField(source='service.code', read_only=True)
+    # Campos calculados para el frontend
+    amount = serializers.DecimalField(source='subtotal', max_digits=15, decimal_places=2, read_only=True)
+    # Información de facturación
+    invoice_id = serializers.IntegerField(source='invoice.id', read_only=True, allow_null=True)
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
+    notes = serializers.CharField(source='description', read_only=True)
 
     class Meta:
         model = OrderCharge
         fields = [
-            'id', 'service_order', 'service', 'service_name',
-            'description', 'quantity', 'unit_price', 'discount',
-            'subtotal', 'iva_amount', 'total',
+            'id', 'service_order', 'service', 'service_name', 'service_code',
+            'description', 'notes', 'quantity', 'unit_price', 'discount',
+            'iva_type', 'subtotal', 'amount', 'iva_amount', 'total',
+            'invoice_id', 'invoice_number',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'subtotal', 'iva_amount', 'total',
-            'created_at', 'updated_at', 'service_name'
+            'id', 'subtotal', 'amount', 'iva_amount', 'total',
+            'created_at', 'updated_at', 'service_name', 'service_code',
+            'invoice_id', 'invoice_number', 'notes'
         ]
 
 
@@ -121,6 +131,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
     client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
     client_credit_limit = serializers.DecimalField(source='client.credit_limit', max_digits=15, decimal_places=2, read_only=True)
+    client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
     
     def get_customs_agent_name(self, obj):
         if obj.customs_agent:
@@ -149,7 +160,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
         model = ServiceOrder
         fields = [
             'id', 'order_number', 'client', 'client_name',
-            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit', 'client_is_gran_contribuyente',
             'sub_client', 'sub_client_name',
             'shipment_type', 'shipment_type_name',
             'provider', 'provider_name',
@@ -168,7 +179,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'mes', 'created_at', 'updated_at',
             'closed_at', 'documents', 'charges',
             'client_name', 'sub_client_name', 'shipment_type_name',
-            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit', 'client_is_gran_contribuyente',
             'provider_name', 'customs_agent_name',
             'created_by_username', 'closed_by_username', 'status_display',
             'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
@@ -221,13 +232,23 @@ class ServiceOrderCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_client(self, value):
-        """Validar límite de crédito del cliente"""
+        """
+        Validar límite de crédito del cliente.
+        En lugar de prohibir la creación, se notifica a los administradores.
+        """
         client = value
         if client.payment_condition == 'credito':
             credit_available = client.get_credit_available()
             if credit_available <= 0:
-                raise serializers.ValidationError(
-                    f"El cliente {client.name} ha excedido su límite de crédito."
+                # El cliente ha excedido su límite, creamos notificación para admins
+                credit_used = client.get_credit_used()
+                Notification.notify_all_admins(
+                    title="Límite de Crédito Excedido",
+                    message=f"El cliente {client.name} ha excedido su límite de crédito (${client.credit_limit}). "
+                            f"Crédito usado: ${credit_used:.2f}. Se ha permitido la creación de la OS.",
+                    notification_type='warning',
+                    category='client',
+                    related_object=client
                 )
         return value
 
@@ -315,6 +336,9 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     days_overdue = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
     
+    # Fiscal fields
+    client_is_gran_contribuyente = serializers.BooleanField(source='service_order.client.is_gran_contribuyente', read_only=True)
+    
     # Items facturados
     billed_charges = serializers.SerializerMethodField()
     billed_expenses = serializers.SerializerMethodField()
@@ -323,10 +347,12 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = [
             'id', 'service_order', 'service_order_number', 'service_order_data',
-            'client_name', 'invoice_number', 'invoice_type', 'invoice_type_display',
+            'client_name', 'client_is_gran_contribuyente',
+            'invoice_number', 'invoice_type', 'invoice_type_display',
             'issue_date', 'due_date',
             'subtotal_services', 'iva_services', 'total_services',
-            'subtotal_third_party', 'total_amount',
+            'subtotal_third_party', 'subtotal_neto', 'iva_total', 'retencion',
+            'total_amount',
             'paid_amount', 'credited_amount', 'balance',
             'status', 'status_display',
             'payment_condition', 'payment_condition_display',

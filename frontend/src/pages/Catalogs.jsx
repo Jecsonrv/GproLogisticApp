@@ -221,18 +221,24 @@ function Catalogs() {
             accessor: "actions",
             header: "Acciones",
             cell: (row) => (
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => openModal(catalog, row)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openModal(catalog, row);
+                        }}
                     >
                         Editar
                     </Button>
                     <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => handleDelete(catalog, row.id)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(catalog, row.id);
+                        }}
                     >
                         Eliminar
                     </Button>
