@@ -1888,6 +1888,370 @@ function ProviderPayments() {
 
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
+                <form onSubmit={handleCreateBatchPayment} className="space-y-6">
+                    {/* Resumen de facturas seleccionadas */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                            Facturas Seleccionadas ({selectedPaymentIds.length})
+                        </h4>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                            {getSelectedPayments().map(payment => (
+                                <div key={payment.id} className="flex justify-between items-center text-sm bg-white px-3 py-2 rounded border border-blue-100">
+                                    <div>
+                                        <span className="font-mono font-semibold">{payment.service_order_number || 'Sin OS'}</span>
+                                        <span className="text-gray-500 ml-2">{payment.description}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-xs text-gray-500">Saldo</div>
+                                        <div className="font-bold text-blue-700">{formatCurrency(payment.balance)}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-center">
+                            <span className="font-semibold text-blue-900">Total a Pagar:</span>
+                            <span className="text-2xl font-bold text-blue-700">
+                                {formatCurrency(
+                                    getSelectedPayments().reduce((sum, p) => sum + parseFloat(p.balance || 0), 0)
+                                )}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Datos del pago */}
+                    <div>
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                1
+                            </span>
+                            Datos del Pago
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <Label>Monto a Pagar *</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={batchPaymentFormData.total_amount}
+                                    onChange={(e) => setBatchPaymentFormData({ ...batchPaymentFormData, total_amount: e.target.value })}
+                                    placeholder="0.00"
+                                    required
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Se distribuirá automáticamente usando método FIFO
+                                </p>
+                            </div>
+                            <div>
+                                <Label>Fecha de Pago *</Label>
+                                <Input
+                                    type="date"
+                                    value={batchPaymentFormData.payment_date}
+                                    onChange={(e) => setBatchPaymentFormData({ ...batchPaymentFormData, payment_date: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <SelectERP
+                                    label="Método de Pago *"
+                                    value={batchPaymentFormData.payment_method}
+                                    onChange={(val) => setBatchPaymentFormData({ ...batchPaymentFormData, payment_method: val })}
+                                    options={PAYMENT_METHOD_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <SelectERP
+                                    label="Banco"
+                                    value={batchPaymentFormData.bank}
+                                    onChange={(val) => setBatchPaymentFormData({ ...batchPaymentFormData, bank: val })}
+                                    options={bankOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    clearable
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <Label>Número de Referencia / Cheque</Label>
+                                <Input
+                                    value={batchPaymentFormData.reference_number}
+                                    onChange={(e) => setBatchPaymentFormData({ ...batchPaymentFormData, reference_number: e.target.value })}
+                                    placeholder="TRANS-12345 o CHQ-678"
+                                    className="font-mono"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-100" />
+
+                    {/* Comprobante */}
+                    <div>
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                2
+                            </span>
+                            Comprobante de Pago
+                        </h4>
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <FileUpload
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onFileChange={(file) => setBatchPaymentFormData({ ...batchPaymentFormData, proof_file: file })}
+                                helperText="Este comprobante se asociará automáticamente a TODAS las facturas incluidas en este pago"
+                            />
+                            <div className="mt-3 flex items-start gap-2 text-xs text-amber-700">
+                                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                <p>
+                                    El comprobante aparecerá en los documentos de todas las Órdenes de Servicio vinculadas a estas facturas
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Observaciones */}
+                    <div>
+                        <Label>Observaciones</Label>
+                        <textarea
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            value={batchPaymentFormData.notes}
+                            onChange={(e) => setBatchPaymentFormData({ ...batchPaymentFormData, notes: e.target.value })}
+                            placeholder="Notas adicionales sobre este pago múltiple..."
+                        />
+                    </div>
+
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsBatchPaymentModalOpen(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? 'Procesando...' : 'Registrar Pago Múltiple'}
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
+
+            {/* Modal de Historial de Pagos Múltiples */}
+            <Modal
+                isOpen={isBatchHistoryModalOpen}
+                onClose={() => {
+                    setIsBatchHistoryModalOpen(false);
+                    setSelectedBatchPayment(null);
+                }}
+                title="Historial de Pagos Múltiples"
+                size="4xl"
+            >
+                {selectedBatchPayment ? (
+                    // Vista de detalle de un pago específico
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <div>
+                                <div className="text-sm text-slate-500 mb-1">Lote de Pago</div>
+                                <div className="text-2xl font-bold text-slate-900 font-mono">
+                                    {selectedBatchPayment.batch_number}
+                                </div>
+                                <div className="text-sm text-slate-600 mt-1">
+                                    {selectedBatchPayment.provider_name}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm text-slate-500 mb-1">Monto Total</div>
+                                <div className="text-3xl font-bold text-blue-600">
+                                    {formatCurrency(selectedBatchPayment.total_amount)}
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">
+                                    {formatDate(selectedBatchPayment.payment_date, { format: 'long' })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Información del pago */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                    Método de Pago
+                                </div>
+                                <div className="text-sm font-medium">{selectedBatchPayment.payment_method_display}</div>
+                            </div>
+                            <div>
+                                <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                    Banco
+                                </div>
+                                <div className="text-sm font-medium">{selectedBatchPayment.bank_name || '—'}</div>
+                            </div>
+                            <div>
+                                <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                    Referencia
+                                </div>
+                                <div className="text-sm font-medium font-mono">{selectedBatchPayment.reference_number || '—'}</div>
+                            </div>
+                        </div>
+
+                        {/* Facturas incluidas */}
+                        <div>
+                            <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                                Facturas Pagadas ({selectedBatchPayment.payments?.length || 0})
+                            </h4>
+                            <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600">OS</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-gray-600">Descripción</th>
+                                            <th className="px-3 py-2 text-right font-semibold text-gray-600">Factura</th>
+                                            <th className="px-3 py-2 text-right font-semibold text-gray-600">Monto Pagado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {selectedBatchPayment.payments?.map((payment, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2">
+                                                    {payment.service_order ? (
+                                                        <button
+                                                            onClick={() => navigate(`/service-orders/${payment.service_order_id}`)}
+                                                            className="text-brand-600 hover:text-brand-700 hover:underline font-mono font-semibold"
+                                                        >
+                                                            {payment.service_order}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-gray-400 italic">Sin OS</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-700">{payment.transfer_description}</td>
+                                                <td className="px-3 py-2 text-right font-mono text-xs">{payment.transfer_invoice_number || '—'}</td>
+                                                <td className="px-3 py-2 text-right font-bold text-blue-600">{formatCurrency(payment.amount_paid)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                                        <tr>
+                                            <td colSpan="3" className="px-3 py-2 text-right font-semibold text-gray-700">
+                                                Total:
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-bold text-blue-700 text-base">
+                                                {formatCurrency(selectedBatchPayment.total_amount)}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Comprobante */}
+                        {selectedBatchPayment.proof_file && (
+                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                <div className="text-xs font-semibold text-blue-700 uppercase mb-3">
+                                    Comprobante de Pago
+                                </div>
+                                <div className="flex gap-3">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => window.open(selectedBatchPayment.proof_file, '_blank')}
+                                    >
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Ver Comprobante
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const link = document.createElement('a');
+                                            link.href = selectedBatchPayment.proof_file;
+                                            link.download = `comprobante_${selectedBatchPayment.batch_number}.pdf`;
+                                            link.click();
+                                        }}
+                                    >
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Descargar
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Observaciones */}
+                        {selectedBatchPayment.notes && (
+                            <div>
+                                <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                                    Observaciones
+                                </div>
+                                <div className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    {selectedBatchPayment.notes}
+                                </div>
+                            </div>
+                        )}
+
+                        <ModalFooter>
+                            <Button variant="outline" onClick={() => setSelectedBatchPayment(null)}>
+                                Volver al Historial
+                            </Button>
+                            <Button
+                                variant="danger"
+                                onClick={() => handleDeleteBatchPayment(selectedBatchPayment.id)}
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Eliminar Pago Múltiple
+                            </Button>
+                        </ModalFooter>
+                    </div>
+                ) : (
+                    // Vista de lista de todos los pagos agrupados
+                    <div className="space-y-4">
+                        <div className="text-sm text-gray-500">
+                            Historial de todos los pagos múltiples realizados
+                        </div>
+                        {batchPayments.length === 0 ? (
+                            <div className="text-center py-12 text-gray-500">
+                                No hay pagos múltiples registrados
+                            </div>
+                        ) : (
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {batchPayments.map((bp) => (
+                                    <div
+                                        key={bp.id}
+                                        onClick={() => openBatchPaymentDetail(bp.id)}
+                                        className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                    >
+                                        <div>
+                                            <div className="font-mono font-semibold text-gray-900">
+                                                {bp.batch_number}
+                                            </div>
+                                            <div className="text-sm text-gray-600 mt-0.5">
+                                                {bp.provider_name}
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                {formatDate(bp.payment_date, { format: 'medium' })} • {bp.transfers_count} facturas
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-xl font-bold text-blue-600">
+                                                {formatCurrency(bp.total_amount)}
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                {bp.payment_method_display}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <ModalFooter>
+                            <Button variant="outline" onClick={() => setIsBatchHistoryModalOpen(false)}>
+                                Cerrar
+                            </Button>
+                        </ModalFooter>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Confirm Delete Dialog */}
+            <ConfirmDialog
                 open={deleteConfirm.open}
                 onClose={() =>
                     setDeleteConfirm({

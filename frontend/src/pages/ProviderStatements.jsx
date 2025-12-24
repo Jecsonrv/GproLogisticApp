@@ -176,13 +176,25 @@ const ProviderStatements = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] = useState(false); // New
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedTransferIds, setSelectedTransferIds] = useState([]); // New
 
     // Forms
     const [paymentForm, setPaymentForm] = useState({
         amount: "",
+        payment_date: getTodayDate(),
+        payment_method: "transferencia",
+        bank: "",
+        reference: "",
+        notes: "",
+        proof_file: null,
+    });
+
+    const [batchPaymentForm, setBatchPaymentForm] = useState({ // New
+        total_amount: "",
         payment_date: getTodayDate(),
         payment_method: "transferencia",
         bank: "",
@@ -207,8 +219,11 @@ const ProviderStatements = () => {
     useEffect(() => {
         if (selectedProvider) {
             fetchStatement(selectedProvider.id);
+            setSelectedTransferIds([]); // Clear selection on provider change
         }
     }, [selectedProvider, selectedYear]);
+
+    // ... (fetch functions remain the same)
 
     const fetchProviders = async () => {
         try {
@@ -282,6 +297,117 @@ const ProviderStatements = () => {
             setSelectedTransfer(response.data);
         } catch (error) {
             toast.error("Error al cargar detalles");
+        }
+    };
+
+    // Selection Logic
+    const toggleSelectAll = (checked) => {
+        if (checked && statement?.transfers) {
+            const payableTransfers = statement.transfers
+                .filter(t => t.status !== "pagado" && t.balance > 0)
+                .map(t => t.id);
+            setSelectedTransferIds(payableTransfers);
+        } else {
+            setSelectedTransferIds([]);
+        }
+    };
+
+    const toggleSelectRow = (id, checked) => {
+        if (checked) {
+            setSelectedTransferIds(prev => [...prev, id]);
+        } else {
+            setSelectedTransferIds(prev => prev.filter(tid => tid !== id));
+        }
+    };
+
+    const handleOpenBatchPayment = () => {
+        if (selectedTransferIds.length === 0) {
+            toast.error("Selecciona al menos una factura para pagar");
+            return;
+        }
+
+        // Validate all selected transfers are from the same provider
+        const selectedTransfers = statement.transfers.filter(t => selectedTransferIds.includes(t.id));
+
+        if (selectedTransfers.length === 0) {
+            toast.error("No se encontraron las facturas seleccionadas");
+            return;
+        }
+
+        // Validate all have balance
+        const withoutBalance = selectedTransfers.filter(t => !t.balance || parseFloat(t.balance) <= 0);
+        if (withoutBalance.length > 0) {
+            toast.error("Algunas facturas seleccionadas no tienen saldo pendiente");
+            return;
+        }
+
+        // Calculate total amount
+        const totalAmount = selectedTransfers.reduce((sum, t) => sum + parseFloat(t.balance || 0), 0);
+
+        if (totalAmount <= 0) {
+            toast.error("El monto total a pagar debe ser mayor a cero");
+            return;
+        }
+
+        setBatchPaymentForm({
+            total_amount: totalAmount.toFixed(2),
+            payment_date: getTodayDate(),
+            payment_method: "transferencia",
+            bank: "",
+            reference: "",
+            notes: "",
+            proof_file: null,
+        });
+
+        setIsBatchPaymentModalOpen(true);
+    };
+
+    const handleRegisterBatchPayment = async (e) => {
+        e.preventDefault();
+        try {
+            setIsSubmitting(true);
+            const formData = new FormData();
+            
+            // Add basic fields
+            formData.append('transfer_ids', JSON.stringify(selectedTransferIds));
+            Object.keys(batchPaymentForm).forEach((key) => {
+                if (batchPaymentForm[key] !== null) {
+                    formData.append(key, batchPaymentForm[key]);
+                }
+            });
+
+            // Need to ensure provider_id is sent if strictly required by endpoint logic not inferred?
+            // The endpoint implementation infers provider from transfers, so we are good.
+
+            await axios.post(
+                `/transfers/batch-payments/create_batch_payment/`,
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
+            );
+
+            toast.success("Pago agrupado registrado exitosamente");
+            setIsBatchPaymentModalOpen(false);
+            setSelectedTransferIds([]);
+            fetchStatement(selectedProvider.id);
+
+            // Reset form
+            setBatchPaymentForm({
+                total_amount: "",
+                payment_date: getTodayDate(),
+                payment_method: "transferencia",
+                bank: "",
+                reference: "",
+                notes: "",
+                proof_file: null,
+            });
+        } catch (error) {
+            console.error("Error completo:", error);
+            console.error("Response data:", error.response?.data);
+            console.error("Selected IDs:", selectedTransferIds);
+            const errorMsg = error.response?.data?.error || error.response?.data?.message || "Error al registrar pago agrupado";
+            toast.error(errorMsg);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -396,6 +522,40 @@ const ProviderStatements = () => {
     }, [providers, searchQuery]);
 
     const columns = [
+        {
+            header: "",
+            accessor: "select",
+            className: "w-12",
+            sortable: false,
+            cell: (row) => {
+                const isPayable = row.status !== "pagado" && row.balance > 0;
+                return (
+                    <div
+                        className="flex items-center justify-center py-2"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <input
+                            type="checkbox"
+                            disabled={!isPayable}
+                            checked={selectedTransferIds.includes(row.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                                if (isPayable) {
+                                    toggleSelectRow(row.id, e.target.checked);
+                                }
+                            }}
+                            className={cn(
+                                "w-4 h-4 rounded border-2 transition-all",
+                                isPayable
+                                    ? "border-gray-400 text-blue-600 hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer hover:scale-110"
+                                    : "border-gray-200 bg-gray-100 opacity-30 cursor-not-allowed"
+                            )}
+                            title={isPayable ? "Seleccionar para pago múltiple" : "Esta factura ya está pagada o no tiene saldo pendiente"}
+                        />
+                    </div>
+                );
+            }
+        },
         {
             header: "Fecha",
             accessor: "transaction_date",
@@ -751,10 +911,31 @@ const ProviderStatements = () => {
                             {/* Transfers Table */}
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>
-                                        Historial de Movimientos ({selectedYear}
-                                        )
-                                    </CardTitle>
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle>
+                                            Historial de Movimientos ({selectedYear})
+                                        </CardTitle>
+                                        {statement?.transfers && statement.transfers.some(t => t.status !== "pagado" && t.balance > 0) && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const payableTransfers = statement.transfers
+                                                        .filter(t => t.status !== "pagado" && t.balance > 0)
+                                                        .map(t => t.id);
+                                                    if (selectedTransferIds.length === payableTransfers.length) {
+                                                        setSelectedTransferIds([]);
+                                                    } else {
+                                                        setSelectedTransferIds(payableTransfers);
+                                                    }
+                                                }}
+                                                className={selectedTransferIds.length > 0 ? "border-blue-500 text-blue-700" : ""}
+                                            >
+                                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                                                {selectedTransferIds.length > 0 ? 'Deseleccionar Todas' : 'Seleccionar Todas'}
+                                            </Button>
+                                        )}
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     <DataTable
@@ -1394,6 +1575,229 @@ const ProviderStatements = () => {
                 ) : (
                     <div className="p-4 text-center">Cargando detalles...</div>
                 )}
+            </Modal>
+
+            {/* Bulk Action Bar */}
+            {selectedTransferIds.length > 0 && (
+                <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="font-medium text-sm">
+                            {selectedTransferIds.length} {selectedTransferIds.length === 1 ? 'factura seleccionada' : 'facturas seleccionadas'}
+                        </span>
+                    </div>
+                    <div className="h-4 w-px bg-slate-700" />
+                    <Button
+                        size="sm"
+                        onClick={handleOpenBatchPayment}
+                        className="bg-white text-slate-900 hover:bg-slate-100"
+                    >
+                        <Banknote className="w-4 h-4 mr-2" />
+                        Pagar Selección
+                    </Button>
+                    <button
+                        onClick={() => setSelectedTransferIds([])}
+                        className="text-slate-400 hover:text-white transition-colors"
+                        title="Limpiar selección"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+            )}
+
+            {/* Batch Payment Modal */}
+            <Modal
+                isOpen={isBatchPaymentModalOpen}
+                onClose={() => setIsBatchPaymentModalOpen(false)}
+                title={`Pago Múltiple - ${selectedProvider?.name || ''}`}
+                size="xl"
+            >
+                <form onSubmit={handleRegisterBatchPayment} className="space-y-6">
+                    {/* Resumen de Facturas */}
+                    <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="px-4 py-3 bg-slate-100 border-b border-slate-200">
+                            <h4 className="font-semibold text-sm text-slate-900">
+                                Facturas Seleccionadas ({selectedTransferIds.length})
+                            </h4>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 sticky top-0">
+                                    <tr className="border-b border-slate-200">
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">OS</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Factura</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-600">Saldo</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {statement?.transfers
+                                        ?.filter(t => selectedTransferIds.includes(t.id))
+                                        .map((transfer) => (
+                                            <tr key={transfer.id} className="hover:bg-slate-50">
+                                                <td className="px-3 py-2 font-mono text-xs">{transfer.service_order || 'Sin OS'}</td>
+                                                <td className="px-3 py-2 font-mono text-xs">{transfer.invoice_number || '-'}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(transfer.balance)}</td>
+                                            </tr>
+                                        ))}
+                                </tbody>
+                                <tfoot className="bg-slate-100 border-t-2 border-slate-300">
+                                    <tr>
+                                        <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
+                                        <td className="px-3 py-2 text-right font-bold text-lg text-blue-600">
+                                            {formatCurrency(batchPaymentForm.total_amount || 0)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <div className="px-4 py-2 bg-blue-50 border-t border-blue-100">
+                            <p className="text-xs text-blue-700 flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4" />
+                                El monto se distribuirá automáticamente por orden de fecha (FIFO)
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Monto Total a Pagar *</Label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="pl-9"
+                                    value={batchPaymentForm.total_amount}
+                                    onChange={(e) =>
+                                        setBatchPaymentForm({
+                                            ...batchPaymentForm,
+                                            total_amount: e.target.value,
+                                        })
+                                    }
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Fecha de Pago *</Label>
+                            <Input
+                                type="date"
+                                value={batchPaymentForm.payment_date}
+                                onChange={(e) =>
+                                    setBatchPaymentForm({
+                                        ...batchPaymentForm,
+                                        payment_date: e.target.value,
+                                    })
+                                }
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Método de Pago *</Label>
+                            <SelectERP
+                                value={batchPaymentForm.payment_method}
+                                onChange={(val) =>
+                                    setBatchPaymentForm({
+                                        ...batchPaymentForm,
+                                        payment_method: val,
+                                        bank: val === "efectivo" ? "" : batchPaymentForm.bank,
+                                    })
+                                }
+                                options={[
+                                    { id: "transferencia", name: "Transferencia Bancaria" },
+                                    { id: "cheque", name: "Cheque" },
+                                    { id: "efectivo", name: "Efectivo" },
+                                    { id: "tarjeta", name: "Tarjeta" },
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
+                        </div>
+                        <div>
+                            <Label>Referencia / No. Cheque</Label>
+                            <Input
+                                value={batchPaymentForm.reference}
+                                onChange={(e) =>
+                                    setBatchPaymentForm({
+                                        ...batchPaymentForm,
+                                        reference: e.target.value,
+                                    })
+                                }
+                                placeholder="Ej: LOTE-001"
+                            />
+                        </div>
+                    </div>
+
+                    {["transferencia", "cheque", "tarjeta"].includes(batchPaymentForm.payment_method) && (
+                        <div>
+                            <Label>Banco *</Label>
+                            <SelectERP
+                                value={batchPaymentForm.bank}
+                                onChange={(val) =>
+                                    setBatchPaymentForm({
+                                        ...batchPaymentForm,
+                                        bank: val,
+                                    })
+                                }
+                                options={[
+                                    { id: "", name: "Seleccionar banco" },
+                                    ...banks.map((b) => ({
+                                        id: String(b.id),
+                                        name: b.name,
+                                    })),
+                                ]}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                searchable
+                                clearable
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <Label>Comprobante Global (Opcional)</Label>
+                        <FileUpload
+                            accept=".pdf,.jpg,.png"
+                            onChange={(file) =>
+                                setBatchPaymentForm({
+                                    ...batchPaymentForm,
+                                    proof_file: file,
+                                })
+                            }
+                            value={batchPaymentForm.proof_file}
+                        />
+                    </div>
+
+                    <div>
+                        <Label>Notas</Label>
+                        <Input
+                            value={batchPaymentForm.notes}
+                            onChange={(e) =>
+                                setBatchPaymentForm({
+                                    ...batchPaymentForm,
+                                    notes: e.target.value,
+                                })
+                            }
+                            placeholder="Observaciones para el lote..."
+                        />
+                    </div>
+
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsBatchPaymentModalOpen(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? "Procesando..." : "Registrar Pago Agrupado"}
+                        </Button>
+                    </ModalFooter>
+                </form>
             </Modal>
         </div>
     );

@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+from apps.core.models import SoftDeleteModel
 
 class ProviderCategory(models.Model):
     """Categorías de proveedores (Naviera, Agencia de Carga, etc.)"""
@@ -105,7 +106,7 @@ class SubClient(models.Model):
         return self.name
 
 
-class Service(models.Model):
+class Service(SoftDeleteModel):
     """Catálogo de servicios que ofrece la agencia aduanal"""
     name = models.CharField(max_length=255, verbose_name="Nombre del Servicio")
     description = models.TextField(blank=True, verbose_name="Descripción")

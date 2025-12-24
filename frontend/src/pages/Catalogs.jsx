@@ -356,229 +356,231 @@ function Catalogs() {
     };
 
     const renderForm = () => {
-        switch (currentCatalog) {
-            case "providerCategories":
-                return (
-                    <>
-                        <div>
-                            <Label>Nombre *</Label>
-                            <Input
-                                value={formData.name || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        name: e.target.value,
-                                    })
-                                }
-                                required
-                                placeholder="Ej: Naviera, Agencia de Carga, etc."
-                            />
-                        </div>
-                        <div>
-                            <Label>Descripción</Label>
-                            <textarea
-                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                rows={3}
-                                value={formData.description || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        description: e.target.value,
-                                    })
-                                }
-                                placeholder="Descripción de la categoría de proveedor"
-                            />
-                        </div>
-                    </>
-                );
+        return (
+            <div className="grid grid-cols-12 gap-4">
+                {(() => {
+                    switch (currentCatalog) {
+                        case "providerCategories":
+                            return (
+                                <>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Nombre *</Label>
+                                        <Input
+                                            value={formData.name || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                            required
+                                            placeholder="Ej: Naviera, Agencia de Carga"
+                                        />
+                                    </div>
+                                    <div className="col-span-12">
+                                        <Label>Descripción</Label>
+                                        <textarea
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                            rows={3}
+                                            value={formData.description || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    description: e.target.value,
+                                                })
+                                            }
+                                            placeholder="Descripción de la categoría de proveedor"
+                                        />
+                                    </div>
+                                </>
+                            );
 
-            case "providers":
-                return (
-                    <>
-                        <div>
-                            <Label>Nombre *</Label>
-                            <Input
-                                value={formData.name || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        name: e.target.value,
-                                    })
-                                }
-                                required
-                            />
-                        </div>
-                        <div>
-                            <Label>Categoría</Label>
-                            <SelectERP
-                                value={formData.category}
-                                onChange={(value) =>
-                                    setFormData({
-                                        ...formData,
-                                        category: value,
-                                    })
-                                }
-                                options={providerCategories}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                placeholder="Seleccionar categoría..."
-                                clearable
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>NIT</Label>
-                                <Input
-                                    value={formData.nit || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            nit: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                            <div>
-                                <Label>Teléfono</Label>
-                                <Input
-                                    value={formData.phone || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            phone: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Email</Label>
-                            <Input
-                                type="email"
-                                value={formData.email || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        email: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                        <div>
-                            <Label>Dirección</Label>
-                            <textarea
-                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                rows={2}
-                                value={formData.address || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        address: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                    </>
-                );
+                        case "providers":
+                            return (
+                                <>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Nombre *</Label>
+                                        <Input
+                                            value={formData.name || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                            required
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Categoría</Label>
+                                        <SelectERP
+                                            value={formData.category}
+                                            onChange={(value) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    category: value,
+                                                })
+                                            }
+                                            options={providerCategories}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            placeholder="Seleccionar categoría..."
+                                            clearable
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-4">
+                                        <Label>NIT</Label>
+                                        <Input
+                                            value={formData.nit || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    nit: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-4">
+                                        <Label>Teléfono</Label>
+                                        <Input
+                                            value={formData.phone || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    phone: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-4">
+                                        <Label>Email</Label>
+                                        <Input
+                                            type="email"
+                                            value={formData.email || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    email: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="col-span-12">
+                                        <Label>Dirección</Label>
+                                        <textarea
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                            rows={2}
+                                            value={formData.address || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    address: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </>
+                            );
 
-            case "banks":
-                return (
-                    <>
-                        <div>
-                            <Label>Nombre del Banco *</Label>
-                            <Input
-                                value={formData.name || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        name: e.target.value,
-                                    })
-                                }
-                                required
-                            />
-                        </div>
-                        <div>
-                            <Label>Teléfono</Label>
-                            <Input
-                                value={formData.contact_phone || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        contact_phone: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                    </>
-                );
+                        case "banks":
+                            return (
+                                <>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Nombre del Banco *</Label>
+                                        <Input
+                                            value={formData.name || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                            required
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Teléfono</Label>
+                                        <Input
+                                            value={formData.contact_phone || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    contact_phone: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </>
+                            );
 
-            case "shipmentTypes":
-                return (
-                    <>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Nombre *</Label>
-                                <Input
-                                    value={formData.name || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            name: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Código</Label>
-                                <Input
-                                    value={formData.code || ""}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            code: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Descripción</Label>
-                            <textarea
-                                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                rows={2}
-                                value={formData.description || ""}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        description: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                    </>
-                );
+                        case "shipmentTypes":
+                            return (
+                                <>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Nombre *</Label>
+                                        <Input
+                                            value={formData.name || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    name: e.target.value,
+                                                })
+                                            }
+                                            required
+                                        />
+                                    </div>
+                                    <div className="col-span-12 md:col-span-6">
+                                        <Label>Código</Label>
+                                        <Input
+                                            value={formData.code || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    code: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="col-span-12">
+                                        <Label>Descripción</Label>
+                                        <textarea
+                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                            rows={2}
+                                            value={formData.description || ""}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    description: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </>
+                            );
 
-            case "subClients":
-                return (
-                    <div>
-                        <Label>Nombre *</Label>
-                        <Input
-                            value={formData.name || ""}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    name: e.target.value,
-                                })
-                            }
-                            required
-                        />
-                    </div>
-                );
+                        case "subClients":
+                            return (
+                                <div className="col-span-12">
+                                    <Label>Nombre *</Label>
+                                    <Input
+                                        value={formData.name || ""}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                name: e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                </div>
+                            );
 
-            default:
-                return null;
-        }
+                        default:
+                            return null;
+                    }
+                })()}
+            </div>
+        );
     };
 
     const getModalTitle = () => {

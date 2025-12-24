@@ -10,6 +10,7 @@ Cumplimiento fiscal El Salvador (Ministerio de Hacienda):
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+from apps.core.models import SoftDeleteModel
 
 
 # Constantes fiscales El Salvador
@@ -18,7 +19,7 @@ RETENCION_RATE = Decimal('0.01')  # 1% retención Gran Contribuyente
 RETENCION_THRESHOLD = Decimal('100.00')  # Umbral para retención (sin IVA)
 
 
-class Service(models.Model):
+class Service(SoftDeleteModel):
     """
     Catálogo de servicios que ofrece la agencia aduanal
     Ej: ASESORÍA Y GESTIÓN ADUANAL, GESTIÓN DE PERMISO DE SALUD, etc.

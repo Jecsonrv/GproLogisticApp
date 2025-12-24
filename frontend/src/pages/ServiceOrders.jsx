@@ -14,6 +14,7 @@ import {
     XCircle,
     Calendar,
     Edit,
+    Trash2,
 } from "lucide-react";
 import {
     DataTable,
@@ -27,6 +28,7 @@ import {
     SelectERP,
     Badge,
     Label,
+    ConfirmDialog,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -130,6 +132,11 @@ const ServiceOrders = () => {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
+        open: false,
+        id: null,
+        orderNumber: ""
+    });
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -273,6 +280,27 @@ const ServiceOrders = () => {
         setTimeout(() => {
             handleEdit(order);
         }, 100);
+    };
+
+    const handleDelete = (order) => {
+        setConfirmDeleteDialog({
+            open: true,
+            id: order.id,
+            orderNumber: order.order_number
+        });
+    };
+
+    const confirmDelete = async () => {
+        try {
+            await axios.delete(`/orders/service-orders/${confirmDeleteDialog.id}/`);
+            toast.success("Orden de Servicio eliminada exitosamente");
+            fetchOrders();
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.error || "Error al eliminar la orden");
+        } finally {
+            setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" });
+        }
     };
 
     const handleCloseOrder = async (orderId) => {
@@ -521,6 +549,16 @@ const ServiceOrders = () => {
                                 title="Cerrar Orden"
                             >
                                 <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(row);
+                                }}
+                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                title="Eliminar Orden"
+                            >
+                                <Trash2 className="w-4 h-4" />
                             </button>
                         </>
                     )}
@@ -1028,6 +1066,17 @@ const ServiceOrders = () => {
                     />
                 )}
             </Modal>
+
+            <ConfirmDialog
+                open={confirmDeleteDialog.open}
+                onClose={() => setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" })}
+                onConfirm={confirmDelete}
+                title={`¿Eliminar Orden ${confirmDeleteDialog.orderNumber}?`}
+                description="Esta acción eliminará la orden de servicio. Si tiene facturas o pagos asociados, es posible que no se pueda eliminar."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
         </div>
     );
 };

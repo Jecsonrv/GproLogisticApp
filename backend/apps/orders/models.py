@@ -179,6 +179,20 @@ class ServiceOrder(SoftDeleteModel):
         profit = self.get_profit()
         return (profit / total_services) * Decimal('100')
 
+    def delete(self, using=None, keep_parents=False):
+        """
+        Sobreescritura de delete para validaciones de negocio antes del soft-delete.
+        """
+        # Validar si tiene facturas de venta asociadas
+        if self.invoices.exists():
+            raise ValidationError("No se puede eliminar la orden porque tiene facturas de venta asociadas.")
+        
+        # Validar si tiene gastos/transferencias asociadas (activas)
+        if self.transfers.filter(is_deleted=False).exists():
+            raise ValidationError("No se puede eliminar la orden porque tiene facturas de costos/gastos asociadas.")
+
+        super().delete(using=using, keep_parents=keep_parents)
+
 class OrderDocument(models.Model):
     """Documentos asociados a una Orden de Servicio"""
     DOCUMENT_TYPE_CHOICES = (

@@ -519,6 +519,11 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
         payment_method = request.data.get('payment_method')
         payment_date = request.data.get('payment_date')
 
+        # Debug logging
+        print(f"DEBUG: Received transfer_ids: {transfer_ids}")
+        print(f"DEBUG: Received data keys: {request.data.keys()}")
+        print(f"DEBUG: Total amount: {total_amount_str}, Method: {payment_method}, Date: {payment_date}")
+
         if not transfer_ids or len(transfer_ids) == 0:
             return Response(
                 {'error': 'Debe seleccionar al menos una factura'},
@@ -557,20 +562,35 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
             )
 
         # Validar que todas sean del mismo proveedor
-        providers = transfers.values_list('provider', flat=True).distinct()
-        if len(providers) > 1 or None in providers:
+        providers_set = set(transfers.values_list('provider', flat=True))
+
+        # Debug logging
+        print(f"DEBUG: Providers set: {providers_set}")
+        print(f"DEBUG: Transfers count: {transfers.count()}")
+        print(f"DEBUG: Transfer details: {[(t.id, t.provider_id) for t in transfers]}")
+
+        # Filtrar None si existe y convertir a lista
+        providers_not_none = [p for p in providers_set if p is not None]
+
+        if len(providers_not_none) == 0:
             return Response(
-                {'error': 'Todas las facturas deben ser del mismo proveedor'},
+                {'error': 'Las facturas seleccionadas no tienen proveedor asignado'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        provider_id = providers[0]
-
-        # Validar que las facturas estén en estado aprobado
-        non_approved = transfers.exclude(status__in=['aprobado', 'parcial'])
-        if non_approved.exists():
+        if len(providers_not_none) > 1:
             return Response(
-                {'error': f'Solo se pueden pagar facturas en estado "Aprobado" o "Pago Parcial". Facturas no aprobadas: {", ".join([str(t.id) for t in non_approved])}'},
+                {'error': f'Todas las facturas deben ser del mismo proveedor. Proveedores encontrados: {providers_not_none}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        provider_id = providers_not_none[0]
+
+        # Validar que las facturas no estén ya pagadas
+        already_paid = transfers.filter(status='pagado')
+        if already_paid.exists():
+            return Response(
+                {'error': f'Algunas facturas ya están pagadas. Facturas: {", ".join([str(t.id) for t in already_paid])}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
