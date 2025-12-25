@@ -46,7 +46,7 @@ const Forbidden = () => {
                     </Button>
                     <Button
                         onClick={() => navigate("/")}
-                        className="bg-brand-600 hover:bg-brand-700 inline-flex items-center gap-2"
+                        className="bg-slate-900 hover:bg-slate-800 inline-flex items-center gap-2"
                     >
                         <Home className="w-4 h-4" />
                         Ir al Dashboard

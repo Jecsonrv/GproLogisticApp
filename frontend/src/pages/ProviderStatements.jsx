@@ -257,9 +257,8 @@ const ProviderStatements = () => {
                 );
                 if (found) setSelectedProvider(found);
             }
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar proveedores");
-            console.error(error);
         } finally {
             setLoading(false);
         }
@@ -269,8 +268,8 @@ const ProviderStatements = () => {
         try {
             const response = await axios.get("/catalogs/banks/");
             setBanks(response.data);
-        } catch (error) {
-            console.error("Error al cargar bancos:", error);
+        } catch {
+            // Silencioso
         }
     };
 
@@ -401,9 +400,6 @@ const ProviderStatements = () => {
                 proof_file: null,
             });
         } catch (error) {
-            console.error("Error completo:", error);
-            console.error("Response data:", error.response?.data);
-            console.error("Selected IDs:", selectedTransferIds);
             const errorMsg = error.response?.data?.error || error.response?.data?.message || "Error al registrar pago agrupado";
             toast.error(errorMsg);
         } finally {
@@ -547,7 +543,7 @@ const ProviderStatements = () => {
                             className={cn(
                                 "w-4 h-4 rounded border-2 transition-all",
                                 isPayable
-                                    ? "border-gray-400 text-blue-600 hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 cursor-pointer hover:scale-110"
+                                    ? "border-gray-400 text-slate-700 hover:border-slate-900 focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 cursor-pointer hover:scale-110"
                                     : "border-gray-200 bg-gray-100 opacity-30 cursor-not-allowed"
                             )}
                             title={isPayable ? "Seleccionar para pago múltiple" : "Esta factura ya está pagada o no tiene saldo pendiente"}
@@ -579,7 +575,7 @@ const ProviderStatements = () => {
                             e.stopPropagation();
                             navigate(`/service-orders/${row.service_order_id}`);
                         }}
-                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        className="font-medium text-slate-700 hover:text-slate-900 hover:underline"
                     >
                         {row.service_order}
                     </button>
@@ -696,7 +692,7 @@ const ProviderStatements = () => {
                             e.stopPropagation();
                             openDetailModal(row);
                         }}
-                        className="text-gray-500 hover:text-blue-600"
+                        className="text-gray-500 hover:text-slate-900"
                         title="Ver Detalles"
                     >
                         <Eye className="w-4 h-4" />
@@ -711,37 +707,27 @@ const ProviderStatements = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
-                        Cuentas por Pagar
-                    </h1>
-                    <p className="text-slate-500 text-sm">
-                        Gestión de deuda a proveedores y estados de cuenta
-                    </p>
-                </div>
-                <div className="flex gap-2">
-                    <SelectERP
-                        value={selectedYear}
-                        onChange={setSelectedYear}
-                        options={[
-                            { id: 2025, name: "2025" },
-                            { id: 2024, name: "2024" },
-                            { id: 2023, name: "2023" },
-                        ]}
-                        getOptionLabel={(o) => o.name}
-                        getOptionValue={(o) => o.id}
-                        size="sm"
-                        className="w-32"
-                    />
-                    <Button
-                        variant="outline"
-                        onClick={() => fetchStatement(selectedProvider?.id)}
-                        disabled={!selectedProvider}
-                    >
-                        <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
-                    </Button>
-                </div>
+            <div className="flex justify-end gap-2">
+                <SelectERP
+                    value={selectedYear}
+                    onChange={setSelectedYear}
+                    options={[
+                        { id: 2025, name: "2025" },
+                        { id: 2024, name: "2024" },
+                        { id: 2023, name: "2023" },
+                    ]}
+                    getOptionLabel={(o) => o.name}
+                    getOptionValue={(o) => o.id}
+                    size="sm"
+                    className="w-24"
+                />
+                <Button
+                    variant="outline"
+                    onClick={() => fetchStatement(selectedProvider?.id)}
+                    disabled={!selectedProvider}
+                >
+                    <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
+                </Button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -814,7 +800,7 @@ const ProviderStatements = () => {
                                 <CardContent className="p-6">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <h2 className="text-xl font-bold text-slate-900">
+                                            <h2 className="text-xl font-semibold text-slate-700">
                                                 {selectedProvider.name}
                                             </h2>
                                             <p className="text-slate-500 text-sm mt-1">
@@ -847,7 +833,7 @@ const ProviderStatements = () => {
                                                 Corriente
                                             </span>
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 statement.aging.current
                                             )}
@@ -860,7 +846,7 @@ const ProviderStatements = () => {
                                                 1-30 Días
                                             </span>
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 statement.aging["1-30"]
                                             )}
@@ -873,7 +859,7 @@ const ProviderStatements = () => {
                                                 31-60 Días
                                             </span>
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 statement.aging["31-60"]
                                             )}
@@ -886,7 +872,7 @@ const ProviderStatements = () => {
                                                 61-90 Días
                                             </span>
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 statement.aging["61-90"]
                                             )}
@@ -899,7 +885,7 @@ const ProviderStatements = () => {
                                                 +90 Días
                                             </span>
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 statement.aging["90+"]
                                             )}
@@ -1259,7 +1245,7 @@ const ProviderStatements = () => {
                                 <div className="text-sm text-slate-500">
                                     Total
                                 </div>
-                                <div className="text-2xl font-bold text-slate-900 tabular-nums">
+                                <div className="text-2xl font-semibold text-slate-700 tabular-nums">
                                     {formatCurrency(selectedTransfer.amount)}
                                 </div>
                             </div>
@@ -1302,7 +1288,7 @@ const ProviderStatements = () => {
                                     <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                                         Monto Pagado
                                     </div>
-                                    <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                    <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                         {formatCurrency(
                                             selectedTransfer.paid_amount || 0
                                         )}
@@ -1315,7 +1301,7 @@ const ProviderStatements = () => {
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                                             Notas de Crédito
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 selectedTransfer.credited_amount ||
                                                     0
@@ -1643,7 +1629,7 @@ const ProviderStatements = () => {
                                 <tfoot className="bg-slate-100 border-t-2 border-slate-300">
                                     <tr>
                                         <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
-                                        <td className="px-3 py-2 text-right font-bold text-lg text-blue-600">
+                                        <td className="px-3 py-2 text-right font-bold text-lg text-slate-700">
                                             {formatCurrency(batchPaymentForm.total_amount || 0)}
                                         </td>
                                     </tr>

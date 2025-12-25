@@ -308,7 +308,7 @@ function Profile() {
                                     <Button
                                         type="submit"
                                         disabled={isUpdatingProfile}
-                                        className="gap-2"
+                                        className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
                                     >
                                         <Save className="w-4 h-4" />
                                         {isUpdatingProfile
@@ -512,7 +512,7 @@ function Profile() {
                                         type="submit"
                                         variant="outline"
                                         disabled={isUpdatingPassword}
-                                        className="gap-2"
+                                        className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
                                     >
                                         <Lock className="w-4 h-4" />
                                         {isUpdatingPassword

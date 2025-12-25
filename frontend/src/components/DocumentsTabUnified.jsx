@@ -15,30 +15,35 @@ import {
     ChevronRight,
     ExternalLink,
     DollarSign,
-    Filter,
     RefreshCw,
+    FolderArchive,
+    CheckSquare,
+    Square,
+    Loader2,
 } from "lucide-react";
 import { Button, EmptyState, ConfirmDialog, Label, Input, Badge } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatDate, formatCurrency, cn } from "../lib/utils";
+import JSZip from "jszip";
 
 /**
- * DocumentsTabUnified - Vista unificada de TODOS los documentos relacionados a una OS
- * Incluye: Documentos directos, facturas, pagos de clientes, notas de crédito,
- * facturas de proveedores y comprobantes de pago a proveedores
+ * DocumentsTabUnified - Centro de Documentos de OS
+ * Diseño ERP corporativo con exportación masiva ZIP
+ * Refactorizado para UX/UI limpia y sobria
  */
-const DocumentsTabUnified = ({ orderId, onUpdate }) => {
+const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
     const [allDocuments, setAllDocuments] = useState([]);
     const [categoriesSummary, setCategoriesSummary] = useState({});
     const [totalDocuments, setTotalDocuments] = useState(0);
     const [loading, setLoading] = useState(true);
     const [isUploading, setIsUploading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [selectedDocs, setSelectedDocs] = useState(new Set());
     const [confirmDialog, setConfirmDialog] = useState({
         open: false,
         id: null,
         sourceModel: null,
-        sourceId: null,
     });
     const [uploadForm, setUploadForm] = useState({
         document_type: "tramite",
@@ -48,6 +53,7 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
     const [dragOver, setDragOver] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState({});
     const [activeFilter, setActiveFilter] = useState("all");
+    const [showUploadForm, setShowUploadForm] = useState(false);
     const fileInputRef = useRef(null);
 
     useEffect(() => {
@@ -65,7 +71,6 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
             setCategoriesSummary(response.data.categories_summary || {});
             setTotalDocuments(response.data.total_documents || 0);
 
-            // Expandir todas las categorías por defecto
             const categories = Object.keys(
                 response.data.categories_summary || {}
             );
@@ -74,81 +79,79 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
                 expanded[cat] = true;
             });
             setExpandedCategories(expanded);
-        } catch (error) {
-            console.error("Error loading documents:", error);
+        } catch {
             toast.error("Error al cargar documentos");
         } finally {
             setLoading(false);
         }
     };
 
-    // Configuración de categorías
+    // Configuración de categorías - Estilo corporativo SOBRIO
+    // Se eliminan los fondos de color (bg-*-50) para evitar saturación visual.
+    // Se usan colores semánticos solo en iconos y acentos sutiles.
     const CATEGORY_CONFIG = {
         tramite: {
-            label: "Documentos del Trámite",
+            label: "Trámite",
+            fullLabel: "Documentos del Trámite",
             icon: FileText,
-            color: "text-blue-600",
-            bgColor: "bg-blue-50",
-            borderColor: "border-blue-200",
-            badgeVariant: "info",
+            color: "text-slate-600",
+            hoverColor: "hover:text-slate-800",
+            prefix: "TRAMITE",
         },
         factura_venta: {
-            label: "Facturas de Venta",
+            label: "Facturación",
+            fullLabel: "Facturas de Venta",
             icon: Receipt,
-            color: "text-emerald-600",
-            bgColor: "bg-emerald-50",
-            borderColor: "border-emerald-200",
-            badgeVariant: "success",
+            color: "text-slate-600",
+            prefix: "FACTURA",
         },
         pago_cliente: {
-            label: "Pagos de Clientes",
+            label: "Cobros",
+            fullLabel: "Pagos de Clientes",
             icon: Banknote,
-            color: "text-green-600",
-            bgColor: "bg-green-50",
-            borderColor: "border-green-200",
-            badgeVariant: "success",
+            color: "text-slate-600",
+            hoverColor: "hover:text-green-700",
+            prefix: "PAGO CLIENTE",
         },
         nota_credito: {
-            label: "Notas de Crédito",
+            label: "Notas Crédito",
+            fullLabel: "Notas de Crédito",
             icon: CreditCard,
-            color: "text-purple-600",
-            bgColor: "bg-purple-50",
-            borderColor: "border-purple-200",
-            badgeVariant: "purple",
+            color: "text-slate-600",
+            hoverColor: "hover:text-purple-700",
+            prefix: "NC",
         },
         factura_costo: {
-            label: "Facturas de Proveedores",
+            label: "Costos",
+            fullLabel: "Facturas de Proveedores",
             icon: Building2,
-            color: "text-orange-600",
-            bgColor: "bg-orange-50",
-            borderColor: "border-orange-200",
-            badgeVariant: "warning",
+            color: "text-slate-600",
+            hoverColor: "hover:text-orange-700",
+            prefix: "FACT PROVEEDOR",
         },
         pago_proveedor: {
-            label: "Pagos a Proveedores",
+            label: "Pagos Prov.",
+            fullLabel: "Pagos a Proveedores",
             icon: DollarSign,
-            color: "text-red-600",
-            bgColor: "bg-red-50",
-            borderColor: "border-red-200",
-            badgeVariant: "danger",
+            color: "text-slate-600",
+            hoverColor: "hover:text-red-700",
+            prefix: "PAGO PROVEEDOR",
         },
         otros: {
-            label: "Otros Documentos",
+            label: "Otros",
+            fullLabel: "Otros Documentos",
             icon: File,
             color: "text-slate-600",
-            bgColor: "bg-slate-50",
-            borderColor: "border-slate-200",
-            badgeVariant: "default",
+            hoverColor: "hover:text-slate-800",
+            prefix: "DOC",
         },
     };
 
-    // Filtrar documentos
     const filteredDocuments = useMemo(() => {
         if (activeFilter === "all") return allDocuments;
         return allDocuments.filter((doc) => doc.category === activeFilter);
     }, [allDocuments, activeFilter]);
 
-    // Agrupar documentos por categoría
     const groupedDocuments = useMemo(() => {
         return filteredDocuments.reduce((acc, doc) => {
             const cat = doc.category || "otros";
@@ -157,6 +160,128 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
             return acc;
         }, {});
     }, [filteredDocuments]);
+
+    // Selección de documentos
+    const toggleDocSelection = (docId) => {
+        const newSelected = new Set(selectedDocs);
+        if (newSelected.has(docId)) {
+            newSelected.delete(docId);
+        } else {
+            newSelected.add(docId);
+        }
+        setSelectedDocs(newSelected);
+    };
+
+    const selectAllInCategory = (category) => {
+        const docs = groupedDocuments[category] || [];
+        const newSelected = new Set(selectedDocs);
+        const allSelected = docs.every((doc) => newSelected.has(doc.id));
+
+        if (allSelected) {
+            docs.forEach((doc) => newSelected.delete(doc.id));
+        } else {
+            docs.forEach((doc) => newSelected.add(doc.id));
+        }
+        setSelectedDocs(newSelected);
+    };
+
+    const selectAll = () => {
+        if (selectedDocs.size === filteredDocuments.length) {
+            setSelectedDocs(new Set());
+        } else {
+            setSelectedDocs(new Set(filteredDocuments.map((doc) => doc.id)));
+        }
+    };
+
+    // Función para generar nombre de archivo ordenado
+    const generateFileName = (doc, index, categoryPrefix) => {
+        const osNumber = orderNumber || `OS${orderId}`;
+        const cleanDescription = (doc.description || "documento")
+            .replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s\-\.]/g, "") // Permitir espacios, guiones y puntos
+            .substring(0, 50); // Aumentar un poco el límite para nombres más naturales
+
+        const extension = doc.file_name?.split(".").pop() || "pdf";
+        const paddedIndex = String(index + 1).padStart(2, "0");
+
+        // Usar espacios como separadores naturales en lugar de guiones bajos
+        return `${osNumber} ${categoryPrefix} ${paddedIndex} ${cleanDescription}.${extension}`;
+    };
+
+    // Exportación masiva en ZIP
+    const handleExportZip = async () => {
+        const docsToExport =
+            selectedDocs.size > 0
+                ? filteredDocuments.filter((doc) => selectedDocs.has(doc.id))
+                : filteredDocuments;
+
+        if (docsToExport.length === 0) {
+            toast.error("No hay documentos para exportar");
+            return;
+        }
+
+        try {
+            setIsExporting(true);
+            const zip = new JSZip();
+            const osNumber = orderNumber || `OS${orderId}`;
+
+            // Agrupar por categoría para renombrado ordenado
+            const groupedForExport = {};
+            docsToExport.forEach((doc) => {
+                const cat = doc.category || "otros";
+                if (!groupedForExport[cat]) groupedForExport[cat] = [];
+                groupedForExport[cat].push(doc);
+            });
+
+            // Crear carpetas por categoría
+            for (const [category, docs] of Object.entries(groupedForExport)) {
+                const config =
+                    CATEGORY_CONFIG[category] || CATEGORY_CONFIG.otros;
+                const folderName = `${config.prefix}`;
+                const folder = zip.folder(folderName);
+
+                for (let i = 0; i < docs.length; i++) {
+                    const doc = docs[i];
+                    try {
+                        const response = await fetch(doc.file_url);
+                        if (!response.ok) continue;
+
+                        const blob = await response.blob();
+                        const fileName = generateFileName(
+                            doc,
+                            i,
+                            config.prefix
+                        );
+                        folder.file(fileName, blob);
+                    } catch {
+                        // Continuar con el siguiente documento si falla
+                    }
+                }
+            }
+
+            // Generar y descargar el ZIP
+            const content = await zip.generateAsync({ type: "blob" });
+            const timestamp = new Date().toISOString().split("T")[0];
+            const zipFileName = `${osNumber}_DOCUMENTOS_${timestamp}.zip`;
+
+            const downloadUrl = window.URL.createObjectURL(content);
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.download = zipFileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+
+            toast.success(
+                `${docsToExport.length} documentos exportados exitosamente`
+            );
+            setSelectedDocs(new Set());
+        } catch {
+            toast.error("Error al generar el archivo ZIP");
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const handleFileSelect = (file) => {
         if (file.size > 5 * 1024 * 1024) {
@@ -180,10 +305,12 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
         e.preventDefault();
         setDragOver(true);
     };
+
     const handleDragLeave = (e) => {
         e.preventDefault();
         setDragOver(false);
     };
+
     const handleDrop = (e) => {
         e.preventDefault();
         setDragOver(false);
@@ -212,6 +339,7 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
 
             toast.success("Documento subido exitosamente");
             resetForm();
+            setShowUploadForm(false);
             fetchAllDocuments();
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -242,14 +370,13 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
         setConfirmDialog({ open: false, id: null, sourceModel: null });
 
         try {
-            // Solo se pueden eliminar OrderDocument desde aquí
             if (sourceModel === "OrderDocument") {
                 await axios.delete(`/orders/documents/${id}/`);
                 toast.success("Documento eliminado exitosamente");
                 fetchAllDocuments();
                 if (onUpdate) onUpdate();
             }
-        } catch (_error) {
+        } catch {
             toast.error("Error al eliminar documento");
         }
     };
@@ -267,15 +394,19 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
         try {
             const response = await fetch(doc.file_url);
             const blob = await response.blob();
+            const config =
+                CATEGORY_CONFIG[doc.category] || CATEGORY_CONFIG.otros;
+            const fileName = generateFileName(doc, 0, config.prefix);
+
             const downloadUrl = window.URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = downloadUrl;
-            link.download = doc.file_name || doc.description || "documento";
+            link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(downloadUrl);
-        } catch (_error) {
+        } catch {
             toast.error("Error al descargar el documento");
         }
     };
@@ -288,9 +419,9 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
     };
 
     const formatFileSize = (bytes) => {
-        if (!bytes || bytes === 0) return "";
+        if (!bytes || bytes === 0) return "—";
         const k = 1024;
-        const sizes = ["Bytes", "KB", "MB"];
+        const sizes = ["B", "KB", "MB"];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return (
             Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
@@ -299,455 +430,555 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="flex items-center justify-center py-16">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 text-slate-400 animate-spin mx-auto mb-3" />
+                    <p className="text-sm text-slate-500 font-medium">
+                        Cargando documentos...
+                    </p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-5">
-            {/* Header con resumen */}
-            <div className="bg-white border border-slate-200 rounded-lg p-5">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-lg font-semibold text-slate-900">
-                            Centro de Documentos
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                            Todos los documentos relacionados a esta orden de
-                            servicio
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+        <div className="space-y-6">
+            {/* Header: Título y Acciones principales */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                        Centro de Documentos
+                        <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                            {totalDocuments} archivos
+                        </span>
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                        Gestión centralizada de archivos y comprobantes
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    {filteredDocuments.length > 0 && (
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={fetchAllDocuments}
-                            className="text-slate-600"
+                            onClick={handleExportZip}
+                            disabled={isExporting}
+                            className="text-slate-600 border-slate-300 hover:bg-slate-50"
                         >
-                            <RefreshCw className="w-4 h-4 mr-1.5" />
-                            Actualizar
+                            {isExporting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <FolderArchive className="w-4 h-4 mr-2" />
+                            )}
+                            {selectedDocs.size > 0
+                                ? `Exportar (${selectedDocs.size})`
+                                : "Descargar Todo ZIP"}
                         </Button>
-                        <Badge variant="default" className="px-3 py-1">
-                            {totalDocuments} documentos
-                        </Badge>
-                    </div>
+                    )}
+                    <Button
+                        size="sm"
+                        onClick={() => setShowUploadForm(!showUploadForm)}
+                        className={
+                            showUploadForm
+                                ? "bg-slate-700 text-white"
+                                : "bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+                        }
+                    >
+                        {showUploadForm ? (
+                            <>
+                                <X className="w-4 h-4 mr-2" />
+                                Cancelar Subida
+                            </>
+                        ) : (
+                            <>
+                                <Upload className="w-4 h-4 mr-2" />
+                                Subir Documento
+                            </>
+                        )}
+                    </Button>
                 </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
-                    {Object.entries(categoriesSummary).map(([cat, data]) => {
-                        const config =
-                            CATEGORY_CONFIG[cat] || CATEGORY_CONFIG.otros;
-                        const Icon = config.icon;
-                        return (
-                            <button
-                                key={cat}
-                                onClick={() =>
-                                    setActiveFilter(
-                                        activeFilter === cat ? "all" : cat
-                                    )
-                                }
-                                className={cn(
-                                    "p-3 rounded-lg border transition-all text-left",
-                                    activeFilter === cat
-                                        ? `${config.bgColor} ${config.borderColor} ring-2 ring-offset-1 ring-blue-500`
-                                        : "bg-white border-slate-200 hover:border-slate-300"
-                                )}
-                            >
-                                <Icon
-                                    className={cn("w-4 h-4 mb-1", config.color)}
-                                />
-                                <p className="text-lg font-bold text-slate-900">
-                                    {data.count}
-                                </p>
-                                <p className="text-xs text-slate-500 truncate">
-                                    {data.label}
-                                </p>
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {activeFilter !== "all" && (
-                    <div className="flex items-center gap-2 text-sm">
-                        <Filter className="w-4 h-4 text-blue-600" />
-                        <span className="text-slate-600">Filtrando por:</span>
-                        <Badge
-                            variant={
-                                CATEGORY_CONFIG[activeFilter]?.badgeVariant ||
-                                "default"
-                            }
-                        >
-                            {CATEGORY_CONFIG[activeFilter]?.label ||
-                                activeFilter}
-                        </Badge>
-                        <button
-                            onClick={() => setActiveFilter("all")}
-                            className="text-blue-600 hover:text-blue-700 underline ml-2"
-                        >
-                            Ver todos
-                        </button>
-                    </div>
-                )}
             </div>
 
-            {/* Formulario de Upload */}
-            <div className="bg-white border border-slate-200 rounded-lg p-5">
-                <h4 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-blue-600" />
-                    Subir Nuevo Documento
-                </h4>
-                <form onSubmit={handleUpload} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
-                                Categoría
-                            </Label>
-                            <select
-                                value={uploadForm.document_type}
-                                onChange={(e) =>
-                                    setUploadForm({
-                                        ...uploadForm,
-                                        document_type: e.target.value,
-                                    })
-                                }
-                                required
-                                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="tramite">
-                                    Documentos del Trámite (DUCA, BL, Levante)
-                                </option>
-                                <option value="factura_venta">
-                                    Facturas de Venta
-                                </option>
-                                <option value="factura_costo">
-                                    Facturas de Costo / Comprobantes
-                                </option>
-                                <option value="otros">
-                                    Otros Documentos / Evidencias
-                                </option>
-                            </select>
-                        </div>
-                        <div>
-                            <Label className="text-xs font-medium text-slate-600 mb-1.5 block">
-                                Descripción
-                            </Label>
-                            <Input
-                                type="text"
-                                value={uploadForm.description}
-                                onChange={(e) =>
-                                    setUploadForm({
-                                        ...uploadForm,
-                                        description: e.target.value,
-                                    })
-                                }
-                                placeholder="Ej: DUCA 4-2558, BL Original, etc."
-                                className="text-sm"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Drag & Drop Zone */}
-                    <div
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        className={cn(
-                            "relative border-2 border-dashed rounded-lg p-6 text-center transition-all",
-                            dragOver
-                                ? "border-blue-500 bg-blue-50"
-                                : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"
-                        )}
-                    >
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={(e) =>
-                                handleFileSelect(e.target.files[0])
-                            }
-                            className="hidden"
-                        />
-
-                        {!uploadForm.file ? (
+            {/* Formulario de Upload colapsable - Diseño limpio */}
+            {showUploadForm && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <form onSubmit={handleUpload} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <Upload className="w-10 h-10 mx-auto text-slate-400 mb-2" />
-                                <p className="text-sm text-slate-600 mb-1">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            fileInputRef.current?.click()
-                                        }
-                                        className="text-blue-600 hover:text-blue-700 font-medium"
-                                    >
-                                        Click para seleccionar
-                                    </button>{" "}
-                                    o arrastra el archivo aquí
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                    PDF, JPG, PNG - Máximo 5MB
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-100 rounded">
-                                        <FileText className="w-4 h-4 text-blue-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-medium text-slate-900">
-                                            {uploadForm.file.name}
-                                        </p>
-                                        <p className="text-xs text-slate-500">
-                                            {formatFileSize(
-                                                uploadForm.file.size
-                                            )}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
+                                <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 block">
+                                    Categoría
+                                </Label>
+                                <select
+                                    value={uploadForm.document_type}
+                                    onChange={(e) =>
                                         setUploadForm({
                                             ...uploadForm,
-                                            file: null,
-                                        });
-                                        if (fileInputRef.current)
-                                            fileInputRef.current.value = "";
-                                    }}
-                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            document_type: e.target.value,
+                                        })
+                                    }
+                                    required
+                                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-slate-500 focus:border-slate-500 transition-shadow"
                                 >
-                                    <X className="w-4 h-4" />
-                                </button>
+                                    <option value="tramite">
+                                        Trámite (DUCA, BL, Levante)
+                                    </option>
+                                    <option value="factura_venta">
+                                        Facturas de Venta
+                                    </option>
+                                    <option value="factura_costo">
+                                        Facturas de Costo
+                                    </option>
+                                    <option value="otros">Otros</option>
+                                </select>
                             </div>
+                            <div className="md:col-span-2">
+                                <Label className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2 block">
+                                    Descripción del archivo
+                                </Label>
+                                <Input
+                                    type="text"
+                                    value={uploadForm.description}
+                                    onChange={(e) =>
+                                        setUploadForm({
+                                            ...uploadForm,
+                                            description: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Ej: DUCA 4-2558, BL Original Escaneado..."
+                                    className="text-sm bg-white border-slate-300"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Drop Zone Refinada */}
+                        <div
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            className={cn(
+                                "relative border-2 border-dashed rounded-lg p-6 text-center transition-all bg-white",
+                                dragOver
+                                    ? "border-slate-500 bg-slate-50"
+                                    : "border-slate-300 hover:border-slate-400 hover:bg-slate-50/50"
+                            )}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(e) =>
+                                    handleFileSelect(e.target.files[0])
+                                }
+                                className="hidden"
+                            />
+
+                            {!uploadForm.file ? (
+                                <div className="flex flex-col items-center justify-center gap-2">
+                                    <div className="p-3 bg-slate-100 rounded-full mb-2">
+                                        <Upload className="w-6 h-6 text-slate-500" />
+                                    </div>
+                                    <p className="text-sm font-medium text-slate-700">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                fileInputRef.current?.click()
+                                            }
+                                            className="text-slate-900 hover:text-slate-700 hover:underline font-semibold"
+                                        >
+                                            Haz clic para seleccionar
+                                        </button>{" "}
+                                        o arrastra y suelta aquí
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        Soporta PDF, JPG, PNG (Max 5MB)
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md p-3 max-w-lg mx-auto">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className="p-2 bg-white rounded shadow-sm">
+                                            <FileText className="w-5 h-5 text-slate-700" />
+                                        </div>
+                                        <div className="text-left overflow-hidden">
+                                            <p className="text-sm font-medium text-slate-900 truncate w-full">
+                                                {uploadForm.file.name}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {formatFileSize(
+                                                    uploadForm.file.size
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setUploadForm({
+                                                ...uploadForm,
+                                                file: null,
+                                            });
+                                            if (fileInputRef.current)
+                                                fileInputRef.current.value = "";
+                                        }}
+                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <Button
+                                type="submit"
+                                className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]"
+                                disabled={!uploadForm.file || isUploading}
+                            >
+                                {isUploading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Subiendo...
+                                    </>
+                                ) : (
+                                    "Confirmar Subida"
+                                )}
+                            </Button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* Navegación y Filtros de Categoría */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-hide border-b border-slate-100">
+                <button
+                    onClick={() => setActiveFilter("all")}
+                    className={cn(
+                        "px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap border",
+                        activeFilter === "all"
+                            ? "bg-slate-800 text-white border-slate-800 shadow-sm"
+                            : "bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                >
+                    Todos
+                    <span
+                        className={cn(
+                            "ml-2 px-1.5 py-0.5 text-[10px] rounded-full",
+                            activeFilter === "all"
+                                ? "bg-slate-600 text-slate-100"
+                                : "bg-slate-100 text-slate-600"
+                        )}
+                    >
+                        {totalDocuments}
+                    </span>
+                </button>
+                <div className="h-6 w-px bg-slate-200 mx-2" />
+                {Object.entries(categoriesSummary).map(([cat, data]) => {
+                    const config =
+                        CATEGORY_CONFIG[cat] || CATEGORY_CONFIG.otros;
+                    const Icon = config.icon;
+                    const isActive = activeFilter === cat;
+                    return (
+                        <button
+                            key={cat}
+                            onClick={() =>
+                                setActiveFilter(isActive ? "all" : cat)
+                            }
+                            className={cn(
+                                "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap border",
+                                isActive
+                                    ? "bg-white border-slate-300 text-slate-900 shadow-sm ring-1 ring-slate-200"
+                                    : "bg-white border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                            )}
+                        >
+                            <Icon
+                                className={cn(
+                                    "w-4 h-4",
+                                    isActive
+                                        ? "text-slate-900"
+                                        : "text-slate-400"
+                                )}
+                            />
+                            {config.label}
+                            <span
+                                className={cn(
+                                    "px-1.5 py-0.5 text-[10px] rounded-full font-bold",
+                                    isActive
+                                        ? "bg-slate-100 text-slate-900"
+                                        : "bg-slate-50 text-slate-400"
+                                )}
+                            >
+                                {data.count}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Barra de selección y herramientas */}
+            {filteredDocuments.length > 0 && (
+                <div className="flex items-center justify-between bg-slate-50 px-4 py-2 rounded-md border border-slate-100">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={selectAll}
+                            className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+                        >
+                            {selectedDocs.size === filteredDocuments.length ? (
+                                <CheckSquare className="w-4 h-4 text-slate-800" />
+                            ) : (
+                                <Square className="w-4 h-4 text-slate-400" />
+                            )}
+                            {selectedDocs.size > 0
+                                ? `${selectedDocs.size} seleccionados`
+                                : "Seleccionar todo"}
+                        </button>
+                        {selectedDocs.size > 0 && (
+                            <>
+                                <div className="h-4 w-px bg-slate-300" />
+                                <button
+                                    onClick={() => setSelectedDocs(new Set())}
+                                    className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                                >
+                                    Limpiar
+                                </button>
+                            </>
                         )}
                     </div>
-
-                    <div className="flex items-center justify-end gap-3">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={resetForm}
-                            disabled={isUploading}
-                            size="sm"
-                        >
-                            Limpiar
-                        </Button>
-                        <Button
-                            type="submit"
-                            className="bg-blue-600 hover:bg-blue-700"
-                            disabled={!uploadForm.file || isUploading}
-                            size="sm"
-                        >
-                            {isUploading ? "Subiendo..." : "Subir Documento"}
-                        </Button>
+                    <div className="text-xs text-slate-400">
+                        {/* Espacio para info adicional si es necesario */}
                     </div>
-                </form>
-            </div>
+                </div>
+            )}
 
             {/* Lista de Documentos Agrupados */}
             {Object.keys(groupedDocuments).length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-6">
                     {Object.entries(groupedDocuments).map(
                         ([category, docs]) => {
                             const config =
                                 CATEGORY_CONFIG[category] ||
                                 CATEGORY_CONFIG.otros;
-                            const Icon = config.icon;
                             const isExpanded =
                                 expandedCategories[category] !== false;
+                            const allSelected = docs.every((doc) =>
+                                selectedDocs.has(doc.id)
+                            );
 
                             return (
-                                <div
-                                    key={category}
-                                    className="bg-white border border-slate-200 rounded-lg overflow-hidden"
-                                >
-                                    {/* Category Header */}
-                                    <button
-                                        onClick={() => toggleCategory(category)}
-                                        className={cn(
-                                            "w-full px-5 py-3 flex items-center justify-between border-b transition-colors",
-                                            config.bgColor,
-                                            config.borderColor,
-                                            "hover:opacity-90"
-                                        )}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <Icon
-                                                className={cn(
-                                                    "w-5 h-5",
-                                                    config.color
+                                <div key={category} className="group">
+                                    {/* Encabezado de grupo limpio */}
+                                    <div className="flex items-center gap-3 mb-3 px-1">
+                                        <button
+                                            onClick={() =>
+                                                toggleCategory(category)
+                                            }
+                                            className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-700 transition-colors"
+                                        >
+                                            <span className="p-1 bg-slate-100 rounded-md text-slate-500 group-hover:text-slate-700">
+                                                {isExpanded ? (
+                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                ) : (
+                                                    <ChevronRight className="w-3.5 h-3.5" />
                                                 )}
-                                            />
-                                            <span className="text-sm font-semibold text-slate-900">
-                                                {config.label}
                                             </span>
-                                            <Badge
-                                                variant={config.badgeVariant}
-                                                className="text-xs"
-                                            >
-                                                {docs.length}
-                                            </Badge>
-                                        </div>
-                                        {isExpanded ? (
-                                            <ChevronDown className="w-4 h-4 text-slate-500" />
-                                        ) : (
-                                            <ChevronRight className="w-4 h-4 text-slate-500" />
-                                        )}
-                                    </button>
+                                            {config.fullLabel}
+                                        </button>
+                                        <div className="h-px flex-1 bg-slate-100 group-hover:bg-slate-200 transition-colors" />
+                                        <button
+                                            onClick={() =>
+                                                selectAllInCategory(category)
+                                            }
+                                            className="text-xs text-slate-400 hover:text-slate-600 font-medium"
+                                        >
+                                            {allSelected
+                                                ? "Deseleccionar grupo"
+                                                : "Seleccionar grupo"}
+                                        </button>
+                                    </div>
 
-                                    {/* Documents List */}
+                                    {/* Tabla de documentos */}
                                     {isExpanded && (
-                                        <div className="divide-y divide-slate-100">
-                                            {docs.map((doc) => (
-                                                <div
-                                                    key={doc.id}
-                                                    className="px-5 py-4 hover:bg-slate-50 transition-colors"
-                                                >
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                                                            <div
+                                        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                                    <tr>
+                                                        <th className="w-10 px-4 py-3 text-center">
+                                                            {/* Checkbox column */}
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Documento
+                                                        </th>
+                                                        <th className="px-4 py-3 hidden sm:table-cell">
+                                                            Referencia
+                                                        </th>
+                                                        <th className="px-4 py-3 hidden md:table-cell">
+                                                            Subido
+                                                        </th>
+                                                        <th className="px-4 py-3 text-right">
+                                                            Acciones
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {docs.map((doc) => {
+                                                        const isSelected =
+                                                            selectedDocs.has(
+                                                                doc.id
+                                                            );
+                                                        return (
+                                                            <tr
+                                                                key={doc.id}
                                                                 className={cn(
-                                                                    "p-2 rounded",
-                                                                    config.bgColor
+                                                                    "group/row transition-colors hover:bg-slate-50",
+                                                                    isSelected &&
+                                                                        "bg-slate-100 hover:bg-slate-100/80"
                                                                 )}
                                                             >
-                                                                <FileText
-                                                                    className={cn(
-                                                                        "w-4 h-4",
-                                                                        config.color
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium text-slate-900 truncate">
-                                                                    {
-                                                                        doc.description
-                                                                    }
-                                                                </p>
-
-                                                                {/* Metadata row */}
-                                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                                                                    {doc.reference_label && (
-                                                                        <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
-                                                                            <ExternalLink className="w-3 h-3" />
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            toggleDocSelection(
+                                                                                doc.id
+                                                                            )
+                                                                        }
+                                                                        className="outline-none"
+                                                                    >
+                                                                        {isSelected ? (
+                                                                            <CheckSquare className="w-4 h-4 text-slate-900" />
+                                                                        ) : (
+                                                                            <Square className="w-4 h-4 text-slate-300 group-hover/row:text-slate-400" />
+                                                                        )}
+                                                                    </button>
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <div
+                                                                            className={cn(
+                                                                                "mt-0.5 p-1.5 rounded-md bg-slate-50 text-slate-400",
+                                                                                config.color // Color semántico sutil solo en el icono
+                                                                            )}
+                                                                        >
+                                                                            <config.icon className="w-4 h-4" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <p
+                                                                                className="font-medium text-slate-900 group-hover/row:text-slate-700 transition-colors cursor-pointer"
+                                                                                onClick={() =>
+                                                                                    window.open(
+                                                                                        doc.file_url,
+                                                                                        "_blank"
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    doc.description
+                                                                                }
+                                                                            </p>
+                                                                            <div className="flex flex-wrap gap-2 mt-0.5">
+                                                                                <span
+                                                                                    className="text-xs text-slate-500"
+                                                                                    title={
+                                                                                        doc.file_name
+                                                                                    }
+                                                                                >
+                                                                                    {doc
+                                                                                        .file_name
+                                                                                        ?.length >
+                                                                                    30
+                                                                                        ? doc.file_name.substring(
+                                                                                              0,
+                                                                                              30
+                                                                                          ) +
+                                                                                          "..."
+                                                                                        : doc.file_name}
+                                                                                </span>
+                                                                                {doc.amount && (
+                                                                                    <Badge
+                                                                                        variant="outline"
+                                                                                        className="text-[10px] py-0 h-4 border-slate-200 text-slate-600"
+                                                                                    >
+                                                                                        {formatCurrency(
+                                                                                            doc.amount
+                                                                                        )}
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 hidden sm:table-cell">
+                                                                    {doc.reference_label ? (
+                                                                        <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-xs font-medium text-slate-600">
                                                                             {
                                                                                 doc.reference_label
                                                                             }
                                                                         </span>
-                                                                    )}
-                                                                    {doc.amount && (
-                                                                        <span className="text-xs font-semibold text-slate-700">
-                                                                            {formatCurrency(
-                                                                                doc.amount
-                                                                            )}
+                                                                    ) : (
+                                                                        <span className="text-slate-400 text-xs">
+                                                                            —
                                                                         </span>
                                                                     )}
-                                                                    {doc.subcategory && (
-                                                                        <span className="text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                            {
-                                                                                doc.subcategory
-                                                                            }
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-
-                                                                {/* Secondary info */}
-                                                                <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-                                                                    {doc.uploaded_at && (
-                                                                        <span>
+                                                                </td>
+                                                                <td className="px-4 py-3 hidden md:table-cell">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs text-slate-600">
                                                                             {formatDate(
                                                                                 doc.uploaded_at,
                                                                                 {
-                                                                                    format: "medium",
+                                                                                    format: "short",
                                                                                 }
                                                                             )}
                                                                         </span>
-                                                                    )}
-                                                                    {doc.uploaded_by && (
-                                                                        <>
-                                                                            <span className="text-slate-300">
-                                                                                •
-                                                                            </span>
-                                                                            <span>
-                                                                                Por:{" "}
-                                                                                {
-                                                                                    doc.uploaded_by
+                                                                        <span className="text-[10px] text-slate-400">
+                                                                            {doc.uploaded_by ||
+                                                                                "Sistema"}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                                                                        <button
+                                                                            onClick={() =>
+                                                                                window.open(
+                                                                                    doc.file_url,
+                                                                                    "_blank"
+                                                                                )
+                                                                            }
+                                                                            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                                                            title="Ver documento"
+                                                                        >
+                                                                            <Eye className="w-4 h-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() =>
+                                                                                handleDownload(
+                                                                                    doc
+                                                                                )
+                                                                            }
+                                                                            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                                                            title="Descargar"
+                                                                        >
+                                                                            <Download className="w-4 h-4" />
+                                                                        </button>
+                                                                        {doc.deletable && (
+                                                                            <button
+                                                                                onClick={() =>
+                                                                                    handleDelete(
+                                                                                        doc
+                                                                                    )
                                                                                 }
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-                                                                    {doc.file_name && (
-                                                                        <>
-                                                                            <span className="text-slate-300">
-                                                                                •
-                                                                            </span>
-                                                                            <span
-                                                                                className="truncate max-w-[150px]"
-                                                                                title={
-                                                                                    doc.file_name
-                                                                                }
+                                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                                                title="Eliminar"
                                                                             >
-                                                                                {
-                                                                                    doc.file_name
-                                                                                }
-                                                                            </span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Actions */}
-                                                        <div className="flex items-center gap-1 ml-2 shrink-0">
-                                                            <a
-                                                                href={
-                                                                    doc.file_url
-                                                                }
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                                                                title="Ver documento"
-                                                            >
-                                                                <Eye className="w-4 h-4" />
-                                                            </a>
-                                                            <button
-                                                                onClick={() =>
-                                                                    handleDownload(
-                                                                        doc
-                                                                    )
-                                                                }
-                                                                className="p-2 text-slate-600 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
-                                                                title="Descargar"
-                                                            >
-                                                                <Download className="w-4 h-4" />
-                                                            </button>
-                                                            {doc.deletable ? (
-                                                                <button
-                                                                    onClick={() =>
-                                                                        handleDelete(
-                                                                            doc
-                                                                        )
-                                                                    }
-                                                                    className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                                                                    title="Eliminar"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            ) : (
-                                                                <span
-                                                                    className="p-2 text-slate-300 cursor-not-allowed"
-                                                                    title="Este documento no puede eliminarse desde aquí"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                                                <Trash2 className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     )}
                                 </div>
@@ -756,34 +987,24 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
                     )}
                 </div>
             ) : (
-                <div className="bg-white border border-slate-200 rounded-lg py-12">
+                <div className="py-12 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                     <EmptyState
                         icon={FileText}
                         title="Sin documentos"
                         description={
                             activeFilter !== "all"
                                 ? "No hay documentos en esta categoría"
-                                : "Sube documentos relacionados con esta orden de servicio"
+                                : "No se han cargado documentos para esta orden"
                         }
                         action={
-                            activeFilter !== "all" ? (
+                            activeFilter === "all" && (
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => setActiveFilter("all")}
+                                    onClick={() => setShowUploadForm(true)}
+                                    className="mt-4 border-slate-300 text-slate-700 hover:bg-white"
                                 >
-                                    Ver todos los documentos
-                                </Button>
-                            ) : (
-                                <Button
-                                    size="sm"
-                                    onClick={() =>
-                                        fileInputRef.current?.click()
-                                    }
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                >
-                                    <Upload className="w-4 h-4 mr-1.5" />
-                                    Subir Primer Documento
+                                    Subir el primer documento
                                 </Button>
                             )
                         }
@@ -802,9 +1023,9 @@ const DocumentsTabUnified = ({ orderId, onUpdate }) => {
                     })
                 }
                 onConfirm={confirmDelete}
-                title="¿Eliminar este documento?"
-                description="Esta acción no se puede deshacer. El documento será eliminado permanentemente."
-                confirmText="Eliminar"
+                title="¿Eliminar documento?"
+                description="Esta acción eliminará el archivo permanentemente. ¿Estás seguro?"
+                confirmText="Sí, eliminar"
                 cancelText="Cancelar"
                 variant="danger"
             />

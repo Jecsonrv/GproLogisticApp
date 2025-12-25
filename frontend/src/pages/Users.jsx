@@ -7,6 +7,12 @@ import {
     Eye,
     EyeOff,
     Search,
+    RefreshCw,
+    Edit2,
+    Trash2,
+    Key,
+    XCircle,
+    Users as UsersIcon,
 } from "lucide-react";
 import {
     Button,
@@ -30,6 +36,31 @@ import {
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import useAuthStore from "../stores/authStore";
+import { cn } from "../lib/utils";
+
+// ============================================
+// KPI CARD - CORPORATE STYLE
+// ============================================
+const KPICard = ({ label, value, icon: Icon }) => {
+    return (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+                <p
+                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    title={label}
+                >
+                    {label}
+                </p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                    {value}
+                </p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            </div>
+        </div>
+    );
+};
 
 function Users() {
     const currentUser = useAuthStore((state) => state.user);
@@ -223,10 +254,12 @@ function Users() {
             header: "Usuario",
             render: (row) => (
                 <div className="flex items-center gap-2 py-2">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold">
+                    <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-semibold border border-slate-200">
                         {row.first_name?.[0] || row.username[0].toUpperCase()}
                     </div>
-                    <span className="font-medium">{row.username}</span>
+                    <span className="font-medium text-slate-900">
+                        {row.username}
+                    </span>
                 </div>
             ),
         },
@@ -234,13 +267,13 @@ function Users() {
             accessor: "email",
             header: "Email",
             render: (row) => (
-                <div className="py-2 text-sm text-gray-700">{row.email}</div>
+                <div className="py-2 text-sm text-slate-600">{row.email}</div>
             ),
         },
         {
             header: "Nombre Completo",
             render: (row) => (
-                <div className="py-2 text-sm text-gray-900">
+                <div className="py-2 text-sm text-slate-700">
                     {row.first_name} {row.last_name}
                 </div>
             ),
@@ -265,40 +298,51 @@ function Users() {
         },
         {
             header: "Acciones",
+            className: "w-[160px] text-center",
+            headerClassName: "text-center",
             render: (row) => (
-                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(row);
-                        }}
-                    >
-                        Editar
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openChangePasswordModal(row);
-                        }}
-                    >
-                        Cambiar Contraseña
-                    </Button>
-                    {currentUser?.id !== row.id && (
-                        <Button
-                            size="sm"
-                            variant="destructive"
+                <div
+                    className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-center">
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                handleDelete(row.id);
+                                openEditModal(row);
                             }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
                         >
-                            Eliminar
-                        </Button>
-                    )}
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openChangePasswordModal(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Cambiar Contraseña"
+                        >
+                            <Key className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        {currentUser?.id !== row.id && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(row.id);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                title="Eliminar"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             ),
         },
@@ -308,11 +352,11 @@ function Users() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center">
-                    <Shield className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <h2 className="text-xl font-semibold text-gray-900">
+                    <Shield className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+                    <h2 className="text-xl font-semibold text-slate-900">
                         Acceso Denegado
                     </h2>
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="text-sm text-slate-500 mt-2">
                         Solo los administradores pueden gestionar usuarios
                     </p>
                 </div>
@@ -330,101 +374,96 @@ function Users() {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Gestión de Usuarios
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Administra los usuarios y sus permisos en el sistema
-                    </p>
-                </div>
-                <Button onClick={() => setIsCreateModalOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nuevo Usuario
-                </Button>
+        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
+            {/* Bloque Superior: KPIs Corporativos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <KPICard
+                    label="Total Usuarios"
+                    value={users.length}
+                    icon={UsersIcon}
+                />
+                <KPICard
+                    label="Usuarios Activos"
+                    value={users.filter((u) => u.is_active).length}
+                    icon={UserCircle}
+                />
+                <KPICard
+                    label="Administradores"
+                    value={users.filter((u) => u.role === "admin").length}
+                    icon={Shield}
+                />
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Total Usuarios
-                                </p>
-                                <p className="text-2xl font-bold text-gray-900">
-                                    {users.length}
-                                </p>
-                            </div>
-                            <UserCircle className="h-8 w-8 text-gray-400" />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Usuarios Activos
-                                </p>
-                                <p className="text-2xl font-bold text-green-600">
-                                    {users.filter((u) => u.is_active).length}
-                                </p>
-                            </div>
-                            <Shield className="h-8 w-8 text-green-400" />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500">
-                                    Administradores
-                                </p>
-                                <p className="text-2xl font-bold text-red-600">
-                                    {
-                                        users.filter((u) => u.role === "admin")
-                                            .length
-                                    }
-                                </p>
-                            </div>
-                            <Shield className="h-8 w-8 text-red-400" />
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Table */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                    <div className="flex items-center gap-2 flex-1 max-w-lg">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
+            {/* Bloque Operativo: Tabla + Herramientas */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                {/* Barra de Herramientas Unificada */}
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                    {/* Izquierda: Buscador */}
+                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-lg">
+                        <div className="relative flex-1 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <input
+                                type="text"
                                 placeholder="Buscar usuario por nombre, email..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-9"
+                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm("")}
+                                className="flex items-center gap-2 text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
+                            >
+                                <XCircle className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
-                </CardHeader>
-                <CardContent className="px-5 pb-5 pt-0">
-                    <DataTable
-                        columns={columns}
-                        data={filteredUsers}
-                        searchable={false}
-                        pagination
-                    />
-                </CardContent>
-            </Card>
+
+                    {/* Derecha: Contador y Botón */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                        <div className="text-sm text-slate-500 hidden md:block">
+                            <span className="font-semibold text-slate-900">
+                                {filteredUsers.length}
+                            </span>{" "}
+                            usuarios
+                        </div>
+                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fetchUsers()}
+                            disabled={loading}
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    "w-3.5 h-3.5 mr-2",
+                                    loading && "animate-spin"
+                                )}
+                            />
+                            Actualizar
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-2" />
+                            Nuevo Usuario
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Tabla */}
+                <DataTable
+                    columns={columns}
+                    data={filteredUsers}
+                    searchable={false}
+                    pagination
+                />
+            </div>
 
             {/* Modal Crear */}
             <Dialog
@@ -517,7 +556,7 @@ function Users() {
                                         onClick={() =>
                                             setShowPassword(!showPassword)
                                         }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                                     >
                                         {showPassword ? (
                                             <EyeOff className="h-4 w-4" />
@@ -549,7 +588,7 @@ function Users() {
                                         onClick={() =>
                                             setShowPassword(!showPassword)
                                         }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                                     >
                                         {showPassword ? (
                                             <EyeOff className="h-4 w-4" />
@@ -596,7 +635,7 @@ function Users() {
                                             is_active: e.target.checked,
                                         })
                                     }
-                                    className="rounded border-gray-300"
+                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                                 />
                                 <Label htmlFor="is_active_create">
                                     Usuario Activo
@@ -612,10 +651,16 @@ function Users() {
                                     setIsCreateModalOpen(false);
                                     resetForm();
                                 }}
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit">Crear Usuario</Button>
+                            <Button
+                                type="submit"
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                            >
+                                Crear Usuario
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -634,7 +679,7 @@ function Users() {
                                 <Input
                                     value={formData.username}
                                     disabled
-                                    className="bg-gray-50"
+                                    className="bg-slate-50 text-slate-500 cursor-not-allowed"
                                 />
                             </div>
                             <div>
@@ -717,7 +762,7 @@ function Users() {
                                             is_active: e.target.checked,
                                         })
                                     }
-                                    className="rounded border-gray-300"
+                                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                                 />
                                 <Label htmlFor="is_active_edit">
                                     Usuario Activo
@@ -733,10 +778,16 @@ function Users() {
                                     setIsEditModalOpen(false);
                                     resetForm();
                                 }}
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit">Actualizar</Button>
+                            <Button
+                                type="submit"
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                            >
+                                Actualizar
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -794,10 +845,16 @@ function Users() {
                                         confirm_password: "",
                                     });
                                 }}
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit">Cambiar Contraseña</Button>
+                            <Button
+                                type="submit"
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                            >
+                                Cambiar Contraseña
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

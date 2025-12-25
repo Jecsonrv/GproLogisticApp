@@ -17,7 +17,10 @@ import {
 import ServiceOrderDetailComponent from "../components/ServiceOrderDetail";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { useServiceOrder, useUpdateServiceOrder } from "../hooks/useServiceOrders";
+import {
+    useServiceOrder,
+    useUpdateServiceOrder,
+} from "../hooks/useServiceOrders";
 
 function ServiceOrderDetailPage() {
     const { id } = useParams();
@@ -60,7 +63,7 @@ function ServiceOrderDetailPage() {
             setProviders(providersRes.data);
             setShipmentTypes(typesRes.data);
         } catch (error) {
-            console.error("Error loading catalogs", error);
+            // Error silencioso - catálogos opcionales
         }
     };
 
@@ -89,7 +92,8 @@ function ServiceOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ["service-orders"] });
             refetchOrder();
         } catch (error) {
-            const errorMsg = error.response?.data?.message || "Error al actualizar orden";
+            const errorMsg =
+                error.response?.data?.message || "Error al actualizar orden";
             toast.error(errorMsg);
         }
     };
@@ -101,15 +105,15 @@ function ServiceOrderDetailPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => navigate("/service-orders")}
-                    className="text-slate-600"
+                    className="border-slate-300 text-slate-700 hover:bg-slate-50"
                 >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Volver al Listado
                 </Button>
             </div>
 
-            <ServiceOrderDetailComponent 
-                orderId={id} 
+            <ServiceOrderDetailComponent
+                orderId={id}
                 onEdit={handleEditOrder}
             />
 
@@ -117,14 +121,16 @@ function ServiceOrderDetailPage() {
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>Editar Orden: {order?.order_number}</DialogTitle>
+                        <DialogTitle>
+                            Editar Orden: {order?.order_number}
+                        </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleUpdateOrder} className="space-y-6">
                         {/* Client Info */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
-                                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs">
                                         1
                                     </span>
                                     Información del Cliente
@@ -148,13 +154,13 @@ function ServiceOrderDetailPage() {
                             />
                         </div>
 
-                        <div className="border-t border-gray-100 my-4"></div>
+                        <div className="border-t border-slate-100 my-4"></div>
 
                         {/* Shipment Info */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
-                                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+                                <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                    <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs">
                                         2
                                     </span>
                                     Datos del Embarque
@@ -192,10 +198,10 @@ function ServiceOrderDetailPage() {
                             />
                         </div>
 
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                    <Label className="mb-1.5 block text-xs font-medium text-slate-700">
                                         DUCA
                                     </Label>
                                     <Input
@@ -212,7 +218,7 @@ function ServiceOrderDetailPage() {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                    <Label className="mb-1.5 block text-xs font-medium text-slate-700">
                                         BL / Guía
                                     </Label>
                                     <Input
@@ -228,7 +234,7 @@ function ServiceOrderDetailPage() {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                    <Label className="mb-1.5 block text-xs font-medium text-slate-700">
                                         Fecha ETA
                                     </Label>
                                     <Input
@@ -244,7 +250,7 @@ function ServiceOrderDetailPage() {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block text-xs font-medium text-gray-700">
+                                    <Label className="mb-1.5 block text-xs font-medium text-slate-700">
                                         Orden de Compra (PO)
                                     </Label>
                                     <Input
@@ -266,12 +272,13 @@ function ServiceOrderDetailPage() {
                                 type="button"
                                 variant="outline"
                                 onClick={() => setIsEditModalOpen(false)}
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
                             >
                                 Cancelar
                             </Button>
                             <Button
                                 type="submit"
-                                className="bg-brand-600 hover:bg-brand-700"
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
                             >
                                 Guardar Cambios
                             </Button>

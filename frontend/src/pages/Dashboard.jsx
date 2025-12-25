@@ -184,8 +184,7 @@ function Dashboard() {
                     },
                 ].filter((i) => i.value > 0),
             });
-        } catch (err) {
-            console.error("Error al cargar el dashboard:", err);
+        } catch {
             setError(
                 "No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo."
             );
@@ -315,33 +314,22 @@ function Dashboard() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Panel de Control
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Resumen ejecutivo de operaciones logísticas
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {error && (
-                        <Badge variant="warning" className="gap-1.5">
-                            <AlertCircle className="w-3 h-3" />
-                            Modo Offline
-                        </Badge>
-                    )}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={fetchDashboardData}
-                        className="gap-1.5"
-                    >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        Actualizar
-                    </Button>
-                </div>
+            <div className="flex justify-end gap-2">
+                {error && (
+                    <Badge variant="warning" className="gap-1.5">
+                        <AlertCircle className="w-3 h-3" />
+                        Modo Offline
+                    </Badge>
+                )}
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchDashboardData}
+                    className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
+                >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Actualizar
+                </Button>
             </div>
 
             {/* Error Alert */}
@@ -532,7 +520,7 @@ function Dashboard() {
                                         />
                                         <Bar
                                             dataKey="value"
-                                            fill="#0052cc"
+                                            fill="#334155"
                                             radius={[4, 4, 0, 0]}
                                             name="Órdenes"
                                         />
@@ -572,7 +560,7 @@ function Dashboard() {
                                         className="flex items-center justify-between p-3 bg-slate-50 rounded hover:bg-slate-100 transition-colors"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="flex items-center justify-center w-7 h-7 rounded bg-brand-100 text-brand-700 font-bold text-xs">
+                                            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-900 text-white font-bold text-xs">
                                                 {index + 1}
                                             </div>
                                             <div>
@@ -744,7 +732,7 @@ function Dashboard() {
                                             }
                                             className="hover:bg-slate-50/50 transition-colors cursor-pointer"
                                         >
-                                            <td className="px-3 py-2.5 font-mono text-sm font-medium text-brand-600">
+                                            <td className="px-3 py-2.5 font-mono text-sm font-medium text-slate-900">
                                                 {order.order_number}
                                             </td>
                                             <td className="px-3 py-2.5 text-slate-700">

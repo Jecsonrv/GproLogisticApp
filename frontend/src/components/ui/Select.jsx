@@ -47,7 +47,7 @@ const Select = ({
                             }
                             transition-colors duration-150
                             hover:border-slate-400
-                            focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500
+                            focus:outline-none focus:border-slate-900
                             disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed disabled:hover:border-slate-300
                         `}
                     >
@@ -77,7 +77,7 @@ const Select = ({
                                 <div className="px-2 py-2 sticky top-0 bg-white border-b border-slate-200">
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-sm transition-colors duration-150 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 hover:border-slate-400 placeholder:text-slate-400"
+                                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-sm transition-colors duration-150 focus:outline-none focus:border-slate-900 hover:border-slate-400 placeholder:text-slate-400"
                                         placeholder="Buscar..."
                                         value={searchTerm}
                                         onChange={(e) =>
@@ -116,7 +116,7 @@ const Select = ({
                                                     {getOptionLabel(option)}
                                                 </span>
                                                 {selected && (
-                                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-brand-600">
+                                                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-900">
                                                         <CheckIcon className="h-4 w-4" />
                                                     </span>
                                                 )}

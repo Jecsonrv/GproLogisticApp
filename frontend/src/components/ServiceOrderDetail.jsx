@@ -109,7 +109,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 error.response?.data?.error ||
                 "Error al cargar detalle de la orden";
             toast.error(errorMsg);
-            console.error("Error fetching order detail:", error);
         } finally {
             if (showLoader) setLoading(false);
         }
@@ -119,9 +118,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         try {
             const response = await axios.get("/catalogs/services/activos/");
             setServices(response.data);
-        } catch (error) {
-            // Silencioso para catálogos secundarios, solo log en dev
-            console.error("Error loading services:", error);
+        } catch {
+            // Silencioso para catálogos secundarios
         }
     };
 
@@ -129,9 +127,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         try {
             const response = await axios.get("/catalogs/providers/");
             setProviders(response.data);
-        } catch (error) {
-            // Silencioso para catálogos secundarios, solo log en dev
-            console.error("Error loading providers:", error);
+        } catch {
+            // Silencioso para catálogos secundarios
         }
     };
 
@@ -141,9 +138,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 `/catalogs/client-service-prices/by-client/${clientId}/`
             );
             setClientPrices(response.data);
-        } catch (error) {
+        } catch {
             // Silencioso - precios personalizados son opcionales
-            console.error("Error loading client prices:", error);
         }
     };
 
@@ -241,7 +237,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 error.response?.data?.detail ||
                 "Error al actualizar servicio";
             toast.error(errorMsg);
-            console.error("Error updating charge:", error);
         }
     };
 
@@ -281,14 +276,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     if (loading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
             </div>
         );
     }
 
     if (!order) {
         return (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-slate-500">
                 No se encontró la orden
             </div>
         );
@@ -299,7 +294,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             {/* Header */}
             <div className="flex justify-between items-start">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">
+                    <h2 className="text-2xl font-bold text-slate-900">
                         OS: {order.order_number}
                     </h2>
                     <div className="flex items-center space-x-3 mt-2">
@@ -324,8 +319,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                     <div className="text-right">
-                        <div className="text-sm text-gray-500">Total</div>
-                        <div className="text-3xl font-bold text-blue-700">
+                        <div className="text-sm text-slate-500">Total</div>
+                        <div className="text-3xl font-bold text-slate-900">
                             {formatCurrency(order.total_amount || 0)}
                         </div>
                     </div>
@@ -334,7 +329,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                             <Button
                                 size="sm"
                                 onClick={() => setShowBillingWizard(true)}
-                                className="bg-brand-600 hover:bg-brand-700 text-white"
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
                             >
                                 <DollarSign className="w-4 h-4 mr-2" />
                                 Generar Factura
@@ -343,6 +338,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => onEdit(order)}
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
                             >
                                 <Edit className="w-4 h-4 mr-2" />
                                 Editar Orden
@@ -364,8 +360,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             />
 
             {/* Tabs */}
-            <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8 overflow-x-auto">
+            <div className="border-b border-slate-200">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto">
                     {tabs.map((tab) => {
                         const Icon = tab.icon;
                         return (
@@ -373,19 +369,19 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`
-                  group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                  group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-all
                   ${
                       activeTab === tab.id
-                          ? "border-blue-500 text-blue-700"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                          ? "border-slate-900 text-slate-900"
+                          : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
                   }
                 `}
                             >
                                 <Icon
-                                    className={`-ml-0.5 mr-2 h-4 w-4 ${
+                                    className={`-ml-0.5 mr-2 h-4 w-4 transition-colors ${
                                         activeTab === tab.id
-                                            ? "text-blue-500"
-                                            : "text-gray-400 group-hover:text-gray-500"
+                                            ? "text-slate-900"
+                                            : "text-slate-400 group-hover:text-slate-500"
                                     }`}
                                 />
                                 {tab.name}
@@ -403,69 +399,68 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         <CardContent className="pt-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">
                                         Información del Cliente
                                     </h3>
                                     <dl className="space-y-4">
                                         <div>
-                                            <dt className="text-sm font-medium text-gray-500">
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 Cliente
                                             </dt>
-                                            <dd className="mt-1 text-base font-medium text-gray-900">
+                                            <dd className="mt-1 text-base font-medium text-slate-900">
                                                 {order.client_name}
                                             </dd>
                                         </div>
                                         {order.sub_client_name && (
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500">
+                                                <dt className="text-sm font-medium text-slate-500">
                                                     Sub-Cliente
                                                 </dt>
-                                                <dd className="mt-1 text-base text-gray-900">
+                                                <dd className="mt-1 text-base text-slate-700">
                                                     {order.sub_client_name}
                                                 </dd>
                                             </div>
                                         )}
                                         <div>
-                                            <dt className="text-sm font-medium text-gray-500">
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 Aforador
                                             </dt>
-                                            <dd className="mt-1 text-base text-gray-900">
+                                            <dd className="mt-1 text-base text-slate-700">
                                                 {order.customs_agent_name ||
-                                                    "N/A"}
+                                                    "—"}
                                             </dd>
                                         </div>
                                     </dl>
                                 </div>
 
                                 <div>
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-2 border-b">
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-4 pb-2 border-b border-slate-200">
                                         Información del Embarque
                                     </h3>
                                     <dl className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500">
+                                                <dt className="text-sm font-medium text-slate-500">
                                                     DUCA
                                                 </dt>
-                                                <dd className="mt-1 text-base font-mono text-gray-900 bg-gray-50 px-2 py-1 rounded w-fit">
+                                                <dd className="mt-1 text-base font-mono text-slate-900 bg-slate-50 px-2 py-1 rounded w-fit">
                                                     {order.duca}
                                                 </dd>
                                             </div>
                                             <div>
-                                                <dt className="text-sm font-medium text-gray-500">
+                                                <dt className="text-sm font-medium text-slate-500">
                                                     BL / Referencia
                                                 </dt>
-                                                <dd className="mt-1 text-base text-gray-900">
-                                                    {order.bl_reference ||
-                                                        "N/A"}
+                                                <dd className="mt-1 text-base text-slate-700">
+                                                    {order.bl_reference || "—"}
                                                 </dd>
                                             </div>
                                         </div>
                                         <div>
-                                            <dt className="text-sm font-medium text-gray-500">
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 ETA
                                             </dt>
-                                            <dd className="mt-1 text-base text-gray-900">
+                                            <dd className="mt-1 text-base text-slate-700">
                                                 {order.eta
                                                     ? new Date(
                                                           order.eta +
@@ -479,24 +474,24 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                               day: "numeric",
                                                           }
                                                       )
-                                                    : "N/A"}
+                                                    : "—"}
                                             </dd>
                                         </div>
                                         <div>
-                                            <dt className="text-sm font-medium text-gray-500">
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 Tipo de Embarque
                                             </dt>
-                                            <dd className="mt-1 text-base text-gray-900">
+                                            <dd className="mt-1 text-base text-slate-700">
                                                 {order.shipment_type_name ||
-                                                    "N/A"}
+                                                    "—"}
                                             </dd>
                                         </div>
                                         <div>
-                                            <dt className="text-sm font-medium text-gray-500">
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 Purchase Order
                                             </dt>
-                                            <dd className="mt-1 text-base text-gray-900">
-                                                {order.purchase_order || "N/A"}
+                                            <dd className="mt-1 text-base text-slate-700">
+                                                {order.purchase_order || "—"}
                                             </dd>
                                         </div>
                                     </dl>
@@ -563,14 +558,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="bg-gradient-to-r from-brand-50 to-blue-50 p-4 rounded-lg border border-brand-200 hover:shadow-sm transition-shadow">
-                                        <div className="text-xs font-medium text-brand-600 uppercase tracking-wide">
+                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 hover:shadow-md transition-shadow">
+                                        <div className="text-xs font-medium text-slate-300 uppercase tracking-wide">
                                             Total a Facturar{" "}
                                             {showWithIva
                                                 ? "(con IVA)"
                                                 : "(Neto)"}
                                         </div>
-                                        <div className="text-2xl font-bold text-brand-700 mt-1.5 tabular-nums">
+                                        <div className="text-2xl font-bold text-white mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
                                                     ? order.total_amount || 0
@@ -593,7 +588,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         <Card>
                             <CardContent className="pt-6">
                                 <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-lg font-semibold text-gray-900">
+                                    <h3 className="text-lg font-semibold text-slate-900">
                                         Calculadora de Servicios
                                     </h3>
                                     {order.status === "abierta" &&
@@ -603,6 +598,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                 onClick={() =>
                                                     setIsAddingCharge(true)
                                                 }
+                                                className="bg-slate-900 hover:bg-slate-800 text-white"
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />{" "}
                                                 Agregar Servicio
@@ -612,8 +608,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
                                 {/* Add Charge Form */}
                                 {isAddingCharge && (
-                                    <div className="bg-gray-50 p-6 rounded-lg mb-6 border border-gray-200 animate-fade-in">
-                                        <h4 className="text-sm font-semibold text-gray-900 mb-4">
+                                    <div className="bg-slate-50 p-6 rounded-xl mb-6 border border-slate-200 animate-fade-in">
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-4">
                                             Nuevo Cargo
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -623,45 +619,83 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     value={chargeForm.service}
                                                     onChange={(value) => {
                                                         // 1. Obtener precio y configuración pre-definida
-                                                        const serviceId = parseInt(value);
-                                                        
+                                                        const serviceId =
+                                                            parseInt(value);
+
                                                         // Buscar si hay precio personalizado para este cliente
-                                                        const customPrice = clientPrices.find(
-                                                            (cp) => parseInt(cp.service) === serviceId || parseInt(cp.service_id) === serviceId
-                                                        );
-                                                        
+                                                        const customPrice =
+                                                            clientPrices.find(
+                                                                (cp) =>
+                                                                    parseInt(
+                                                                        cp.service
+                                                                    ) ===
+                                                                        serviceId ||
+                                                                    parseInt(
+                                                                        cp.service_id
+                                                                    ) ===
+                                                                        serviceId
+                                                            );
+
                                                         // Buscar el servicio en el catálogo general
-                                                        const service = services.find(s => parseInt(s.id) === serviceId);
-                                                        
+                                                        const service =
+                                                            services.find(
+                                                                (s) =>
+                                                                    parseInt(
+                                                                        s.id
+                                                                    ) ===
+                                                                    serviceId
+                                                            );
+
                                                         // Determinar Precio Base
                                                         let unitPrice = 0;
                                                         if (customPrice) {
-                                                            unitPrice = parseFloat(customPrice.custom_price);
+                                                            unitPrice =
+                                                                parseFloat(
+                                                                    customPrice.custom_price
+                                                                );
                                                         } else if (service) {
-                                                            unitPrice = parseFloat(service.default_price);
+                                                            unitPrice =
+                                                                parseFloat(
+                                                                    service.default_price
+                                                                );
                                                         }
 
                                                         // Determinar Tratamiento Fiscal (Prioridad: Personalizado > General)
-                                                        let defaultIvaType = "gravado"; 
-                                                        
-                                                        if (customPrice && customPrice.iva_type) {
-                                                            defaultIvaType = customPrice.iva_type;
+                                                        let defaultIvaType =
+                                                            "gravado";
+
+                                                        if (
+                                                            customPrice &&
+                                                            customPrice.iva_type
+                                                        ) {
+                                                            defaultIvaType =
+                                                                customPrice.iva_type;
                                                         } else if (service) {
                                                             // Lógica robusta: Si applies_iva es false, forzar no_sujeto a menos que el tipo sea explícitamente otro
-                                                            if (service.applies_iva === false) {
-                                                                defaultIvaType = (service.iva_type && service.iva_type !== 'gravado') 
-                                                                    ? service.iva_type 
-                                                                    : "no_sujeto";
+                                                            if (
+                                                                service.applies_iva ===
+                                                                false
+                                                            ) {
+                                                                defaultIvaType =
+                                                                    service.iva_type &&
+                                                                    service.iva_type !==
+                                                                        "gravado"
+                                                                        ? service.iva_type
+                                                                        : "no_sujeto";
                                                             } else {
-                                                                defaultIvaType = service.iva_type || "gravado";
+                                                                defaultIvaType =
+                                                                    service.iva_type ||
+                                                                    "gravado";
                                                             }
                                                         }
 
                                                         setChargeForm({
                                                             ...chargeForm,
                                                             service: value,
-                                                            unit_price: unitPrice,
-                                                            iva_type: defaultIvaType,
+                                                            unit_price:
+                                                                unitPrice,
+                                                            iva_type:
+                                                                defaultIvaType,
                                                         });
                                                     }}
                                                     options={services}
@@ -691,7 +725,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 aplicado
                                                             </span>
                                                         ) : (
-                                                            <span className="text-gray-500">
+                                                            <span className="text-slate-500">
                                                                 Precio de lista
                                                                 base
                                                             </span>
@@ -729,7 +763,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     Precio Unitario (Sin IVA)
                                                 </Label>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2 text-gray-500">
+                                                    <span className="absolute left-3 top-2 text-slate-500">
                                                         $
                                                     </span>
                                                     <Input
@@ -785,9 +819,18 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             </Label>
                                             <SelectERP
                                                 options={[
-                                                    { id: "gravado", name: "Gravado (13% IVA)" },
-                                                    { id: "exento", name: "Exento" },
-                                                    { id: "no_sujeto", name: "No Sujeto" },
+                                                    {
+                                                        id: "gravado",
+                                                        name: "Gravado (13% IVA)",
+                                                    },
+                                                    {
+                                                        id: "exento",
+                                                        name: "Exento",
+                                                    },
+                                                    {
+                                                        id: "no_sujeto",
+                                                        name: "No Sujeto",
+                                                    },
                                                 ]}
                                                 value={chargeForm.iva_type}
                                                 onChange={(value) =>
@@ -796,11 +839,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         iva_type: value,
                                                     })
                                                 }
-                                                getOptionLabel={(opt) => opt.name}
+                                                getOptionLabel={(opt) =>
+                                                    opt.name
+                                                }
                                                 getOptionValue={(opt) => opt.id}
                                             />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                {chargeForm.iva_type === "gravado"
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                {chargeForm.iva_type ===
+                                                "gravado"
                                                     ? "Se aplicará IVA del 13% sobre el precio"
                                                     : "No se aplicará IVA (fuera del ámbito de aplicación)"}
                                             </p>
@@ -829,10 +875,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     setIsAddingCharge(false);
                                                     resetChargeForm();
                                                 }}
+                                                className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                                             >
                                                 Cancelar
                                             </Button>
-                                            <Button onClick={handleAddCharge}>
+                                            <Button
+                                                onClick={handleAddCharge}
+                                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                            >
                                                 Guardar Cargo
                                             </Button>
                                         </div>
@@ -936,99 +986,180 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 </td>
                                                                 {/* Cantidad */}
                                                                 <td className="px-3 py-2.5 text-right text-sm">
-                                                                    {editingChargeId === charge.id ? (
+                                                                    {editingChargeId ===
+                                                                    charge.id ? (
                                                                         <Input
                                                                             type="number"
                                                                             min="1"
-                                                                            value={editChargeForm.quantity}
-                                                                            onChange={(e) =>
-                                                                                setEditChargeForm({
-                                                                                    ...editChargeForm,
-                                                                                    quantity: e.target.value,
-                                                                                })
+                                                                            value={
+                                                                                editChargeForm.quantity
+                                                                            }
+                                                                            onChange={(
+                                                                                e
+                                                                            ) =>
+                                                                                setEditChargeForm(
+                                                                                    {
+                                                                                        ...editChargeForm,
+                                                                                        quantity:
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                    }
+                                                                                )
                                                                             }
                                                                             className="w-16 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
-                                                                        <span className={isBilled ? "text-slate-500" : "text-slate-700"}>
-                                                                            {charge.quantity}
+                                                                        <span
+                                                                            className={
+                                                                                isBilled
+                                                                                    ? "text-slate-500"
+                                                                                    : "text-slate-700"
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                charge.quantity
+                                                                            }
                                                                         </span>
                                                                     )}
                                                                 </td>
                                                                 {/* Precio */}
                                                                 <td className="px-3 py-2.5 text-right text-sm">
-                                                                    {editingChargeId === charge.id ? (
+                                                                    {editingChargeId ===
+                                                                    charge.id ? (
                                                                         <Input
                                                                             type="number"
                                                                             step="0.01"
                                                                             min="0"
-                                                                            value={editChargeForm.unit_price}
-                                                                            onChange={(e) =>
-                                                                                setEditChargeForm({
-                                                                                    ...editChargeForm,
-                                                                                    unit_price: e.target.value,
-                                                                                })
+                                                                            value={
+                                                                                editChargeForm.unit_price
+                                                                            }
+                                                                            onChange={(
+                                                                                e
+                                                                            ) =>
+                                                                                setEditChargeForm(
+                                                                                    {
+                                                                                        ...editChargeForm,
+                                                                                        unit_price:
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                    }
+                                                                                )
                                                                             }
                                                                             className="w-24 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
-                                                                        <span className={isBilled ? "text-slate-500" : "text-slate-700"}>
-                                                                            {formatCurrency(charge.unit_price)}
+                                                                        <span
+                                                                            className={
+                                                                                isBilled
+                                                                                    ? "text-slate-500"
+                                                                                    : "text-slate-700"
+                                                                            }
+                                                                        >
+                                                                            {formatCurrency(
+                                                                                charge.unit_price
+                                                                            )}
                                                                         </span>
                                                                     )}
                                                                 </td>
                                                                 {/* Descuento */}
                                                                 <td className="px-3 py-2.5 text-right text-sm">
-                                                                    {editingChargeId === charge.id ? (
+                                                                    {editingChargeId ===
+                                                                    charge.id ? (
                                                                         <Input
                                                                             type="number"
                                                                             min="0"
                                                                             max="100"
                                                                             step="0.01"
-                                                                            value={editChargeForm.discount}
-                                                                            onChange={(e) =>
-                                                                                setEditChargeForm({
-                                                                                    ...editChargeForm,
-                                                                                    discount: e.target.value,
-                                                                                })
+                                                                            value={
+                                                                                editChargeForm.discount
+                                                                            }
+                                                                            onChange={(
+                                                                                e
+                                                                            ) =>
+                                                                                setEditChargeForm(
+                                                                                    {
+                                                                                        ...editChargeForm,
+                                                                                        discount:
+                                                                                            e
+                                                                                                .target
+                                                                                                .value,
+                                                                                    }
+                                                                                )
                                                                             }
                                                                             className="w-16 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
-                                                                        <span className={isBilled ? "text-slate-500" : "text-slate-700"}>
-                                                                            {charge.discount > 0 ? `${charge.discount}%` : "-"}
+                                                                        <span
+                                                                            className={
+                                                                                isBilled
+                                                                                    ? "text-slate-500"
+                                                                                    : "text-slate-700"
+                                                                            }
+                                                                        >
+                                                                            {charge.discount >
+                                                                            0
+                                                                                ? `${charge.discount}%`
+                                                                                : "-"}
                                                                         </span>
                                                                     )}
                                                                 </td>
                                                                 {/* Tipo IVA */}
                                                                 <td className="px-3 py-2.5 text-center">
-                                                                    {editingChargeId === charge.id ? (
+                                                                    {editingChargeId ===
+                                                                    charge.id ? (
                                                                         <SelectERP
                                                                             options={[
-                                                                                { id: "gravado", name: "Gravado 13%" },
-                                                                                { id: "no_sujeto", name: "No Sujeto" },
+                                                                                {
+                                                                                    id: "gravado",
+                                                                                    name: "Gravado 13%",
+                                                                                },
+                                                                                {
+                                                                                    id: "no_sujeto",
+                                                                                    name: "No Sujeto",
+                                                                                },
                                                                             ]}
-                                                                            value={editChargeForm.iva_type}
-                                                                            onChange={(value) =>
-                                                                                setEditChargeForm({
-                                                                                    ...editChargeForm,
-                                                                                    iva_type: value,
-                                                                                })
+                                                                            value={
+                                                                                editChargeForm.iva_type
                                                                             }
-                                                                            getOptionLabel={(opt) => opt.name}
-                                                                            getOptionValue={(opt) => opt.id}
+                                                                            onChange={(
+                                                                                value
+                                                                            ) =>
+                                                                                setEditChargeForm(
+                                                                                    {
+                                                                                        ...editChargeForm,
+                                                                                        iva_type:
+                                                                                            value,
+                                                                                    }
+                                                                                )
+                                                                            }
+                                                                            getOptionLabel={(
+                                                                                opt
+                                                                            ) =>
+                                                                                opt.name
+                                                                            }
+                                                                            getOptionValue={(
+                                                                                opt
+                                                                            ) =>
+                                                                                opt.id
+                                                                            }
                                                                             className="w-32"
                                                                         />
                                                                     ) : (
                                                                         <Badge
                                                                             variant="outline"
                                                                             className={`text-[10px] px-1.5 py-0.5 font-medium ${
-                                                                                charge.iva_type === "gravado"
+                                                                                charge.iva_type ===
+                                                                                "gravado"
                                                                                     ? "bg-slate-100 text-slate-700 border-slate-300"
                                                                                     : "bg-slate-50 text-slate-600 border-slate-200"
                                                                             }`}
                                                                         >
-                                                                            {charge.iva_type === "gravado" ? "Gravado 13%" : "No Sujeto"}
+                                                                            {charge.iva_type ===
+                                                                            "gravado"
+                                                                                ? "Gravado 13%"
+                                                                                : "No Sujeto"}
                                                                         </Badge>
                                                                     )}
                                                                 </td>
@@ -1066,17 +1197,22 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     "abierta" && (
                                                                     <td className="px-3 py-2.5 text-center">
                                                                         {!isBilled ? (
-                                                                            editingChargeId === charge.id ? (
+                                                                            editingChargeId ===
+                                                                            charge.id ? (
                                                                                 <div className="flex gap-1 justify-center">
                                                                                     <button
-                                                                                        onClick={handleSaveEditCharge}
+                                                                                        onClick={
+                                                                                            handleSaveEditCharge
+                                                                                        }
                                                                                         className="text-slate-400 hover:text-success-600 transition-colors p-1 rounded hover:bg-success-50"
                                                                                         title="Guardar"
                                                                                     >
                                                                                         <Check className="h-4 w-4" />
                                                                                     </button>
                                                                                     <button
-                                                                                        onClick={handleCancelEditCharge}
+                                                                                        onClick={
+                                                                                            handleCancelEditCharge
+                                                                                        }
                                                                                         className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded hover:bg-slate-100"
                                                                                         title="Cancelar"
                                                                                     >
@@ -1086,8 +1222,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             ) : (
                                                                                 <div className="flex gap-1 justify-center">
                                                                                     <button
-                                                                                        onClick={() => handleEditCharge(charge)}
-                                                                                        className="text-slate-400 hover:text-blue-600 transition-colors p-1 rounded hover:bg-blue-50"
+                                                                                        onClick={() =>
+                                                                                            handleEditCharge(
+                                                                                                charge
+                                                                                            )
+                                                                                        }
+                                                                                        className="text-slate-400 hover:text-slate-900 transition-colors p-1 rounded hover:bg-slate-100"
                                                                                         title="Editar"
                                                                                     >
                                                                                         <Edit className="h-4 w-4" />
@@ -1122,102 +1262,196 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                 <tfoot className="bg-slate-50 border-t-2 border-slate-300">
                                                     {(() => {
                                                         // Calcular subtotales y retención
-                                                        const subtotal = charges.reduce((sum, charge) => sum + parseFloat(charge.amount || 0), 0);
-                                                        const iva = charges.reduce((sum, charge) => sum + parseFloat(charge.iva_amount || 0), 0);
-                                                        const totalBruto = charges.reduce((sum, charge) => sum + parseFloat(charge.total || 0), 0);
+                                                        const subtotal =
+                                                            charges.reduce(
+                                                                (sum, charge) =>
+                                                                    sum +
+                                                                    parseFloat(
+                                                                        charge.amount ||
+                                                                            0
+                                                                    ),
+                                                                0
+                                                            );
+                                                        const iva =
+                                                            charges.reduce(
+                                                                (sum, charge) =>
+                                                                    sum +
+                                                                    parseFloat(
+                                                                        charge.iva_amount ||
+                                                                            0
+                                                                    ),
+                                                                0
+                                                            );
+                                                        const totalBruto =
+                                                            charges.reduce(
+                                                                (sum, charge) =>
+                                                                    sum +
+                                                                    parseFloat(
+                                                                        charge.total ||
+                                                                            0
+                                                                    ),
+                                                                0
+                                                            );
 
-                                                        const RETENCION_THRESHOLD = 100.00;
+                                                        const RETENCION_THRESHOLD = 100.0;
                                                         const RETENCION_RATE = 0.01;
-                                                        const isGranContribuyente = order.client_is_gran_contribuyente || false;
+                                                        const isGranContribuyente =
+                                                            order.client_is_gran_contribuyente ||
+                                                            false;
 
                                                         let retencion = 0;
-                                                        if (isGranContribuyente && subtotal > RETENCION_THRESHOLD) {
-                                                            retencion = subtotal * RETENCION_RATE;
+                                                        if (
+                                                            isGranContribuyente &&
+                                                            subtotal >
+                                                                RETENCION_THRESHOLD
+                                                        ) {
+                                                            retencion =
+                                                                subtotal *
+                                                                RETENCION_RATE;
                                                         }
 
-                                                        const totalNeto = totalBruto - retencion;
+                                                        const totalNeto =
+                                                            totalBruto -
+                                                            retencion;
 
                                                         return (
                                                             <>
                                                                 <tr>
                                                                     <td
-                                                                        colSpan={6}
+                                                                        colSpan={
+                                                                            6
+                                                                        }
                                                                         className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                     >
-                                                                        Subtotal (sin IVA):
+                                                                        Subtotal
+                                                                        (sin
+                                                                        IVA):
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700">
-                                                                        {formatCurrency(subtotal)}
+                                                                        {formatCurrency(
+                                                                            subtotal
+                                                                        )}
                                                                     </td>
-                                                                    {order.status === "abierta" && <td></td>}
+                                                                    {order.status ===
+                                                                        "abierta" && (
+                                                                        <td></td>
+                                                                    )}
                                                                 </tr>
                                                                 <tr>
                                                                     <td
-                                                                        colSpan={6}
+                                                                        colSpan={
+                                                                            6
+                                                                        }
                                                                         className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                     >
-                                                                        IVA (13%):
+                                                                        IVA
+                                                                        (13%):
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700">
-                                                                        {formatCurrency(iva)}
+                                                                        {formatCurrency(
+                                                                            iva
+                                                                        )}
                                                                     </td>
-                                                                    {order.status === "abierta" && <td></td>}
+                                                                    {order.status ===
+                                                                        "abierta" && (
+                                                                        <td></td>
+                                                                    )}
                                                                 </tr>
                                                                 <tr className="border-t border-slate-200">
                                                                     <td
-                                                                        colSpan={6}
+                                                                        colSpan={
+                                                                            6
+                                                                        }
                                                                         className="px-3 py-2.5 text-right text-xs font-semibold text-slate-700"
                                                                     >
-                                                                        Total Bruto:
+                                                                        Total
+                                                                        Bruto:
                                                                     </td>
                                                                     <td className="px-3 py-2.5 text-right font-semibold text-slate-900 text-base tabular-nums">
-                                                                        {formatCurrency(totalBruto)}
+                                                                        {formatCurrency(
+                                                                            totalBruto
+                                                                        )}
                                                                     </td>
-                                                                    {order.status === "abierta" && <td></td>}
+                                                                    {order.status ===
+                                                                        "abierta" && (
+                                                                        <td></td>
+                                                                    )}
                                                                 </tr>
-                                                                {retencion > 0 && (
+                                                                {retencion >
+                                                                    0 && (
                                                                     <>
                                                                         <tr className="border-t border-slate-200">
                                                                             <td
-                                                                                colSpan={6}
+                                                                                colSpan={
+                                                                                    6
+                                                                                }
                                                                                 className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                             >
                                                                                 <div className="flex items-center justify-end gap-1">
                                                                                     <AlertCircle className="w-3 h-3" />
-                                                                                    <span>Retención 1%:</span>
+                                                                                    <span>
+                                                                                        Retención
+                                                                                        1%:
+                                                                                    </span>
                                                                                 </div>
                                                                             </td>
                                                                             <td className="px-3 py-2 text-right text-sm font-medium tabular-nums text-slate-700">
-                                                                                - {formatCurrency(retencion)}
+                                                                                -{" "}
+                                                                                {formatCurrency(
+                                                                                    retencion
+                                                                                )}
                                                                             </td>
-                                                                            {order.status === "abierta" && <td></td>}
+                                                                            {order.status ===
+                                                                                "abierta" && (
+                                                                                <td></td>
+                                                                            )}
                                                                         </tr>
                                                                         <tr className="border-t-2 border-slate-400 bg-slate-100">
                                                                             <td
-                                                                                colSpan={6}
+                                                                                colSpan={
+                                                                                    6
+                                                                                }
                                                                                 className="px-3 py-2.5 text-right text-sm font-bold text-slate-800"
                                                                             >
-                                                                                TOTAL NETO A PAGAR:
+                                                                                TOTAL
+                                                                                NETO
+                                                                                A
+                                                                                PAGAR:
                                                                             </td>
                                                                             <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-base tabular-nums">
-                                                                                {formatCurrency(totalNeto)}
+                                                                                {formatCurrency(
+                                                                                    totalNeto
+                                                                                )}
                                                                             </td>
-                                                                            {order.status === "abierta" && <td></td>}
+                                                                            {order.status ===
+                                                                                "abierta" && (
+                                                                                <td></td>
+                                                                            )}
                                                                         </tr>
                                                                     </>
                                                                 )}
-                                                                {retencion === 0 && (
+                                                                {retencion ===
+                                                                    0 && (
                                                                     <tr className="border-t-2 border-slate-400 bg-slate-100">
                                                                         <td
-                                                                            colSpan={6}
+                                                                            colSpan={
+                                                                                6
+                                                                            }
                                                                             className="px-3 py-2.5 text-right text-sm font-bold text-slate-800"
                                                                         >
-                                                                            TOTAL A PAGAR:
+                                                                            TOTAL
+                                                                            A
+                                                                            PAGAR:
                                                                         </td>
                                                                         <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-base tabular-nums">
-                                                                            {formatCurrency(totalBruto)}
+                                                                            {formatCurrency(
+                                                                                totalBruto
+                                                                            )}
                                                                         </td>
-                                                                        {order.status === "abierta" && <td></td>}
+                                                                        {order.status ===
+                                                                            "abierta" && (
+                                                                            <td></td>
+                                                                        )}
                                                                     </tr>
                                                                 )}
                                                             </>
@@ -1258,6 +1492,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 {activeTab === "documents" && (
                     <DocumentsTabUnified
                         orderId={orderId}
+                        orderNumber={order?.order_number}
                         onUpdate={() => {
                             fetchOrderDetail();
                             if (onUpdate) onUpdate();

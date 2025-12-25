@@ -97,8 +97,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                 `/transfers/transfers/?service_order=${orderId}`
             );
             setPayments(Array.isArray(response.data) ? response.data : []);
-        } catch (error) {
-            console.error("Error loading payments:", error);
+        } catch {
             setPayments([]);
         } finally {
             setLoading(false);
@@ -109,16 +108,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
         try {
             const response = await axios.get("/catalogs/providers/");
             setProviders(response.data);
-        } catch (_error) {
-            console.error("Error loading providers");
+        } catch {
+            // Error silencioso
         }
     };
 
     const handleEditPayment = (payment) => {
-        console.log("=== DATOS DEL PAGO PARA EDITAR ===", payment);
-        console.log("provider:", payment.provider);
-        console.log("service_order:", payment.service_order);
-
         setPaymentForm({
             transfer_type: payment.transfer_type || "costos",
             amount: payment.amount || "",
@@ -344,7 +339,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             header: "Proveedor",
             accessor: "provider_name",
             cell: (row) => (
-                <span className="text-slate-900 font-medium">
+                <span className="text-slate-900 font-medium text-sm">
                     {row.provider_name || row.beneficiary_name || "-"}
                 </span>
             ),
@@ -359,16 +354,16 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             ),
         },
         {
-            header: "Monto/Tipo",
+            header: "Monto",
             accessor: "amount",
-            className: "w-32 text-right",
+            className: "w-32",
             cell: (row) => (
                 <div className="text-right">
-                    <div className="font-semibold tabular-nums text-slate-900">
+                    <div className="font-semibold tabular-nums text-slate-900 text-sm">
                         {formatCurrency(row.amount)}
                     </div>
                     {row.payment_method && (
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="text-xs text-slate-500 mt-0.5 font-normal">
                             {row.payment_method === "efectivo" && "Efectivo"}
                             {row.payment_method === "transferencia" &&
                                 "Transferencia"}
@@ -402,7 +397,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             cell: (row) => {
                 const [year, month, day] = row.transaction_date.split("-");
                 return (
-                    <span className="text-sm text-slate-600">
+                    <span className="text-sm text-slate-600 font-normal">
                         {`${day}/${month}/${year}`}
                     </span>
                 );
@@ -475,7 +470,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEditPayment(row)}
-                        className="text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                        className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
                         title="Editar"
                     >
                         <Edit className="h-4 w-4" />
@@ -561,7 +556,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                     <Button
                         size="sm"
                         onClick={() => setIsAddingPayment(!isAddingPayment)}
-                        className="bg-brand-600 hover:bg-brand-700"
+                        className="bg-slate-900 hover:bg-slate-800"
                     >
                         {isAddingPayment ? (
                             <>
@@ -602,11 +597,11 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             {formatCurrency(totals.admin)}
                         </div>
                     </div>
-                    <div className="bg-brand-50 p-3 rounded-lg border border-brand-200">
-                        <div className="text-xs font-medium text-brand-700 uppercase tracking-wide">
+                    <div className="bg-gradient-to-br from-slate-700 to-slate-800 p-3 rounded-lg border border-slate-600 shadow-sm">
+                        <div className="text-xs font-medium text-slate-100 uppercase tracking-wide">
                             Total General
                         </div>
-                        <div className="text-lg font-bold text-brand-900 mt-1 tabular-nums">
+                        <div className="text-lg font-bold text-white mt-1 tabular-nums">
                             {formatCurrency(totals.total)}
                         </div>
                     </div>
@@ -789,7 +784,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                         href={existingInvoiceFile}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                                        className="text-sm text-slate-900 hover:text-slate-700 flex items-center gap-1"
                                     >
                                         <Eye className="w-4 h-4" />
                                         Ver archivo
@@ -797,7 +792,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 </div>
                             )}
                             <div className="mt-1">
-                                <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-brand-500 hover:bg-brand-50 transition-colors">
+                                <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-slate-500 hover:bg-slate-50 transition-colors">
                                     <Upload className="w-5 h-5 text-slate-400 mr-2" />
                                     <span className="text-sm text-slate-600">
                                         {paymentForm.invoice_file
@@ -852,7 +847,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             </Button>
                             <Button
                                 type="submit"
-                                className="bg-brand-600 hover:bg-brand-700"
+                                className="bg-slate-900 hover:bg-slate-800"
                             >
                                 {isEditing
                                     ? "Actualizar Pago"
@@ -866,7 +861,11 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             {/* Tabla de pagos */}
             <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
                 {payments.length > 0 ? (
-                    <DataTable columns={columns} data={payments} />
+                    <DataTable
+                        columns={columns}
+                        data={payments}
+                        searchable={false}
+                    />
                 ) : (
                     <div className="py-12">
                         <EmptyState
@@ -877,7 +876,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 <Button
                                     size="sm"
                                     onClick={() => setIsAddingPayment(true)}
-                                    className="bg-brand-600 hover:bg-brand-700"
+                                    className="bg-slate-900 hover:bg-slate-800"
                                 >
                                     <Plus className="w-4 h-4 mr-1.5" />
                                     Registrar Primer Pago

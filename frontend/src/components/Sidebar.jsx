@@ -219,17 +219,17 @@ export function Sidebar({ isOpen, onClose }) {
                                                 to={item.path}
                                                 onClick={onClose}
                                                 className={cn(
-                                                    "flex items-center gap-2.5 px-2.5 py-2 text-sm font-medium rounded-sm transition-all duration-150",
+                                                    "flex items-center gap-2.5 px-2.5 py-2 text-sm font-medium rounded-lg transition-all duration-150",
                                                     isActive
-                                                        ? "bg-brand-50 text-brand-700 border-l-2 border-brand-600 -ml-0.5 pl-2"
-                                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                                        ? "bg-slate-900 text-white shadow-sm"
+                                                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                                                 )}
                                             >
                                                 <Icon
                                                     className={cn(
                                                         "h-4 w-4 flex-shrink-0",
                                                         isActive
-                                                            ? "text-brand-600"
+                                                            ? "text-white"
                                                             : "text-slate-400"
                                                     )}
                                                 />

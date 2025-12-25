@@ -9,6 +9,7 @@ import {
     CreditCard,
     FileText,
     Edit,
+    Edit2,
     Eye,
     MoreHorizontal,
     X,
@@ -41,37 +42,27 @@ import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, cn, formatDateTime } from "../lib/utils";
 
-/**
- * Clients - Gestión de Clientes
- * Diseño ERP Profesional
- */
-
-// KPI Card consistente con otras páginas
-const KPICard = ({ title, value, variant = "default" }) => {
-    const variants = {
-        default: "text-slate-900",
-        success: "text-emerald-600",
-        muted: "text-slate-400",
-        info: "text-blue-600",
-        purple: "text-purple-600",
-    };
-
+// ============================================
+// KPI CARD - CORPORATE STYLE (Aligned with ProviderPayments)
+// ============================================
+const KPICard = ({ label, value, icon: Icon }) => {
     return (
-        <Card>
-            <CardContent className="p-5">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                    {title}
-                </p>
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
+            <div className="min-w-0">
                 <p
-                    className={cn(
-                        "text-2xl font-semibold mt-1.5",
-                        variants[variant]
-                    )}
+                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    title={label}
                 >
+                    {label}
+                </p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
                     {value}
                 </p>
-            </CardContent>
-        </Card>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            </div>
+        </div>
     );
 };
 
@@ -92,7 +83,6 @@ function Clients() {
     const stats = useMemo(() => {
         const total = clients.length;
         const active = clients.filter((c) => c.is_active).length;
-        const inactive = total - active;
         const withCredit = clients.filter(
             (c) => c.payment_condition === "credito"
         ).length;
@@ -100,7 +90,7 @@ function Clients() {
             (c) => c.is_gran_contribuyente
         ).length;
 
-        return { total, active, inactive, withCredit, granContribuyente };
+        return { total, active, withCredit, granContribuyente };
     }, [clients]);
 
     // Fetch clients
@@ -149,13 +139,6 @@ function Clients() {
     // Check if any filter is active
     const hasActiveFilters = statusFilter || paymentFilter;
 
-    // Clear all filters
-    const clearFilters = () => {
-        setSearchTerm("");
-        setStatusFilter(null);
-        setPaymentFilter(null);
-    };
-
     // Toggle client status
     const toggleClientStatus = async (client) => {
         try {
@@ -181,25 +164,32 @@ function Clients() {
     const exportToExcel = async () => {
         try {
             const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
-            if (statusFilter) params.append('is_active', statusFilter === 'active' ? 'True' : 'False');
-            if (paymentFilter) params.append('payment_condition', paymentFilter);
+            if (searchTerm) params.append("search", searchTerm);
+            if (statusFilter)
+                params.append(
+                    "is_active",
+                    statusFilter === "active" ? "True" : "False"
+                );
+            if (paymentFilter)
+                params.append("payment_condition", paymentFilter);
 
-            const response = await axios.get('/clients/export_clients_excel/', {
+            const response = await axios.get("/clients/export_clients_excel/", {
                 params,
-                responseType: 'blob',
+                responseType: "blob",
             });
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
+            const link = document.createElement("a");
             link.href = url;
-            link.setAttribute('download', `clientes_gpro_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            link.setAttribute(
+                "download",
+                `clientes_gpro_${new Date().toISOString().slice(0, 10)}.xlsx`
+            );
             document.body.appendChild(link);
             link.click();
             link.remove();
             toast.success("Listado de clientes exportado correctamente");
-        } catch (error) {
-            console.error("Error exporting clients:", error);
+        } catch {
             toast.error("Error al exportar clientes");
         }
     };
@@ -221,111 +211,67 @@ function Clients() {
         {
             header: "Cliente",
             accessor: "name",
-            sortable: true,
+            sortable: false,
             render: (row) => (
-                <div className="flex items-center gap-3 py-2">
-                    <div className="w-9 h-9 rounded bg-slate-100 flex items-center justify-center flex-shrink-0">
-                        <Building2 className="w-4 h-4 text-slate-500" />
+                <div className="flex items-center gap-3 py-1">
+                    <div className="w-9 h-9 rounded bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                        <Building2 className="w-4 h-4 text-slate-400" />
                     </div>
                     <div className="min-w-0">
-                        <div className="font-medium text-slate-900 truncate">
+                        <div className="font-semibold text-slate-700 truncate text-sm">
                             {row.name}
                         </div>
-                        {row.legal_name && row.legal_name !== row.name && (
-                            <div className="text-xs text-slate-500 truncate">
-                                {row.legal_name}
-                            </div>
-                        )}
+                        <div className="text-[10px] text-slate-400 font-mono">
+                            NIT: {row.nit}
+                        </div>
                     </div>
                 </div>
-            ),
-        },
-        {
-            header: "NIT",
-            accessor: "nit",
-            sortable: true,
-            render: (row) => (
-                <span className="font-mono text-sm text-slate-700 py-2">
-                    {row.nit}
-                </span>
-            ),
-        },
-        {
-            header: "Registro IVA",
-            accessor: "iva_registration",
-            render: (row) => (
-                <span className="font-mono text-sm text-slate-600 py-2">
-                    {row.iva_registration || "—"}
-                </span>
             ),
         },
         {
             header: "Contacto",
             accessor: "contact_person",
+            sortable: false,
             render: (row) => (
-                <div className="text-sm py-2">
-                    <div className="text-slate-700">
+                <div className="text-sm py-1">
+                    <div className="text-slate-700 font-medium">
                         {row.contact_person || "—"}
                     </div>
-                    <div className="text-xs text-slate-500">
-                        {row.phone || "—"}
+                    <div className="text-[11px] text-slate-400">
+                        {row.email || row.phone || "—"}
                     </div>
                 </div>
             ),
         },
         {
-            header: "Condición Pago",
+            header: "Condición",
             accessor: "payment_condition",
-            sortable: true,
+            sortable: false,
             render: (row) => (
-                <div className="py-2">
-                    <Badge
-                        variant={
-                            row.payment_condition === "credito"
-                                ? "info"
-                                : "default"
-                        }
-                    >
-                        {row.payment_condition === "credito"
-                            ? "Crédito"
-                            : "Contado"}
-                    </Badge>
-                    {row.payment_condition === "credito" &&
-                        row.credit_days > 0 && (
-                            <div className="text-xs text-slate-500 mt-1">
-                                {row.credit_days} días
-                            </div>
-                        )}
-                </div>
+                <Badge
+                    variant={
+                        row.payment_condition === "credito" ? "info" : "default"
+                    }
+                    className="uppercase text-[9px] font-bold tracking-wider"
+                >
+                    {row.payment_condition === "credito"
+                        ? "Crédito"
+                        : "Contado"}
+                </Badge>
             ),
         },
         {
-            header: "Límite Crédito",
+            header: "Crédito",
             accessor: "credit_limit",
-            sortable: true,
+            sortable: false,
             render: (row) => (
-                <div className="text-right py-2">
+                <div className="text-right py-1">
                     {row.payment_condition === "credito" ? (
-                        <span className="font-medium text-slate-900 tabular-nums">
+                        <span className="font-semibold text-slate-700 tabular-nums text-xs">
                             {formatCurrency(row.credit_limit)}
                         </span>
                     ) : (
-                        <span className="text-slate-400">—</span>
-                    )}
-                </div>
-            ),
-        },
-        {
-            header: "Tipo",
-            accessor: "is_gran_contribuyente",
-            render: (row) => (
-                <div className="py-2">
-                    {row.is_gran_contribuyente ? (
-                        <Badge variant="purple" className="whitespace-nowrap">
-                            Gran Contrib.
-                        </Badge>
-                    ) : (
-                        <span className="text-slate-400 text-sm">Normal</span>
+                        <span className="text-slate-300">—</span>
                     )}
                 </div>
             ),
@@ -333,235 +279,197 @@ function Clients() {
         {
             header: "Estado",
             accessor: "is_active",
-            sortable: true,
+            sortable: false,
             render: (row) => (
-                <div className="flex items-center gap-1.5 py-2">
+                <div className="flex items-center gap-1.5 py-1">
                     {row.is_active ? (
-                        <>
-                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span className="text-sm text-emerald-700">
-                                Activo
-                            </span>
-                        </>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-wide">
+                            Activo
+                        </span>
                     ) : (
-                        <>
-                            <div className="w-2 h-2 rounded-full bg-slate-400" />
-                            <span className="text-sm text-slate-500">
-                                Inactivo
-                            </span>
-                        </>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-50 text-slate-500 border border-slate-200 uppercase tracking-wide">
+                            Inactivo
+                        </span>
                     )}
                 </div>
             ),
         },
         {
-            header: "",
+            header: "Acciones",
             accessor: "actions",
+            className: "w-[140px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             render: (row) => (
-                <div 
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                >
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            as={Button}
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={(e) => e.stopPropagation()}
-                            onMouseDown={(e) => e.stopPropagation()}
+                <div className="grid grid-cols-3 gap-1 w-full max-w-[100px] mx-auto">
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                viewClientDetails(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Ver detalles"
                         >
-                            <MoreHorizontal className="h-4 w-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    viewClientDetails(row);
-                                }}
-                            >
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver detalles
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/clients/${row.id}/edit`);
-                                }}
-                            >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/account-statements?client=${row.id}`);
-                                }}
-                            >
-                                <FileText className="h-4 w-4 mr-2" />
-                                Estado de cuenta
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/services?tab=custom&client=${row.id}`);
-                                }}
-                            >
-                                <CreditCard className="h-4 w-4 mr-2" />
-                                Precios personalizados
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleClientStatus(row);
-                                }}
-                                className={
-                                    row.is_active
-                                        ? "text-amber-600"
-                                        : "text-emerald-600"
-                                }
-                            >
-                                {row.is_active ? (
-                                    <>
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Desactivar
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                        Activar
-                                    </>
-                                )}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                            <Eye className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/clients/${row.id}/edit`);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                toggleClientStatus(row);
+                            }}
+                            className={cn(
+                                "p-1.5 rounded-md transition-colors",
+                                row.is_active
+                                    ? "text-slate-400 hover:text-amber-600 hover:bg-amber-50"
+                                    : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            )}
+                            title={row.is_active ? "Desactivar" : "Activar"}
+                        >
+                            {row.is_active ? (
+                                <XCircle className="w-4 h-4" />
+                            ) : (
+                                <CheckCircle className="w-4 h-4" />
+                            )}
+                        </button>
+                    </div>
                 </div>
             ),
         },
     ];
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
-                        Clientes
-                    </h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Gestión de clientes y cuentas por cobrar
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={fetchClients}
-                        disabled={loading}
-                    >
-                        <RefreshCw
-                            className={cn(
-                                "h-4 w-4 mr-2",
-                                loading && "animate-spin"
-                            )}
-                        />
-                        Actualizar
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={exportToExcel}
-                        disabled={filteredClients.length === 0}
-                    >
-                        <Download className="h-4 w-4 mr-2" />
-                        Exportar Excel
-                    </Button>
-                    <Button onClick={() => navigate("/clients/new")}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nuevo Cliente
-                    </Button>
-                </div>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <KPICard title="Total Clientes" value={stats.total} />
+        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
+            {/* Bloque Superior (Estratégico): KPIs Compactos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <KPICard
-                    title="Activos"
+                    label="Total Clientes"
+                    value={stats.total}
+                    icon={Building2}
+                />
+                <KPICard
+                    label="Activos"
                     value={stats.active}
-                    variant="success"
+                    icon={CheckCircle}
                 />
                 <KPICard
-                    title="Inactivos"
-                    value={stats.inactive}
-                    variant="muted"
+                    label="Inactivos"
+                    value={stats.total - stats.active}
+                    icon={XCircle}
                 />
                 <KPICard
-                    title="Con Crédito"
+                    label="Con Crédito"
                     value={stats.withCredit}
-                    variant="info"
+                    icon={CreditCard}
                 />
                 <KPICard
-                    title="Gran Contribuyente"
+                    label="Gran Contribuyente"
                     value={stats.granContribuyente}
-                    variant="purple"
+                    icon={FileText}
                 />
             </div>
 
-            {/* Search, Filters and Table Card */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                    <div className="flex items-center gap-2 flex-1 max-w-lg">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
+            {/* Bloque Operativo: Tabla + Acciones */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                {/* Barra de Herramientas Unificada */}
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                    {/* Izquierda: Buscador y Filtros */}
+                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-2xl">
+                        <div className="relative flex-1 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <input
+                                type="text"
                                 placeholder="Buscar por nombre, NIT, email o contacto..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-9"
+                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
-
                         <Button
-                            variant={isFiltersOpen ? "secondary" : "outline"}
+                            variant="outline"
+                            size="sm"
                             onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                            className={cn(isFiltersOpen && "bg-slate-100")}
+                            className={cn(
+                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all whitespace-nowrap",
+                                isFiltersOpen &&
+                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                            )}
                         >
-                            <Filter className="h-4 w-4 mr-2" />
+                            <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
                             Filtros
                             {hasActiveFilters && (
-                                <span className="ml-1.5 bg-brand-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
                                     {(statusFilter ? 1 : 0) +
                                         (paymentFilter ? 1 : 0)}
                                 </span>
                             )}
                         </Button>
-
-                        {(searchTerm || hasActiveFilters) && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={clearFilters}
-                                className="text-red-600 hover:text-red-700"
-                            >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Limpiar
-                            </Button>
-                        )}
                     </div>
-                    <div className="text-sm text-slate-500 hidden md:block">
-                        <span className="font-semibold text-slate-900">
-                            {filteredClients.length}
-                        </span>{" "}
-                        clientes
-                    </div>
-                </CardHeader>
 
-                {/* Filters Panel */}
+                    {/* Derecha: Botones de Acción */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                        <div className="text-sm text-slate-500 hidden md:block">
+                            <span className="font-semibold text-slate-900">
+                                {filteredClients.length}
+                            </span>{" "}
+                            clientes
+                        </div>
+                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchClients}
+                            disabled={loading}
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    "w-3.5 h-3.5 mr-2",
+                                    loading && "animate-spin"
+                                )}
+                            />
+                            Actualizar
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={exportToExcel}
+                            disabled={filteredClients.length === 0}
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                            Exportar
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => navigate("/clients/new")}
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-2" />
+                            Nuevo Cliente
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Panel de Filtros Expandido */}
                 {isFiltersOpen && (
-                    <CardContent className="pt-0 pb-4 border-b border-slate-100 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-lg">
+                    <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                             <SelectERP
                                 label="Estado"
                                 value={statusFilter}
@@ -571,7 +479,6 @@ function Clients() {
                                 getOptionValue={(opt) => opt.id}
                                 clearable
                                 placeholder="Todos los estados"
-                                size="sm"
                             />
                             <SelectERP
                                 label="Condición de Pago"
@@ -582,19 +489,31 @@ function Clients() {
                                 getOptionValue={(opt) => opt.id}
                                 clearable
                                 placeholder="Todas las condiciones"
-                                size="sm"
                             />
                         </div>
-                    </CardContent>
+                        <div className="flex justify-end pt-5">
+                            <button
+                                onClick={() => {
+                                    setSearchTerm("");
+                                    setStatusFilter(null);
+                                    setPaymentFilter(null);
+                                }}
+                                className="flex items-center gap-2 text-xs font-bold text-red-600 hover:text-red-700 transition-colors uppercase tracking-wider"
+                            >
+                                <XCircle className="w-4 h-4" />
+                                Restablecer Filtros
+                            </button>
+                        </div>
+                    </div>
                 )}
 
-                {/* Table Content */}
-                <CardContent className="px-5 pb-5 pt-0">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Spinner size="lg" />
-                        </div>
-                    ) : filteredClients.length === 0 ? (
+                {/* Contenido de la Tabla */}
+                {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Spinner size="lg" />
+                    </div>
+                ) : filteredClients.length === 0 ? (
+                    <div className="p-8">
                         <EmptyState
                             icon={Building2}
                             title="No se encontraron clientes"
@@ -608,6 +527,7 @@ function Clients() {
                                 !hasActiveFilters && (
                                     <Button
                                         onClick={() => navigate("/clients/new")}
+                                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
                                     >
                                         <Plus className="h-4 w-4 mr-2" />
                                         Crear primer cliente
@@ -615,17 +535,17 @@ function Clients() {
                                 )
                             }
                         />
-                    ) : (
-                        <DataTable
-                            columns={columns}
-                            data={filteredClients}
-                            searchable={false}
-                            onRowClick={(row) => viewClientDetails(row)}
-                            emptyMessage="No hay clientes"
-                        />
-                    )}
-                </CardContent>
-            </Card>
+                    </div>
+                ) : (
+                    <DataTable
+                        columns={columns}
+                        data={filteredClients}
+                        searchable={false}
+                        onRowClick={(row) => viewClientDetails(row)}
+                        emptyMessage="No hay clientes"
+                    />
+                )}
+            </div>
 
             {/* Detail Modal */}
             <Modal
@@ -774,11 +694,15 @@ function Clients() {
                         <div className="pt-4 border-t border-slate-200 flex gap-6 text-xs text-slate-500">
                             <span>
                                 Creado:{" "}
-                                {formatDateTime(selectedClient.created_at, { includeTime: true })}
+                                {formatDateTime(selectedClient.created_at, {
+                                    includeTime: true,
+                                })}
                             </span>
                             <span>
                                 Actualizado:{" "}
-                                {formatDateTime(selectedClient.updated_at, { includeTime: true })}
+                                {formatDateTime(selectedClient.updated_at, {
+                                    includeTime: true,
+                                })}
                             </span>
                         </div>
 
@@ -786,32 +710,38 @@ function Clients() {
                         <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
                             <Button
                                 variant="outline"
+                                size="sm"
                                 onClick={() =>
                                     navigate(
                                         `/account-statements?client=${selectedClient.id}`
                                     )
                                 }
+                                className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95"
                             >
                                 <FileText className="h-4 w-4 mr-2" />
                                 Estado de Cuenta
                             </Button>
                             <Button
                                 variant="outline"
+                                size="sm"
                                 onClick={() =>
                                     navigate(
                                         `/service-orders?client=${selectedClient.id}`
                                     )
                                 }
+                                className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm transition-all active:scale-95"
                             >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Nueva Orden
                             </Button>
                             <Button
+                                size="sm"
                                 onClick={() =>
                                     navigate(
                                         `/clients/${selectedClient.id}/edit`
                                     )
                                 }
+                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all active:scale-95"
                             >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Editar Cliente

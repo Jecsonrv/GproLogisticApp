@@ -7,7 +7,6 @@ import {
     Download,
     Filter,
     DollarSign,
-    TrendingUp,
     TrendingDown,
     CreditCard,
     Edit2,
@@ -18,19 +17,19 @@ import {
     RefreshCw,
     FileText,
     Building2,
-    Calendar,
     Receipt,
     Banknote,
     AlertCircle,
-    MoreVertical,
     Landmark,
     User,
+    Calendar,
+    ArrowUpRight,
+    Lock as LockIcon,
 } from "lucide-react";
 import {
     Button,
     Card,
     CardHeader,
-    CardTitle,
     CardContent,
     DataTable,
     Badge,
@@ -48,85 +47,67 @@ import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
 
+/**
+ * Gestión de Pagos - Rediseño Corporativo SaaS
+ * Bloque Estratégico (KPIs Compactos) | Bloque Operativo (Tabla + Herramientas)
+ */
+
 // ============================================
-// STATUS CONFIGURATION
+// STATUS CONFIGURATION - CORPORATE STYLE
 // ============================================
 const STATUS_CONFIG = {
     pendiente: {
         label: "Pendiente",
-        variant: "warning",
-        bgColor: "bg-amber-50",
-        textColor: "text-amber-700",
-        borderColor: "border-amber-200",
-        dotColor: "bg-amber-500",
+        className: "bg-white border-slate-200 text-slate-600",
+        icon: Clock,
+        iconColor: "text-amber-500",
     },
     aprobado: {
         label: "Aprobado",
-        variant: "info",
-        bgColor: "bg-blue-50",
-        textColor: "text-blue-700",
-        borderColor: "border-blue-200",
-        dotColor: "bg-blue-500",
+        className: "bg-white border-slate-200 text-slate-700",
+        icon: CheckCircle2,
+        iconColor: "text-slate-900",
     },
     pagado: {
         label: "Pagado",
-        variant: "success",
-        bgColor: "bg-emerald-50",
-        textColor: "text-emerald-700",
-        borderColor: "border-emerald-200",
-        dotColor: "bg-emerald-500",
+        className: "bg-white border-slate-200 text-slate-900 font-medium",
+        icon: Banknote,
+        iconColor: "text-emerald-600",
     },
     provisionada: {
         label: "Provisionada",
-        variant: "default",
-        bgColor: "bg-slate-50",
-        textColor: "text-slate-600",
-        borderColor: "border-slate-200",
-        dotColor: "bg-slate-400",
+        className: "bg-slate-50 border-transparent text-slate-500",
+        icon: FileText,
+        iconColor: "text-slate-400",
     },
 };
 
 const TYPE_CONFIG = {
     costos: {
-        label: "Costos Directos",
-        variant: "danger",
-        bgColor: "bg-red-50",
-        textColor: "text-red-700",
-        borderColor: "border-red-200",
+        label: "Costo Directo",
+        className: "text-slate-700 bg-slate-100 border-transparent",
     },
     cargos: {
-        label: "Cargos a Cliente",
-        variant: "success",
-        bgColor: "bg-green-50",
-        textColor: "text-green-700",
-        borderColor: "border-green-200",
+        label: "Cargo Cliente",
+        className: "text-slate-700 bg-slate-100 border-slate-200",
     },
     admin: {
-        label: "Gastos Operación",
-        variant: "purple",
-        bgColor: "bg-purple-50",
-        textColor: "text-purple-700",
-        borderColor: "border-purple-200",
+        label: "Gasto Op.",
+        className: "text-purple-700 bg-purple-50 border-purple-100",
     },
     terceros: {
         label: "Terceros",
-        variant: "warning",
-        bgColor: "bg-orange-50",
-        textColor: "text-orange-700",
-        borderColor: "border-orange-200",
+        className: "text-orange-700 bg-orange-50 border-orange-100",
     },
     propios: {
         label: "Propios",
-        variant: "info",
-        bgColor: "bg-blue-50",
-        textColor: "text-blue-700",
-        borderColor: "border-blue-200",
+        className: "text-indigo-700 bg-indigo-50 border-indigo-100",
     },
 };
 
 const PAYMENT_METHODS = {
     efectivo: "Efectivo",
-    transferencia: "Transferencia Bancaria",
+    transferencia: "Transferencia",
     cheque: "Cheque",
     tarjeta: "Tarjeta",
 };
@@ -151,13 +132,6 @@ const STATUS_OPTIONS = [
     { id: "provisionada", name: "Provisionada" },
 ];
 
-const PAYMENT_METHOD_OPTIONS = [
-    { id: "transferencia", name: "Transferencia" },
-    { id: "efectivo", name: "Efectivo" },
-    { id: "cheque", name: "Cheque" },
-    { id: "tarjeta", name: "Tarjeta" },
-];
-
 const CREATE_TYPE_OPTIONS = [
     { id: "costos", name: "Costos Directos" },
     { id: "cargos", name: "Cargos a Cliente" },
@@ -170,7 +144,6 @@ const EDIT_TYPE_OPTIONS = [
     { id: "admin", name: "Gastos de Operación" },
 ];
 
-// Estados solo para edición (no para creación inicial)
 const EDIT_STATUS_OPTIONS = [
     { id: "pendiente", name: "Pendiente" },
     { id: "aprobado", name: "Aprobado" },
@@ -181,16 +154,15 @@ const EDIT_STATUS_OPTIONS = [
 // ============================================
 const StatusBadge = ({ status }) => {
     const config = STATUS_CONFIG[status] || STATUS_CONFIG.pendiente;
+    const Icon = config.icon;
     return (
         <span
             className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full border",
-                config.bgColor,
-                config.textColor,
-                config.borderColor
+                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm transition-colors",
+                config.className
             )}
         >
-            <span className={cn("w-1.5 h-1.5 rounded-full", config.dotColor)} />
+            {Icon && <Icon className={cn("w-3.5 h-3.5", config.iconColor)} />}
             {config.label}
         </span>
     );
@@ -201,10 +173,8 @@ const TypeBadge = ({ type }) => {
     return (
         <span
             className={cn(
-                "inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border",
-                config.bgColor,
-                config.textColor,
-                config.borderColor
+                "inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded border",
+                config.className
             )}
         >
             {config.label}
@@ -213,40 +183,27 @@ const TypeBadge = ({ type }) => {
 };
 
 // ============================================
-// KPI CARD
+// KPI CARD - REFINED & SPACIOUS
 // ============================================
 const KPICard = ({
     label,
     value,
-    subtext,
     icon: Icon,
-    variant = "default",
 }) => {
     return (
-        <Card>
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                            {label}
-                        </p>
-                        <p className="text-2xl font-semibold text-slate-900 tabular-nums">
-                            {value}
-                        </p>
-                        {subtext && (
-                            <p className="text-xs text-slate-500 mt-1.5">
-                                {subtext}
-                            </p>
-                        )}
-                    </div>
-                    {Icon && (
-                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                            <Icon className="w-5 h-5 text-slate-400" />
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-500 mb-1 truncate" title={label}>
+                    {label}
+                </p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                    {value}
+                </p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            </div>
+        </div>
     );
 };
 
@@ -255,6 +212,7 @@ const KPICard = ({
 // ============================================
 function ProviderPayments() {
     const navigate = useNavigate();
+    
     // Data state
     const [payments, setPayments] = useState([]);
     const [serviceOrders, setServiceOrders] = useState([]);
@@ -287,7 +245,7 @@ function ProviderPayments() {
         dateTo: "",
     });
 
-    // Form state - Nota: payment_method y status se definen al EJECUTAR el pago, no al registrar
+    // Form state
     const initialFormData = {
         service_order: "",
         transfer_type: "costos",
@@ -303,7 +261,16 @@ function ProviderPayments() {
     };
     const [formData, setFormData] = useState(initialFormData);
 
-    // Derived options for Select components
+    // Payment Execution State
+    const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+    const [payFormData, setPayFormData] = useState({
+        payment_method: "transferencia",
+        bank: "",
+        reference: "",
+        payment_date: getTodayDate(),
+    });
+
+    // Derived options
     const serviceOrderOptions = useMemo(
         () => [
             { id: "", name: "Sin OS (Gasto Administrativo)" },
@@ -321,14 +288,6 @@ function ProviderPayments() {
             ...providers.map((p) => ({ id: String(p.id), name: p.name })),
         ],
         [providers]
-    );
-
-    const bankOptions = useMemo(
-        () => [
-            { id: "", name: "Seleccionar banco" },
-            ...banks.map((b) => ({ id: String(b.id), name: b.name })),
-        ],
-        [banks]
     );
 
     const filterProviderOptions = useMemo(
@@ -349,8 +308,7 @@ function ProviderPayments() {
             setLoading(true);
             const response = await axios.get("/transfers/transfers/");
             setPayments(response.data || []);
-        } catch (error) {
-            console.error(error);
+        } catch {
             toast.error("Error al cargar pagos a proveedores");
             setPayments([]);
         } finally {
@@ -371,8 +329,8 @@ function ProviderPayments() {
             setProviders(providersRes.data);
             setBanks(banksRes.data);
             setClients(clientsRes.data);
-        } catch (error) {
-            console.error("Error cargando catálogos", error);
+        } catch {
+            // Silencioso
         }
     };
 
@@ -448,7 +406,7 @@ function ProviderPayments() {
             );
 
             toast.success("Pago actualizado exitosamente");
-            setIsEditModalOpen(false);
+            setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
         } catch (error) {
@@ -481,15 +439,63 @@ function ProviderPayments() {
         }
     };
 
-    const openEditModal = (payment) => {
-        console.log("=== DATOS DEL PAGO PARA EDITAR (Página General) ===");
-        console.log("payment completo:", payment);
-        console.log("service_order:", payment.service_order);
-        console.log("provider:", payment.provider);
-        console.log("bank:", payment.bank);
-
+    const handleMarkAsPaid = (payment) => {
         setSelectedPayment(payment);
+        setPayFormData({
+            payment_method: "transferencia",
+            bank: "",
+            reference: "",
+            payment_date: getTodayDate(),
+            invoice_file: null,
+        });
+        setIsPayModalOpen(true);
+    };
 
+    const handlePaySubmit = async (e) => {
+        e.preventDefault();
+        if (isSubmitting || !selectedPayment) return;
+
+        try {
+            setIsSubmitting(true);
+            const formDataToSend = new FormData();
+            
+            // Usar el saldo pendiente si existe, si no el monto total
+            const amountToPay = selectedPayment.balance || selectedPayment.amount;
+            formDataToSend.append("amount", amountToPay);
+            
+            formDataToSend.append("payment_date", payFormData.payment_date);
+            if (payFormData.payment_method) formDataToSend.append("payment_method", payFormData.payment_method);
+            if (payFormData.bank) formDataToSend.append("bank", payFormData.bank);
+            if (payFormData.reference) formDataToSend.append("reference", payFormData.reference);
+            
+            if (payFormData.invoice_file instanceof File) {
+                formDataToSend.append("proof_file", payFormData.invoice_file);
+            }
+
+            await axios.post(
+                `/transfers/transfers/${selectedPayment.id}/register_payment/`, 
+                formDataToSend,
+                {
+                    headers: { "Content-Type": undefined },
+                }
+            );
+            
+            toast.success("Pago registrado exitosamente");
+            setIsPayModalOpen(false);
+            fetchPayments();
+        } catch (error) {
+             const errorMsg =
+                error.response?.data?.error ||
+                error.response?.data?.message ||
+                "Error al registrar pago";
+            toast.error(errorMsg);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const openEditModal = (payment) => {
+        setSelectedPayment(payment);
         const formDataToSet = {
             service_order: payment.service_order?.id
                 ? String(payment.service_order.id)
@@ -519,9 +525,8 @@ function ProviderPayments() {
             invoice_file: null,
         };
 
-        console.log("FormData a establecer:", formDataToSet);
         setFormData(formDataToSet);
-        setIsEditModalOpen(true);
+        setIsCreateModalOpen(true);
     };
 
     const openDetailModal = (payment) => {
@@ -647,15 +652,8 @@ function ProviderPayments() {
         const costos = payments
             .filter((p) => p.transfer_type === "costos")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-        const cargos = payments
-            .filter(
-                (p) =>
-                    p.transfer_type === "cargos" ||
-                    p.transfer_type === "terceros"
-            )
-            .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
-        return { total, pendiente, aprobado, pagado, costos, cargos };
+        return { total, pendiente, aprobado, pagado, costos };
     }, [payments]);
 
     const activeFiltersCount = useMemo(() => {
@@ -668,52 +666,46 @@ function ProviderPayments() {
         return count;
     }, [filters]);
 
-    // Table columns
     const columns = [
         {
             header: "Orden de Servicio",
             accessor: "service_order_number",
+            className: "w-[180px]",
+            sortable: false,
             cell: (row) => (
-                <div>
-                    <div className="font-mono text-sm font-semibold">
-                        {row.service_order_number ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(
-                                        `/service-orders/${row.service_order}`
-                                    );
-                                }}
-                                className="text-brand-600 hover:text-brand-700 hover:underline"
-                            >
-                                {row.service_order_number}
-                            </button>
-                        ) : (
-                            <span className="text-gray-400 italic">Sin OS</span>
-                        )}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                        {formatDate(row.transaction_date, { format: "medium" })}
-                    </div>
+                <div className="flex flex-col">
+                    {row.service_order_number ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/service-orders/${row.service_order}`);
+                            }}
+                            className="font-mono text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit"
+                        >
+                            {row.service_order_number}
+                        </button>
+                    ) : (
+                        <span className="font-mono text-xs text-slate-400 italic">Administrativo</span>
+                    )}
+                    <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        {formatDate(row.transaction_date, { format: "short" })}
+                    </span>
                 </div>
             ),
         },
         {
-            header: "Tipo",
-            accessor: "transfer_type",
-            cell: (row) => <TypeBadge type={row.transfer_type} />,
-        },
-        {
-            header: "Proveedor / Descripción",
+            header: "Proveedor / Beneficiario",
             accessor: "provider_name",
+            className: "min-w-[220px]",
+            sortable: false,
             cell: (row) => (
-                <div className="min-w-[180px]">
-                    <div className="font-medium text-gray-900">
+                <div>
+                    <div className="font-medium text-slate-700 text-sm truncate max-w-[240px]">
                         {row.provider_name || row.beneficiary_name || "—"}
                     </div>
                     {row.description && (
                         <div
-                            className="text-xs text-gray-500 truncate max-w-[250px]"
+                            className="text-xs text-slate-500 truncate max-w-[240px] mt-0.5 leading-tight font-normal"
                             title={row.description}
                         >
                             {row.description}
@@ -723,56 +715,39 @@ function ProviderPayments() {
             ),
         },
         {
+            header: "Categoría",
+            accessor: "transfer_type",
+            className: "w-[130px]",
+            sortable: false,
+            cell: (row) => <TypeBadge type={row.transfer_type} />,
+        },
+        {
             header: "Monto",
             accessor: "amount",
+            className: "w-[140px]",
+            sortable: false,
             cell: (row) => (
-                <div className="text-right">
-                    <div className="text-sm font-bold text-gray-900 tabular-nums">
+                <div className="flex flex-col items-end text-right">
+                    <span className="font-semibold text-slate-700 tabular-nums text-sm tracking-tight">
                         {formatCurrency(row.amount)}
-                    </div>
+                    </span>
                 </div>
             ),
         },
         {
-            header: "Factura Prov.",
+            header: "Referencia",
             accessor: "invoice_number",
+            className: "w-[150px]",
+            sortable: false,
             cell: (row) => (
-                <div>
+                <div className="flex flex-col gap-1">
                     {row.invoice_number ? (
-                        <div className="font-mono text-xs text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
-                            {row.invoice_number}
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 w-fit">
+                            <Receipt className="w-3 h-3 text-slate-400" />
+                            <span className="font-mono">{row.invoice_number}</span>
                         </div>
                     ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                    )}
-                </div>
-            ),
-        },
-        {
-            header: "Método de Pago",
-            accessor: "payment_method",
-            cell: (row) => (
-                <div className="text-sm text-gray-700">
-                    {row.payment_method ? (
-                        <div className="flex items-center gap-1.5">
-                            <CreditCard className="w-3.5 h-3.5 text-gray-400" />
-                            <span>{PAYMENT_METHODS[row.payment_method]}</span>
-                        </div>
-                    ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                    )}
-                </div>
-            ),
-        },
-        {
-            header: "Banco",
-            accessor: "bank_name",
-            cell: (row) => (
-                <div className="text-sm text-gray-700">
-                    {row.bank_name ? (
-                        <span>{row.bank_name}</span>
-                    ) : (
-                        <span className="text-gray-400 text-xs">—</span>
+                        <span className="text-[10px] text-slate-300 font-medium italic">Sin soporte</span>
                     )}
                 </div>
             ),
@@ -780,260 +755,205 @@ function ProviderPayments() {
         {
             header: "Estado",
             accessor: "status",
+            className: "w-[130px]",
+            sortable: false,
             cell: (row) => <StatusBadge status={row.status} />,
         },
         {
-            header: "Doc.",
+            header: "Soporte",
             accessor: "invoice_file",
-            className: "w-16 text-center",
-            cell: (row) =>
-                row.invoice_file ? (
-                    <div className="relative group">
-                        <Button
-                            variant="ghost"
-                            size="sm"
+            className: "w-[80px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
+            cell: (row) => (
+                <div className="flex items-center justify-center">
+                    {row.invoice_file ? (
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(row.invoice_file, "_blank");
                             }}
-                            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                            title="Ver comprobante (click para ver, click derecho para descargar)"
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Descargar usando axios
-                                axios
-                                    .get(
-                                        `/transfers/transfers/${row.id}/download_invoice/`,
-                                        {
-                                            responseType: "blob",
-                                        }
-                                    )
-                                    .then((response) => {
-                                        const url = window.URL.createObjectURL(
-                                            new Blob([response.data])
-                                        );
-                                        const link =
-                                            document.createElement("a");
-                                        link.href = url;
-                                        link.setAttribute(
-                                            "download",
-                                            `comprobante_${
-                                                row.invoice_number || row.id
-                                            }.pdf`
-                                        );
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        link.remove();
-                                        window.URL.revokeObjectURL(url);
-                                        toast.success(
-                                            "Descargando comprobante..."
-                                        );
-                                    })
-                                    .catch((error) => {
-                                        toast.error(
-                                            "Error al descargar comprobante"
-                                        );
-                                    });
-                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Ver soporte digital"
                         >
                             <FileText className="w-4 h-4" />
-                        </Button>
-                    </div>
-                ) : (
-                    <span className="text-gray-400 text-xs">—</span>
-                ),
+                        </button>
+                    ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                    )}
+                </div>
+            ),
         },
         {
             header: "Acciones",
             accessor: "actions",
+            className: "w-[140px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="flex items-center justify-end gap-1">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openDetailModal(row);
-                        }}
-                        className="text-gray-500 hover:text-blue-600"
-                        title="Ver detalles"
-                    >
-                        <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(row);
-                        }}
-                        className="text-gray-500 hover:text-amber-600"
-                        title="Editar"
-                    >
-                        <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirm({ open: true, id: row.id });
-                        }}
-                        className="text-gray-400 hover:text-red-600"
-                        title="Eliminar"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </Button>
+                <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
+                    <div className="flex justify-center">
+                        {row.status !== "pagado" && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMarkAsPaid(row);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                                title="Ejecutar Pago"
+                            >
+                                <Banknote className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirm({ open: true, id: row.id });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
             ),
         },
     ];
 
-    // Loading state
     if (loading && payments.length === 0) {
         return (
             <div className="space-y-6">
-                <Skeleton className="h-10 w-64" />
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {[1, 2, 3, 4, 5, 6].map((i) => (
-                        <Skeleton key={i} className="h-24" />
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-20 rounded-xl" />
                     ))}
                 </div>
-                <SkeletonTable rows={8} columns={7} />
+                <SkeletonTable rows={10} columns={7} />
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Pagos a Proveedores
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Gestión de gastos, costos y pagos asociados a órdenes de
-                        servicio
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={fetchPayments}
-                        disabled={loading}
-                    >
-                        <RefreshCw
-                            className={cn(
-                                "w-4 h-4 mr-2",
-                                loading && "animate-spin"
-                            )}
-                        />
-                        Actualizar
-                    </Button>
-                    <Button
-                        variant="outline"
-                        onClick={handleExportExcel}
-                        disabled={isExporting || payments.length === 0}
-                    >
-                        <Download
-                            className={cn(
-                                "w-4 h-4 mr-2",
-                                isExporting && "animate-bounce"
-                            )}
-                        />
-                        Exportar
-                    </Button>
-                    <Button onClick={() => setIsCreateModalOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Nuevo Pago
-                    </Button>
-                </div>
-            </div>
-
-            {/* KPI Cards */}
+        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
+            
+            {/* Bloque Superior (Estratégico): KPIs Compactos */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <KPICard
-                    label="Pendientes"
+                    label="Pendientes de pago"
                     value={formatCurrency(kpis.pendiente)}
                     icon={Clock}
-                    variant="warning"
                 />
                 <KPICard
-                    label="Aprobados"
+                    label="Listos para pagar"
                     value={formatCurrency(kpis.aprobado)}
                     icon={CheckCircle2}
-                    variant="primary"
                 />
                 <KPICard
-                    label="Pagados"
+                    label="Pagado este mes"
                     value={formatCurrency(kpis.pagado)}
                     icon={Banknote}
-                    variant="success"
                 />
                 <KPICard
-                    label="Costos Directos"
+                    label="Gastos operativos"
                     value={formatCurrency(kpis.costos)}
                     icon={TrendingDown}
-                    variant="danger"
                 />
                 <KPICard
-                    label="Total General"
+                    label="Total obligaciones"
                     value={formatCurrency(kpis.total)}
                     icon={DollarSign}
-                    variant="default"
-                    subtext="Todos los gastos"
                 />
             </div>
 
-            {/* Filters & Table */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                    <div className="flex items-center gap-2 flex-1 max-w-lg">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <Input
-                                placeholder="Buscar por OS, proveedor, factura..."
+            {/* Bloque Inferior (Operativo): Tabla + Acciones */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                
+                {/* Barra de Herramientas Unificada (Buscador + Filtros + Botones de Acción) */}
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                    
+                    {/* Izquierda: Buscador y Filtros */}
+                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-2xl">
+                        <div className="relative flex-1 group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por proveedor, OS o factura..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9"
+                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
                         <Button
                             variant="outline"
+                            size="sm"
                             onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                            className={cn(isFiltersOpen && "bg-gray-100")}
+                            className={cn(
+                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all whitespace-nowrap",
+                                isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                            )}
                         >
-                            <Filter className="w-4 h-4 mr-2" />
+                            <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
                             Filtros
                             {activeFiltersCount > 0 && (
-                                <Badge
-                                    variant="primary"
-                                    className="ml-2 px-1.5 py-0.5 h-5"
-                                >
+                                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
                                     {activeFiltersCount}
-                                </Badge>
+                                </span>
                             )}
                         </Button>
                     </div>
-                    <div className="text-sm text-gray-500">
-                        {filteredPayments.length} de {payments.length} registros
+                    
+                    {/* Derecha: Botones de Acción Operativa */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+                        
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExportExcel()}
+                            disabled={isExporting}
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            {isExporting ? (
+                                <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
+                            ) : (
+                                <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
+                            )}
+                            Exportar
+                        </Button>
+                        <Button 
+                            size="sm"
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-2" />
+                            Nuevo Gasto
+                        </Button>
                     </div>
-                </CardHeader>
+                </div>
 
+                {/* Expanded Filters Panel */}
                 {isFiltersOpen && (
-                    <CardContent className="pt-0 pb-4 border-b border-gray-100">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                             <SelectERP
                                 label="Tipo de Gasto"
                                 value={filters.transfer_type}
-                                onChange={(val) =>
-                                    setFilters({
-                                        ...filters,
-                                        transfer_type: val,
-                                    })
-                                }
+                                onChange={(val) => setFilters({ ...filters, transfer_type: val })}
                                 options={TRANSFER_TYPE_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -1042,9 +962,7 @@ function ProviderPayments() {
                             <SelectERP
                                 label="Estado"
                                 value={filters.status}
-                                onChange={(val) =>
-                                    setFilters({ ...filters, status: val })
-                                }
+                                onChange={(val) => setFilters({ ...filters, status: val })}
                                 options={STATUS_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -1053,9 +971,7 @@ function ProviderPayments() {
                             <SelectERP
                                 label="Proveedor"
                                 value={filters.provider}
-                                onChange={(val) =>
-                                    setFilters({ ...filters, provider: val })
-                                }
+                                onChange={(val) => setFilters({ ...filters, provider: val })}
                                 options={filterProviderOptions}
                                 searchable
                                 clearable
@@ -1066,517 +982,222 @@ function ProviderPayments() {
                                 label="Desde"
                                 type="date"
                                 value={filters.dateFrom}
-                                onChange={(e) =>
-                                    setFilters({
-                                        ...filters,
-                                        dateFrom: e.target.value,
-                                    })
-                                }
+                                onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
                             />
                             <Input
                                 label="Hasta"
                                 type="date"
                                 value={filters.dateTo}
-                                onChange={(e) =>
-                                    setFilters({
-                                        ...filters,
-                                        dateTo: e.target.value,
-                                    })
-                                }
+                                onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
                             />
                         </div>
-                        <div className="flex justify-end pt-3">
-                            <Button
-                                variant="ghost"
-                                size="sm"
+                        <div className="flex justify-end pt-5">
+                            <button
                                 onClick={clearFilters}
-                                className="text-red-600 hover:text-red-700"
+                                className="flex items-center gap-2 text-xs font-bold text-red-600 hover:text-red-700 transition-colors uppercase tracking-wider"
                             >
-                                <XCircle className="w-4 h-4 mr-1.5" />
-                                Limpiar Filtros
-                            </Button>
+                                <XCircle className="w-4 h-4" />
+                                Restablecer Filtros
+                            </button>
                         </div>
-                    </CardContent>
+                    </div>
                 )}
 
-                <CardContent className="px-5 pb-5 pt-0">
-                    <DataTable
-                        data={filteredPayments}
-                        columns={columns}
-                        loading={loading}
-                        searchable={false}
-                        onRowClick={openDetailModal}
-                        emptyMessage="No se encontraron pagos a proveedores"
-                    />
-                </CardContent>
-            </Card>
+                <DataTable
+                    data={filteredPayments}
+                    columns={columns}
+                    loading={loading}
+                    searchable={false}
+                    onRowClick={openDetailModal}
+                    emptyMessage="No se encontraron movimientos financieros con los criterios actuales."
+                />
+            </div>
 
-            {/* Create Modal */}
+            {/* Create/Edit Modal */}
             <Modal
                 isOpen={isCreateModalOpen}
                 onClose={() => {
                     setIsCreateModalOpen(false);
                     resetForm();
                 }}
-                title="Registrar Pago a Proveedor"
+                title={selectedPayment ? "Editar Registro de Gasto" : "Nuevo Registro de Gasto"}
                 size="3xl"
             >
-                <form onSubmit={handleCreate} className="space-y-6">
-                    {/* Section 1: Asociación */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
-                                1
-                            </span>
-                            Asociación del Pago
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <SelectERP
-                                    label="Orden de Servicio"
-                                    value={formData.service_order}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            service_order: val,
-                                        })
-                                    }
-                                    options={serviceOrderOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                    helperText="Deja vacío para gastos de operación"
-                                />
-                            </div>
-                            <div>
-                                <SelectERP
-                                    label="Tipo de Gasto"
-                                    value={formData.transfer_type}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            transfer_type: val,
-                                        })
-                                    }
-                                    required
-                                    options={CREATE_TYPE_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                />
-                            </div>
-                        </div>
-                    </div>
+                {(() => {
+                    const isLocked = selectedPayment && (
+                        selectedPayment.status === 'pagado' || 
+                        parseFloat(selectedPayment.paid_amount || 0) > 0 ||
+                        selectedPayment.is_billed
+                    );
 
-                    <div className="border-t border-gray-100" />
+                    return (
+                        <form onSubmit={selectedPayment ? handleEdit : handleCreate} className="space-y-6">
+                            {isLocked && (
+                                <div className="bg-slate-50 border-l-4 border-slate-900 p-4 rounded-r-lg flex items-start gap-3 shadow-sm">
+                                    <div className="p-1.5 bg-white rounded-full border border-slate-200 shadow-sm">
+                                        <LockIcon className="w-4 h-4 text-slate-700" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900">Registro Protegido</p>
+                                        <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                                            Este movimiento financiero ya ha sido procesado (pagado parcial/totalmente o facturado). 
+                                            Para garantizar la integridad contable, los campos críticos han sido bloqueados.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
-                    {/* Section 2: Proveedor y Monto */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
-                                2
-                            </span>
-                            Datos del Proveedor y Monto
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Section 1: Asociación */}
                             <div>
-                                <SelectERP
-                                    label="Proveedor"
-                                    value={formData.provider}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            provider: val,
-                                        })
-                                    }
-                                    options={providerOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                />
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                                    Origen y Clasificación
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div>
+                                        <Label className="mb-1.5 block">Orden de Servicio</Label>
+                                        <SelectERP
+                                            value={formData.service_order}
+                                            onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                            options={serviceOrderOptions}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            searchable
+                                            clearable
+                                            disabled={isLocked}
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1.5">Opcional para gastos administrativos generales</p>
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">Tipo de Movimiento *</Label>
+                                        <SelectERP
+                                            value={formData.transfer_type}
+                                            onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                            options={CREATE_TYPE_OPTIONS}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            disabled={isLocked}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <Label>Beneficiario (si es diferente)</Label>
-                                <Input
-                                    value={formData.beneficiary_name}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            beneficiary_name: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Nombre del beneficiario"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <Label>Descripción *</Label>
-                                <Input
-                                    value={formData.description}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            description: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Concepto del pago..."
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Monto *</Label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={formData.amount}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            amount: e.target.value,
-                                        })
-                                    }
-                                    placeholder="0.00"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Fecha de Transacción</Label>
-                                <Input
-                                    type="date"
-                                    value={formData.transaction_date}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            transaction_date: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className="border-t border-gray-100" />
-
-                    {/* Section 3: Pago y Facturación */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
-                                3
-                            </span>
-                            Datos de Factura del Proveedor
-                        </h4>
-                        <div className="grid grid-cols-1 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            {/* Section 2: Detalle */}
                             <div>
-                                <Label>
-                                    Número de Factura/CCF del Proveedor
-                                </Label>
-                                <Input
-                                    value={formData.invoice_number}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            invoice_number: e.target.value,
-                                        })
-                                    }
-                                    placeholder="F-2025-001 o CCF-123456"
-                                    className="font-mono"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Número del documento fiscal del proveedor
-                                </p>
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 pt-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                                    Detalle Financiero
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div>
+                                        <Label className="mb-1.5 block">Proveedor</Label>
+                                        <SelectERP
+                                            value={formData.provider}
+                                            onChange={(val) => setFormData({ ...formData, provider: val })}
+                                            options={providerOptions}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            searchable
+                                            clearable
+                                            disabled={isLocked}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">Beneficiario (Alternativo)</Label>
+                                        <Input
+                                            value={formData.beneficiary_name}
+                                            onChange={(e) => setFormData({ ...formData, beneficiary_name: e.target.value })}
+                                            placeholder="Si el cheque/transferencia sale a otro nombre"
+                                        />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <Label className="mb-1.5 block">Concepto del Gasto *</Label>
+                                        <Input
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            placeholder="Ej: Pago de alquiler bodega diciembre 2025"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">Monto Solicitado *</Label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={formData.amount}
+                                                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                                placeholder="0.00"
+                                                className="pl-7 font-mono font-bold text-slate-900"
+                                                required
+                                                disabled={isLocked}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">Fecha de Operación</Label>
+                                        <Input
+                                            type="date"
+                                            value={formData.transaction_date}
+                                            onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                                            disabled={isLocked}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="sm:col-span-2">
-                                <Label>Adjuntar Factura (Opcional)</Label>
-                                <FileUpload
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    onFileChange={(file) =>
-                                        setFormData({
-                                            ...formData,
-                                            invoice_file: file,
-                                        })
-                                    }
-                                    helperText="El método de pago se define al ejecutar el pago desde Cuentas por Pagar"
-                                />
-                            </div>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            El estado inicial será "Pendiente". El método de
-                            pago se registra al ejecutar el pago.
-                        </p>
-                    </div>
 
-                    {/* Notes */}
-                    <div>
-                        <Label>Notas Adicionales</Label>
-                        <textarea
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={formData.notes}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    notes: e.target.value,
-                                })
-                            }
-                            placeholder="Observaciones adicionales..."
-                        />
-                    </div>
+                            {/* Section 3: Soporte */}
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Receipt className="w-3.5 h-3.5" />
+                                    Documentación de Soporte
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <div>
+                                        <Label className="mb-1.5 block">N° Factura / Comprobante (Opcional)</Label>
+                                        <Input
+                                            value={formData.invoice_number}
+                                            onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                                            placeholder="Ej: FAC-001-552"
+                                            className="font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">Adjuntar Archivo</Label>
+                                        <FileUpload
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            onFileChange={(file) => setFormData({ ...formData, invoice_file: file })}
+                                            helperText="PDF, JPG o PNG - Máx. 5MB"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setIsCreateModalOpen(false);
-                                resetForm();
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? "Guardando..." : "Registrar Pago"}
-                        </Button>
-                    </ModalFooter>
-                </form>
-            </Modal>
-
-            {/* Edit Modal */}
-            <Modal
-                isOpen={isEditModalOpen}
-                onClose={() => {
-                    setIsEditModalOpen(false);
-                    resetForm();
-                }}
-                title="Editar Pago a Proveedor"
-                size="3xl"
-            >
-                <form onSubmit={handleEdit} className="space-y-6">
-                    {/* Section 1: Asociación */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
-                                1
-                            </span>
-                            Asociación del Pago
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <SelectERP
-                                    label="Orden de Servicio"
-                                    value={formData.service_order}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            service_order: val,
-                                        })
-                                    }
-                                    options={serviceOrderOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                />
-                            </div>
-                            <div>
-                                <SelectERP
-                                    label="Tipo de Gasto"
-                                    value={formData.transfer_type}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            transfer_type: val,
-                                        })
-                                    }
-                                    options={EDIT_TYPE_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    required
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border-t border-gray-100" />
-
-                    {/* Section 2: Proveedor y Monto */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
-                                2
-                            </span>
-                            Datos del Proveedor y Monto
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <SelectERP
-                                    label="Proveedor"
-                                    value={formData.provider}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            provider: val,
-                                        })
-                                    }
-                                    options={providerOptions}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    clearable
-                                />
-                            </div>
-                            <div>
-                                <Label>Beneficiario</Label>
-                                <Input
-                                    value={formData.beneficiary_name}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            beneficiary_name: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Nombre del beneficiario"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <Label>Descripción *</Label>
-                                <Input
-                                    value={formData.description}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            description: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Concepto del pago..."
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Monto *</Label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={formData.amount}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            amount: e.target.value,
-                                        })
-                                    }
-                                    placeholder="0.00"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label>Fecha de Transacción</Label>
-                                <Input
-                                    type="date"
-                                    value={formData.transaction_date}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            transaction_date: e.target.value,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border-t border-gray-100" />
-
-                    {/* Section 3: Datos de Factura (Edición) */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">
-                                3
-                            </span>
-                            Datos de Factura y Estado
-                        </h4>
-                        <div className="grid grid-cols-1 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <div>
-                                <SelectERP
-                                    label="Estado"
-                                    value={formData.status}
-                                    onChange={(val) =>
-                                        setFormData({
-                                            ...formData,
-                                            status: val,
-                                        })
-                                    }
-                                    options={EDIT_STATUS_OPTIONS}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    helperText="Para marcar como pagado, use Cuentas por Pagar"
-                                />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <Label>Número de Factura/CCF</Label>
-                                <Input
-                                    value={formData.invoice_number}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            invoice_number: e.target.value,
-                                        })
-                                    }
-                                    placeholder="F-2025-001 o CCF-123456"
-                                    className="font-mono"
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Comprobante de Crédito Fiscal o número de
-                                    factura
-                                </p>
-                            </div>
-                            <div>
-                                <Label>Nueva Factura (opcional)</Label>
-                                <FileUpload
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    onFileChange={(file) =>
-                                        setFormData({
-                                            ...formData,
-                                            invoice_file: file,
-                                        })
-                                    }
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                        <Label>Notas Adicionales</Label>
-                        <textarea
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={formData.notes}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    notes: e.target.value,
-                                })
-                            }
-                            placeholder="Observaciones adicionales..."
-                        />
-                    </div>
-
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setIsEditModalOpen(false);
-                                resetForm();
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? "Guardando..." : "Actualizar Pago"}
-                        </Button>
-                    </ModalFooter>
-                </form>
+                            <ModalFooter className="px-0 pb-0 mr-0">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setIsCreateModalOpen(false);
+                                        resetForm();
+                                    }}
+                                    className="text-slate-500 font-semibold"
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="bg-slate-900 text-white hover:bg-black min-w-[140px] shadow-lg shadow-slate-200 transition-all active:scale-95 mr-0"
+                                >
+                                    {isSubmitting ? "Procesando..." : selectedPayment ? "Actualizar Movimiento" : "Registrar Movimiento"}
+                                </Button>
+                            </ModalFooter>
+                        </form>
+                    );
+                })()}
             </Modal>
 
             {/* Detail Modal */}
@@ -1586,318 +1207,243 @@ function ProviderPayments() {
                     setIsDetailModalOpen(false);
                     setSelectedPayment(null);
                 }}
-                title="Detalles del Pago"
-                size="3xl"
+                title="Detalle de Movimiento"
+                size="2xl"
             >
                 {selectedPayment && (
                     <div className="space-y-6">
-                        {/* Header con monto y estado */}
-                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        {/* Header con monto principal */}
+                        <div className="flex items-center justify-between p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700">
                             <div>
-                                <div className="text-sm text-slate-500 mb-1">
-                                    Monto Total
-                                </div>
-                                <div className="text-3xl font-bold text-slate-900 tabular-nums">
+                                <p className="text-xs font-medium text-slate-400 mb-1">Monto Total</p>
+                                <h2 className="text-3xl font-bold text-white tabular-nums">
                                     {formatCurrency(selectedPayment.amount)}
-                                </div>
+                                </h2>
                             </div>
-                            <div className="text-right space-y-2">
+                            <div className="text-right flex flex-col items-end gap-2">
                                 <StatusBadge status={selectedPayment.status} />
-                                <div className="text-xs text-slate-500">
-                                    {formatDate(
-                                        selectedPayment.transaction_date,
-                                        { format: "long" }
-                                    )}
+                                <div className="text-xs text-slate-300">
+                                    {formatDate(selectedPayment.transaction_date, { format: "long" })}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Información General */}
-                        <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Tipo de Pago
+                        {/* Grid de información */}
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Proveedor */}
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Proveedor / Beneficiario</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                        <Building2 className="w-4 h-4 text-slate-600" />
                                     </div>
-                                    <TypeBadge
-                                        type={selectedPayment.transfer_type}
-                                    />
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Orden de Servicio
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-900">
-                                        {selectedPayment.service_order_number ? (
-                                            <button
-                                                onClick={() =>
-                                                    navigate(
-                                                        `/service-orders/${selectedPayment.service_order}`
-                                                    )
-                                                }
-                                                className="text-brand-600 hover:text-brand-700 hover:underline flex items-center gap-1 font-mono"
-                                            >
-                                                {
-                                                    selectedPayment.service_order_number
-                                                }
-                                                <Eye className="w-3.5 h-3.5" />
-                                            </button>
-                                        ) : (
-                                            <span className="text-slate-400 italic">
-                                                Sin OS vinculada
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Método de Pago
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-900">
-                                        {selectedPayment.payment_method ? (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200 w-fit">
-                                                <CreditCard className="w-4 h-4 text-slate-500" />
-                                                <span>
-                                                    {
-                                                        PAYMENT_METHODS[
-                                                            selectedPayment
-                                                                .payment_method
-                                                        ]
-                                                    }
-                                                </span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-slate-400 italic">
-                                                No especificado
-                                            </span>
-                                        )}
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-700 truncate">{selectedPayment.provider_name || selectedPayment.beneficiary_name || "—"}</p>
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Proveedor
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
-                                        <Building2 className="w-4 h-4 text-slate-400" />
-                                        {selectedPayment.provider_name ||
-                                            selectedPayment.beneficiary_name ||
-                                            "No especificado"}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Banco
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-900">
-                                        {selectedPayment.bank?.name ||
-                                        selectedPayment.bank_name ? (
-                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-200 w-fit">
-                                                <Landmark className="w-4 h-4 text-blue-600" />
-                                                <span>
-                                                    {selectedPayment.bank
-                                                        ?.name ||
-                                                        selectedPayment.bank_name}
-                                                </span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-slate-400 italic">
-                                                No especificado
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                                        Solicitado por
-                                    </div>
-                                    <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
-                                        <User className="w-4 h-4 text-slate-400" />
-                                        {selectedPayment.created_by_name ||
-                                            selectedPayment.created_by_username ||
-                                            "Sistema"}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Facturación */}
-                        {selectedPayment.invoice_number && (
-                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                                <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <Receipt className="w-4 h-4" />
-                                    Información de Factura
-                                </div>
-                                <div>
-                                    <div className="text-xs text-amber-600 mb-0.5">
-                                        Número de Factura/CCF
-                                    </div>
-                                    <div className="font-mono text-sm font-medium text-slate-900">
-                                        {selectedPayment.invoice_number}
-                                    </div>
+                            {/* Categoría */}
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Categoría</label>
+                                <div className="mt-1">
+                                    <TypeBadge type={selectedPayment.transfer_type} />
                                 </div>
                             </div>
-                        )}
 
-                        {/* Comprobante */}
-                        {selectedPayment.invoice_file && (
-                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <div className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                    <FileText className="w-4 h-4" />
-                                    Comprobante Adjunto
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            window.open(
-                                                selectedPayment.invoice_file,
-                                                "_blank"
-                                            )
-                                        }
-                                        className="flex-1"
+                            {/* Orden de Servicio */}
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Orden de Servicio</label>
+                                {selectedPayment.service_order_number ? (
+                                    <button
+                                        onClick={() => navigate(`/service-orders/${selectedPayment.service_order}`)}
+                                        className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 transition-colors group"
                                     >
-                                        <Eye className="w-4 h-4 mr-2" />
-                                        Ver Comprobante
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={async () => {
-                                            try {
-                                                const response =
-                                                    await axios.get(
-                                                        `/transfers/transfers/${selectedPayment.id}/download_invoice/`,
-                                                        { responseType: "blob" }
-                                                    );
-                                                const url =
-                                                    window.URL.createObjectURL(
-                                                        new Blob([
-                                                            response.data,
-                                                        ])
-                                                    );
-                                                const link =
-                                                    document.createElement("a");
-                                                link.href = url;
-                                                link.setAttribute(
-                                                    "download",
-                                                    `comprobante_${
-                                                        selectedPayment.invoice_number ||
-                                                        selectedPayment.id
-                                                    }.pdf`
-                                                );
-                                                document.body.appendChild(link);
-                                                link.click();
-                                                link.remove();
-                                                window.URL.revokeObjectURL(url);
-                                                toast.success(
-                                                    "Comprobante descargado"
-                                                );
-                                            } catch (error) {
-                                                toast.error(
-                                                    "Error al descargar comprobante"
-                                                );
-                                            }
-                                        }}
-                                        className="flex-1"
-                                    >
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Descargar
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Descripción */}
-                        {selectedPayment.description && (
-                            <div>
-                                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                                    Descripción
-                                </div>
-                                <div className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                    {selectedPayment.description}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Notas */}
-                        {selectedPayment.notes && (
-                            <div>
-                                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                                    Notas Adicionales
-                                </div>
-                                <div className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                    {selectedPayment.notes}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Auditoría */}
-                        <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-xs text-slate-500">
-                            <div>
-                                <span className="font-medium">Registrado:</span>{" "}
-                                {formatDate(selectedPayment.created_at, {
-                                    format: "long",
-                                })}
-                                {selectedPayment.created_by_username && (
-                                    <span className="ml-1">
-                                        por{" "}
-                                        <span className="font-medium text-slate-700">
-                                            {
-                                                selectedPayment.created_by_username
-                                            }
-                                        </span>
-                                    </span>
+                                        <span className="font-mono">{selectedPayment.service_order_number}</span>
+                                        <ArrowUpRight className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
+                                    </button>
+                                ) : (
+                                    <p className="text-sm text-slate-500 italic">Gasto Administrativo</p>
                                 )}
                             </div>
-                            {selectedPayment.payment_date && (
-                                <div>
-                                    <span className="font-medium">Pagado:</span>{" "}
-                                    {formatDate(selectedPayment.payment_date, {
-                                        format: "long",
-                                    })}
-                                </div>
-                            )}
+
+                            {/* Referencia Fiscal */}
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Referencia Fiscal</label>
+                                {selectedPayment.invoice_number ? (
+                                    <p className="text-sm font-mono font-semibold text-slate-700">{selectedPayment.invoice_number}</p>
+                                ) : (
+                                    <p className="text-sm text-slate-400 italic">Sin referencia</p>
+                                )}
+                            </div>
                         </div>
 
-                        <ModalFooter>
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setIsDetailModalOpen(false);
-                                    setSelectedPayment(null);
-                                }}
-                            >
-                                Cerrar
-                            </Button>
+                        {/* Descripción */}
+                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Concepto</label>
+                            <p className="text-sm text-slate-700 leading-relaxed">
+                                {selectedPayment.description || "Sin descripción proporcionada"}
+                            </p>
+                        </div>
+
+                        {/* Archivo adjunto */}
+                        {selectedPayment.invoice_file && (
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Archivo Adjunto</label>
+                                <button
+                                    onClick={() => window.open(selectedPayment.invoice_file, "_blank")}
+                                    className="flex items-center gap-3 p-3 bg-white border border-slate-300 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition-all group w-full"
+                                >
+                                    <div className="p-2 bg-slate-100 text-slate-600 rounded group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                                        <FileText className="w-4 h-4" />
+                                    </div>
+                                    <div className="text-left flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-slate-700 truncate">Ver Documento</p>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Botones de Acción */}
+                        <div className="flex items-center justify-end gap-3 mt-6 pt-2">
+                            <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Cerrar</Button>
                             <Button
                                 onClick={() => {
                                     setIsDetailModalOpen(false);
                                     openEditModal(selectedPayment);
                                 }}
+                                className="bg-slate-900 text-white hover:bg-slate-800"
                             >
-                                <Edit2 className="w-4 h-4 mr-2" />
-                                Editar Pago
+                                Editar Movimiento
+                            </Button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Pay Modal */}
+            <Modal
+                isOpen={isPayModalOpen}
+                onClose={() => setIsPayModalOpen(false)}
+                title="Registrar Pago"
+                size="lg"
+            >
+                {selectedPayment && (
+                    <form onSubmit={handlePaySubmit} className="space-y-6">
+                        {/* Resumen del Pago */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                    <Building2 className="w-5 h-5 text-slate-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Proveedor / Beneficiario</p>
+                                    <p className="text-sm font-bold text-slate-700 truncate max-w-[200px]">
+                                        {selectedPayment.provider_name || selectedPayment.beneficiary_name || "—"}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Monto a Pagar</p>
+                                <p className="text-xl font-bold text-slate-800 tabular-nums tracking-tight">
+                                    {formatCurrency(selectedPayment.amount)}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                                Detalle de la Transacción
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <Label className="mb-1.5 block">Método de Pago</Label>
+                                    <SelectERP
+                                        value={payFormData.payment_method}
+                                        onChange={(val) => setPayFormData({ ...payFormData, payment_method: val })}
+                                        options={Object.entries(PAYMENT_METHODS).map(([id, name]) => ({ id, name }))}
+                                        getOptionLabel={(opt) => opt.name}
+                                        getOptionValue={(opt) => opt.id}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label className="mb-1.5 block">Fecha de Pago</Label>
+                                    <Input
+                                        type="date"
+                                        value={payFormData.payment_date}
+                                        onChange={(e) => setPayFormData({ ...payFormData, payment_date: e.target.value })}
+                                        required
+                                    />
+                                </div>
+
+                                {payFormData.payment_method !== "efectivo" && (
+                                    <div className="sm:col-span-2">
+                                        <Label className="mb-1.5 block">Banco de Salida</Label>
+                                                                            <SelectERP
+                                                                                value={payFormData.bank}
+                                                                                onChange={(val) => setPayFormData({ ...payFormData, bank: val })}
+                                                                                options={[
+                                                                                    { id: "", name: "Seleccionar banco..." },
+                                                                                    ...banks.map(b => ({ id: String(b.id), name: b.name }))
+                                                                                ]}
+                                                                                getOptionLabel={(opt) => opt.name}
+                                                                                getOptionValue={(opt) => opt.id}
+                                                                            />
+                                        
+                                    </div>
+                                )}
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">Referencia / N° Cheque</Label>
+                                    <Input
+                                        value={payFormData.reference}
+                                        onChange={(e) => setPayFormData({ ...payFormData, reference: e.target.value })}
+                                        placeholder="Ej: Transferencia #123456 o Cheque #001"
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">Comprobante de Pago (Opcional)</Label>
+                                    <FileUpload
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onFileChange={(file) => setPayFormData({ ...payFormData, invoice_file: file })}
+                                        helperText="Adjuntar comprobante de transferencia o cheque"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <ModalFooter>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setIsPayModalOpen(false)}
+                                className="text-slate-500 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
+                            >
+                                {isSubmitting ? "Procesando..." : "Confirmar Pago"}
                             </Button>
                         </ModalFooter>
-                    </div>
+                    </form>
                 )}
             </Modal>
 
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onClose={() =>
-                    setDeleteConfirm({
-                        open: false,
-                        id: null,
-                    })
-                }
-                title="Eliminar Pago"
-                description="¿Estás seguro de que deseas eliminar este pago? Esta acción no se puede deshacer."
-                confirmText="Eliminar"
+                onClose={() => setDeleteConfirm({ open: false, id: null })}
+                title="Confirmar Eliminación"
+                description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción es permanente y afectará los reportes mensuales."
+                confirmText="Eliminar Permanentemente"
                 cancelText="Cancelar"
                 variant="danger"
                 onConfirm={handleDelete}

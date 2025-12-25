@@ -53,55 +53,69 @@ export function formatCurrency(value, options = {}) {
 
 /**
  * Formatea una fecha en formato "13 dic 2025"
+ * Maneja correctamente valores nulos, indefinidos y fechas inválidas
  * @param {string|Date} date - La fecha a formatear
  * @param {object} options - Opciones de formateo
  * @returns {string} - Fecha formateada
  */
 export function formatDate(date, options = {}) {
-    if (!date) return "N/A";
+    // Validación robusta de entrada
+    if (!date || date === "null" || date === "undefined") return "—";
 
     const {
         locale = "es-SV",
         format = "short", // 'short', 'medium', 'long'
     } = options;
 
-    const dateObj = new Date(date);
+    try {
+        const dateObj = new Date(date);
 
-    // Nombres cortos de meses en español
-    const monthsShort = [
-        "ene",
-        "feb",
-        "mar",
-        "abr",
-        "may",
-        "jun",
-        "jul",
-        "ago",
-        "sep",
-        "oct",
-        "nov",
-        "dic",
-    ];
+        // Verificar si la fecha es válida
+        if (isNaN(dateObj.getTime())) {
+            return "—";
+        }
 
-    // Para formato short y medium, usamos "13 dic 2025"
-    if (format === "short" || format === "medium") {
-        const day = dateObj.getDate();
-        const month = monthsShort[dateObj.getMonth()];
-        const year = dateObj.getFullYear();
-        return `${day} ${month} ${year}`;
+        // Nombres cortos de meses en español
+        const monthsShort = [
+            "ene",
+            "feb",
+            "mar",
+            "abr",
+            "may",
+            "jun",
+            "jul",
+            "ago",
+            "sep",
+            "oct",
+            "nov",
+            "dic",
+        ];
+
+        // Para formato short y medium, usamos "13 dic 2025"
+        if (format === "short" || format === "medium") {
+            const day = dateObj.getDate();
+            const month = monthsShort[dateObj.getMonth()];
+            const year = dateObj.getFullYear();
+            return `${day} ${month} ${year}`;
+        }
+
+        // Para formato long, incluimos hora si está disponible
+        if (format === "long") {
+            const formatOptions = {
+                weekday: "long",
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+            };
+            return dateObj.toLocaleDateString(locale, formatOptions);
+        }
+
+        return dateObj.toLocaleDateString(locale);
+    } catch {
+        return "—";
     }
-
-    // Para formato long, usamos el formato completo con nombre del día y mes
-    const formats = {
-        long: {
-            weekday: "long",
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-        },
-    };
-
-    return dateObj.toLocaleDateString(locale, formats[format] || formats.long);
 }
 
 /**
@@ -110,21 +124,28 @@ export function formatDate(date, options = {}) {
  * @returns {string} - Texto relativo
  */
 export function formatRelativeDate(date) {
-    if (!date) return "N/A";
+    if (!date || date === "null" || date === "undefined") return "—";
 
-    const now = new Date();
-    const target = new Date(date);
-    const diffTime = target - now;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    try {
+        const now = new Date();
+        const target = new Date(date);
 
-    if (diffDays === 0) return "Hoy";
-    if (diffDays === 1) return "Mañana";
-    if (diffDays === -1) return "Ayer";
-    if (diffDays > 0 && diffDays <= 7) return `En ${diffDays} días`;
-    if (diffDays < 0 && diffDays >= -7)
-        return `Hace ${Math.abs(diffDays)} días`;
+        if (isNaN(target.getTime())) return "—";
 
-    return formatDate(date, { format: "medium" });
+        const diffTime = target - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return "Hoy";
+        if (diffDays === 1) return "Mañana";
+        if (diffDays === -1) return "Ayer";
+        if (diffDays > 0 && diffDays <= 7) return `En ${diffDays} días`;
+        if (diffDays < 0 && diffDays >= -7)
+            return `Hace ${Math.abs(diffDays)} días`;
+
+        return formatDate(date, { format: "medium" });
+    } catch {
+        return "—";
+    }
 }
 
 /**
@@ -199,7 +220,7 @@ export function getInitials(name) {
  * @returns {string} - Fecha formateada
  */
 export function formatDateTime(dateString, options = {}) {
-    if (!dateString) return "N/A";
+    if (!dateString || dateString === "null" || dateString === "undefined") return "—";
 
     const { includeTime = false, locale = "es-SV" } = options;
 
@@ -208,7 +229,7 @@ export function formatDateTime(dateString, options = {}) {
 
         // Verificar si la fecha es válida
         if (isNaN(date.getTime())) {
-            return "Fecha inválida";
+            return "—";
         }
 
         const formatOptions = {
@@ -223,8 +244,7 @@ export function formatDateTime(dateString, options = {}) {
         }
 
         return date.toLocaleDateString(locale, formatOptions);
-    } catch (error) {
-        console.error("Error formateando fecha:", error);
-        return "Error en fecha";
+    } catch {
+        return "—";
     }
 }

@@ -22,12 +22,12 @@ import {
     CardTitle,
     CardContent,
     CardDescription,
-} from "../components/ui/Card";
-import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Label } from "../components/ui/Label";
-import { SelectERP } from "../components/ui";
+    Badge,
+    Button,
+    Input,
+    Label,
+    SelectERP,
+} from "../components/ui";
 import { LoadingState } from "../components/ui/Spinner";
 import api from "../lib/axios";
 import { cn, formatCurrency } from "../lib/utils";
@@ -184,27 +184,15 @@ function ClientForm() {
         <div className="space-y-6 max-w-4xl mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate("/clients")}
-                        className="gap-1.5"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                        Volver
-                    </Button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">
-                            {isEditing ? "Editar Cliente" : "Nuevo Cliente"}
-                        </h1>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                            {isEditing
-                                ? "Actualiza la información del cliente"
-                                : "Complete el formulario para registrar un nuevo cliente"}
-                        </p>
-                    </div>
-                </div>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate("/clients")}
+                    className="gap-1.5 text-slate-500 hover:text-slate-900"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver
+                </Button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -307,7 +295,7 @@ function ClientForm() {
                                             e.target.checked
                                         )
                                     }
-                                    className="mt-1 h-4 w-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                                    className="mt-1 h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-500"
                                 />
                                 <div>
                                     <label
@@ -464,7 +452,7 @@ function ClientForm() {
                                     className={cn(
                                         "p-4 rounded-lg border-2 text-left transition-all",
                                         formData.payment_condition === "contado"
-                                            ? "border-brand-500 bg-brand-50"
+                                            ? "border-slate-900 bg-slate-50"
                                             : "border-slate-200 hover:border-slate-300"
                                     )}
                                 >
@@ -474,13 +462,13 @@ function ClientForm() {
                                                 "w-4 h-4 rounded-full border-2 flex items-center justify-center",
                                                 formData.payment_condition ===
                                                     "contado"
-                                                    ? "border-brand-500"
+                                                    ? "border-slate-900"
                                                     : "border-slate-300"
                                             )}
                                         >
                                             {formData.payment_condition ===
                                                 "contado" && (
-                                                <div className="w-2 h-2 rounded-full bg-brand-500" />
+                                                <div className="w-2 h-2 rounded-full bg-slate-900" />
                                             )}
                                         </div>
                                         <div>
@@ -506,7 +494,7 @@ function ClientForm() {
                                     className={cn(
                                         "p-4 rounded-lg border-2 text-left transition-all",
                                         formData.payment_condition === "credito"
-                                            ? "border-brand-500 bg-brand-50"
+                                            ? "border-slate-900 bg-slate-50"
                                             : "border-slate-200 hover:border-slate-300"
                                     )}
                                 >
@@ -516,13 +504,13 @@ function ClientForm() {
                                                 "w-4 h-4 rounded-full border-2 flex items-center justify-center",
                                                 formData.payment_condition ===
                                                     "credito"
-                                                    ? "border-brand-500"
+                                                    ? "border-slate-900"
                                                     : "border-slate-300"
                                             )}
                                         >
                                             {formData.payment_condition ===
                                                 "credito" && (
-                                                <div className="w-2 h-2 rounded-full bg-brand-500" />
+                                                <div className="w-2 h-2 rounded-full bg-slate-900" />
                                             )}
                                         </div>
                                         <div>
@@ -702,7 +690,7 @@ function ClientForm() {
                                             e.target.checked
                                         )
                                     }
-                                    className="h-4 w-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                                    className="h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-500"
                                 />
                                 <label
                                     htmlFor="is_active"
@@ -732,12 +720,17 @@ function ClientForm() {
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
                     <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => navigate("/clients")}
+                        className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100"
                     >
                         Cancelar
                     </Button>
-                    <Button type="submit" disabled={saving}>
+                    <Button
+                        type="submit"
+                        disabled={saving}
+                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 min-w-[140px] transition-all active:scale-95"
+                    >
                         {saving ? (
                             <>
                                 <span className="animate-spin mr-2">⏳</span>

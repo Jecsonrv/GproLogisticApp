@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils";
 export function Skeleton({ className, ...props }) {
     return (
         <div
-            className={cn("animate-pulse rounded-md bg-gray-200", className)}
+            className={cn("animate-pulse rounded-md bg-slate-200", className)}
             {...props}
         />
     );
@@ -34,7 +34,7 @@ export function SkeletonTable({ rows = 5, columns = 5 }) {
 
 export function SkeletonCard() {
     return (
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
             <Skeleton className="h-4 w-1/4 mb-4" />
             <Skeleton className="h-8 w-1/2 mb-2" />
             <Skeleton className="h-4 w-3/4" />

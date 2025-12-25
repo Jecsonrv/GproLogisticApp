@@ -131,7 +131,7 @@ const DataTable = ({
                                 setSearchTerm(e.target.value);
                                 setCurrentPage(1);
                             }}
-                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-sm bg-white placeholder:text-slate-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors duration-150"
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-sm bg-white placeholder:text-slate-400 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-colors duration-150"
                         />
                     </div>
                 </div>
@@ -164,14 +164,28 @@ const DataTable = ({
                                         column.minWidth
                                             ? `min-w-[${column.minWidth}]`
                                             : "min-w-[80px]"
-                                    }`}
+                                    } ${column.headerClassName || ""}`}
                                     style={
                                         column.minWidth
                                             ? { minWidth: column.minWidth }
                                             : {}
                                     }
                                 >
-                                    <div className="flex items-center gap-1">
+                                    <div
+                                        className={`flex items-center gap-1 w-full ${
+                                            column.headerClassName?.includes(
+                                                "text-right"
+                                            )
+                                                ? "justify-end"
+                                                : ""
+                                        } ${
+                                            column.headerClassName?.includes(
+                                                "text-center"
+                                            )
+                                                ? "justify-center"
+                                                : ""
+                                        }`}
+                                    >
                                         <span className="truncate">
                                             {column.header}
                                         </span>
@@ -304,7 +318,7 @@ const DataTable = ({
                                             }
                                             className={`min-w-[28px] h-7 px-2 text-xs font-medium rounded-sm border transition-colors duration-150 ${
                                                 currentPage === page
-                                                    ? "bg-brand-600 text-white border-brand-600"
+                                                    ? "bg-slate-900 text-white border-slate-900"
                                                     : "border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
                                             }`}
                                         >

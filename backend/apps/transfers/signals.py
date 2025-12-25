@@ -113,7 +113,7 @@ def sync_batch_payment_documents(sender, instance, created, **kwargs):
                 # Crear nuevo documento
                 OrderDocument.objects.create(
                     order=service_order,
-                    document_type='factura_costo',
+                    document_type='pago_proveedor',
                     file=instance.proof_file,
                     description=description,
                     uploaded_by=instance.created_by

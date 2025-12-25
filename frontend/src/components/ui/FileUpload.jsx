@@ -11,7 +11,7 @@ export function FileUpload({
     multiple = false,
     disabled = false,
     className,
-    label = "Seleccionar archivo",
+    label = "Adjuntar archivo",
     helperText,
     value, // Support controlled value
 }) {
@@ -102,7 +102,7 @@ export function FileUpload({
 
             {/* Helper Text */}
             {helperText && (
-                <p className="mt-1 text-xs text-gray-500">{helperText}</p>
+                <p className="mt-1 text-xs text-slate-500">{helperText}</p>
             )}
 
             {/* Error Message */}
@@ -114,15 +114,15 @@ export function FileUpload({
                     {selectedFiles.map((file, index) => (
                         <div
                             key={index}
-                            className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-2"
+                            className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-2"
                         >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <FileIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                <FileIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-700 truncate">
+                                    <p className="text-sm font-medium text-slate-700 truncate">
                                         {file.name}
                                     </p>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-slate-500">
                                         {formatFileSize(file.size)}
                                     </p>
                                 </div>
@@ -130,7 +130,7 @@ export function FileUpload({
                             <button
                                 type="button"
                                 onClick={() => handleRemoveFile(index)}
-                                className="ml-2 rounded-sm text-gray-400 hover:text-gray-600 focus:outline-none"
+                                className="ml-2 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
                             >
                                 <X className="h-4 w-4" />
                             </button>

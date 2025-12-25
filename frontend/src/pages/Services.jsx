@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Plus, DollarSign, Tag, FileText, Search, ArrowLeft, Building2, RefreshCw, CheckCircle2, Percent, Settings2, Info } from "lucide-react";
+import {
+    Plus,
+    DollarSign,
+    Tag,
+    FileText,
+    Search,
+    ArrowLeft,
+    Building2,
+    RefreshCw,
+    CheckCircle2,
+    Percent,
+    Settings2,
+    Info,
+    Edit2,
+    Trash2,
+    Download,
+    Filter,
+    XCircle,
+    Clock,
+} from "lucide-react";
 import {
     Card,
     CardHeader,
@@ -8,11 +27,8 @@ import {
     CardContent,
     DataTable,
     Button,
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
+    Modal,
+    ModalFooter,
     Input,
     Label,
     Badge,
@@ -22,11 +38,34 @@ import {
     TabsTrigger,
     TabsContent,
     SelectERP,
-    StatCard,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, cn } from "../lib/utils";
+
+// ============================================
+// KPI CARD - CORPORATE STYLE (Aligned with ProviderPayments)
+// ============================================
+const KPICard = ({ label, value, icon: Icon }) => {
+    return (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+                <p
+                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    title={label}
+                >
+                    {label}
+                </p>
+                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                    {value}
+                </p>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            </div>
+        </div>
+    );
+};
 
 /**
  * Página de Gestión de Servicios y Tarifario
@@ -34,7 +73,7 @@ import { formatCurrency, cn } from "../lib/utils";
 const Services = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
-    
+
     // Obtener parámetros de la URL
     const tabParam = searchParams.get("tab") || "general";
     const clientParam = searchParams.get("client");
@@ -106,13 +145,13 @@ const Services = () => {
         if (activeTab === "custom") {
             fetchCustomPrices();
         }
-        setSearchTerm(""); 
+        setSearchTerm("");
     }, [activeTab]);
 
     // Cliente seleccionado (si viene por URL)
     const selectedClientData = useMemo(() => {
         if (!clientParam || clients.length === 0) return null;
-        return clients.find(c => c.id === parseInt(clientParam));
+        return clients.find((c) => c.id === parseInt(clientParam));
     }, [clientParam, clients]);
 
     // Filtered Data
@@ -128,10 +167,10 @@ const Services = () => {
 
     const filteredCustomPrices = useMemo(() => {
         let data = customPrices;
-        
+
         // Primero filtrar por cliente si hay parámetro
         if (clientParam) {
-            data = data.filter(cp => cp.client === parseInt(clientParam));
+            data = data.filter((cp) => cp.client === parseInt(clientParam));
         }
 
         if (!searchTerm) return data;
@@ -175,8 +214,8 @@ const Services = () => {
         try {
             const response = await axios.get("/clients/");
             setClients(response.data);
-        } catch (error) {
-            console.error("Error al cargar clientes:", error);
+        } catch {
+            // Silencioso
         }
     };
 
@@ -184,8 +223,8 @@ const Services = () => {
         try {
             const response = await axios.get("/catalogs/services/activos/");
             setActiveServices(response.data);
-        } catch (error) {
-            console.error("Error al cargar servicios activos:", error);
+        } catch {
+            // Silencioso
         }
     };
 
@@ -334,6 +373,7 @@ const Services = () => {
         {
             header: "Cliente",
             accessor: "client_name",
+            sortable: false,
             cell: (row) => (
                 <div className="font-medium text-slate-900">
                     {row.client_name}
@@ -343,22 +383,24 @@ const Services = () => {
         {
             header: "Servicio",
             accessor: "service_name",
+            sortable: false,
             cell: (row) => (
-                <div className="text-slate-600">
-                    {row.service_name}
-                </div>
+                <div className="text-slate-600">{row.service_name}</div>
             ),
         },
         {
             header: "Precio Personalizado",
             accessor: "custom_price",
+            className: "text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div>
+                <div className="flex flex-col items-center">
                     <div className="font-semibold text-slate-900 tabular-nums">
                         {formatCurrency(row.custom_price)}
                     </div>
                     {row.price_with_iva && (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-[10px] text-slate-500">
                             Con IVA: {formatCurrency(row.price_with_iva)}
                         </div>
                     )}
@@ -368,8 +410,9 @@ const Services = () => {
         {
             header: "Vigencia",
             accessor: "effective_date",
+            sortable: false,
             cell: (row) => (
-                <div className="text-slate-600 tabular-nums">
+                <div className="text-slate-600 tabular-nums text-sm">
                     {row.effective_date
                         ? new Date(
                               row.effective_date + "T00:00:00"
@@ -381,6 +424,7 @@ const Services = () => {
         {
             header: "Estado",
             accessor: "is_active",
+            sortable: false,
             cell: (row) => (
                 <Badge variant={row.is_active ? "success" : "default"}>
                     {row.is_active ? "Activo" : "Inactivo"}
@@ -390,30 +434,42 @@ const Services = () => {
         {
             header: "Acciones",
             accessor: "actions",
+            className: "w-[100px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenCustomModal(row);
-                        }}
-                        className="text-slate-500 hover:text-amber-600"
-                    >
-                        <FileText className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteCustom(row.id);
-                        }}
-                        className="text-slate-500 hover:text-red-600"
-                    >
-                        <Plus className="w-4 h-4 rotate-45" />
-                    </Button>
+                <div
+                    className="grid grid-cols-2 gap-1 w-full max-w-[80px] mx-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCustomModal(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </Button>
+                    </div>
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCustom(row.id);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
             ),
         },
@@ -424,6 +480,7 @@ const Services = () => {
         {
             header: "Nombre del Servicio",
             accessor: "name",
+            sortable: false,
             cell: (row) => (
                 <div className="py-1">
                     <div className="font-medium text-slate-900">{row.name}</div>
@@ -438,14 +495,20 @@ const Services = () => {
         {
             header: "Precio Base",
             accessor: "default_price",
+            className: "text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div>
+                <div className="flex flex-col items-center">
                     <div className="font-semibold text-slate-900 tabular-nums">
                         {formatCurrency(row.default_price)}
                     </div>
                     {row.applies_iva && (
-                        <div className="text-xs text-slate-500">
-                            Con IVA: {formatCurrency(parseFloat(row.default_price) * 1.13)}
+                        <div className="text-[10px] text-slate-500">
+                            Con IVA:{" "}
+                            {formatCurrency(
+                                parseFloat(row.default_price) * 1.13
+                            )}
                         </div>
                     )}
                 </div>
@@ -454,6 +517,7 @@ const Services = () => {
         {
             header: "IVA",
             accessor: "applies_iva",
+            sortable: false,
             cell: (row) => (
                 <Badge variant={row.applies_iva ? "success" : "default"}>
                     {row.applies_iva ? "Sí" : "No"}
@@ -463,6 +527,7 @@ const Services = () => {
         {
             header: "Estado",
             accessor: "is_active",
+            sortable: false,
             cell: (row) => (
                 <Badge variant={row.is_active ? "success" : "default"}>
                     {row.is_active ? "Activo" : "Inactivo"}
@@ -472,329 +537,471 @@ const Services = () => {
         {
             header: "Acciones",
             accessor: "actions",
+            className: "w-[100px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenModal(row);
-                        }}
-                        className="text-slate-500 hover:text-amber-600"
-                    >
-                        <FileText className="w-4 h-4" />
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(row.id);
-                        }}
-                        className="text-slate-500 hover:text-red-600"
-                    >
-                        <Plus className="w-4 h-4 rotate-45" />
-                    </Button>
+                <div
+                    className="grid grid-cols-2 gap-1 w-full max-w-[80px] mx-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenModal(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </Button>
+                    </div>
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(row.id);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
             ),
         },
     ];
 
     return (
-        <div className="space-y-6">
-            {/* Header Estándar */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-2">
+        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
+            {/* Bloque Superior: KPIs Corporativos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <KPICard
+                    label="Total Servicios"
+                    value={services.length}
+                    icon={Tag}
+                />
+                <KPICard
+                    label="Servicios Activos"
+                    value={services.filter((s) => s.is_active).length}
+                    icon={CheckCircle2}
+                />
+                <KPICard
+                    label="Tarifas Especiales"
+                    value={customPrices.length}
+                    icon={DollarSign}
+                />
+                <KPICard
+                    label={
+                        selectedClientData
+                            ? `Cliente: ${selectedClientData.name.substring(
+                                  0,
+                                  20
+                              )}${
+                                  selectedClientData.name.length > 20
+                                      ? "..."
+                                      : ""
+                              }`
+                            : "Todos los Clientes"
+                    }
+                    value={
+                        selectedClientData
+                            ? customPrices.filter(
+                                  (cp) => cp.client === selectedClientData.id
+                              ).length
+                            : customPrices.length
+                    }
+                    icon={Building2}
+                />
+            </div>
+
+            {/* Bloque Operativo: Tabs & Table */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                {/* Barra de Herramientas Unificada */}
+                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                    {/* Izquierda: Tabs y Buscador */}
+                    <div className="flex items-center gap-4 flex-1 w-full">
                         {clientParam && (
-                            <Button 
-                                variant="ghost" 
-                                size="icon-xs" 
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => navigate("/clients")}
-                                className="h-6 w-6 text-slate-400 hover:text-slate-900"
+                                className="h-8 w-8 p-0 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                             >
                                 <ArrowLeft className="h-4 w-4" />
                             </Button>
                         )}
-                        <h1 className="text-2xl font-bold text-slate-900">
-                            Servicios y Tarifario
-                        </h1>
-                    </div>
-                    <p className="text-sm text-slate-500 mt-1">
-                        {selectedClientData 
-                            ? `Gestionando precios personalizados para: ${selectedClientData.name}`
-                            : "Gestión de servicios generales y precios personalizados por cliente"}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => activeTab === 'general' ? fetchServices() : fetchCustomPrices()}
-                        disabled={loading || loadingCustom}
-                        size="sm"
-                    >
-                        <RefreshCw className={cn("w-4 h-4 mr-1.5", (loading || loadingCustom) && "animate-spin")} />
-                        Actualizar
-                    </Button>
-                    <Button 
-                        onClick={() => activeTab === 'general' ? handleOpenModal() : handleOpenCustomModal()}
-                        size="sm"
-                    >
-                        <Plus className="h-4 w-4 mr-1.5" />
-                        {activeTab === 'general' ? 'Nuevo Servicio' : 'Nueva Tarifa'}
-                    </Button>
-                </div>
-            </div>
 
-            {/* KPI Cards Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                    title="Total Servicios"
-                    value={services.length}
-                    icon={Tag}
-                />
-                <StatCard
-                    title="Servicios Activos"
-                    value={services.filter(s => s.is_active).length}
-                    icon={CheckCircle2}
-                />
-                <StatCard
-                    title="Tarifas Especiales"
-                    value={customPrices.length}
-                    description="Personalizados"
-                    icon={DollarSign}
-                />
-                {selectedClientData && (
-                    <StatCard
-                        title="Cliente Actual"
-                        value={selectedClientData.name}
-                        description={`${customPrices.filter(cp => cp.client === selectedClientData.id).length} tarifas`}
-                        icon={Building2}
+                        <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => handleTabChange("general")}
+                                className={cn(
+                                    "px-4 py-2 text-sm font-medium rounded-md transition-all",
+                                    activeTab === "general"
+                                        ? "bg-white text-slate-900 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                )}
+                            >
+                                Catálogo General
+                            </button>
+                            <button
+                                onClick={() => handleTabChange("custom")}
+                                className={cn(
+                                    "px-4 py-2 text-sm font-medium rounded-md transition-all",
+                                    activeTab === "custom"
+                                        ? "bg-white text-slate-900 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                )}
+                            >
+                                Precios por Cliente
+                            </button>
+                        </div>
+
+                        <div className="relative flex-1 max-w-md group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <input
+                                type="text"
+                                placeholder="Buscar en el catálogo..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                            />
+                        </div>
+
+                        {clientParam && activeTab === "custom" && (
+                            <Badge
+                                variant="info"
+                                className="gap-2 rounded border-blue-200"
+                            >
+                                Filtro: {selectedClientData?.name}
+                                <button
+                                    onClick={clearClientFilter}
+                                    className="hover:text-blue-800"
+                                >
+                                    <XCircle className="w-3 h-3" />
+                                </button>
+                            </Badge>
+                        )}
+                    </div>
+
+                    {/* Derecha: Contador y Botones */}
+                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                        <div className="text-sm text-slate-500 hidden md:block">
+                            <span className="font-semibold text-slate-900">
+                                {activeTab === "general"
+                                    ? filteredServices.length
+                                    : filteredCustomPrices.length}
+                            </span>{" "}
+                            registros
+                        </div>
+                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                                activeTab === "general"
+                                    ? fetchServices()
+                                    : fetchCustomPrices()
+                            }
+                            disabled={loading || loadingCustom}
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <RefreshCw
+                                className={cn(
+                                    "w-3.5 h-3.5 mr-2",
+                                    (loading || loadingCustom) && "animate-spin"
+                                )}
+                            />
+                            Actualizar
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() =>
+                                activeTab === "general"
+                                    ? handleOpenModal()
+                                    : handleOpenCustomModal()
+                            }
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Plus className="w-3.5 h-3.5 mr-2" />
+                            {activeTab === "general"
+                                ? "Nuevo Servicio"
+                                : "Nueva Tarifa"}
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Contenido de la Tabla */}
+                {activeTab === "general" ? (
+                    <DataTable
+                        data={filteredServices}
+                        columns={columns}
+                        loading={loading}
+                        searchable={false}
+                        emptyMessage="No hay servicios registrados"
+                    />
+                ) : (
+                    <DataTable
+                        data={filteredCustomPrices}
+                        columns={customPriceColumns}
+                        loading={loadingCustom}
+                        searchable={false}
+                        emptyMessage="No hay precios personalizados registrados"
                     />
                 )}
             </div>
 
-            {/* Tabs & Table Card */}
-            <div className="space-y-4">
-                <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg w-fit">
-                    <button
-                        onClick={() => handleTabChange("general")}
-                        className={cn(
-                            "px-4 py-2 text-sm font-medium rounded-md transition-all",
-                            activeTab === "general"
-                                ? "bg-white text-slate-900 shadow-sm"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                        )}
-                    >
-                        Catálogo General
-                    </button>
-                    <button
-                        onClick={() => handleTabChange("custom")}
-                        className={cn(
-                            "px-4 py-2 text-sm font-medium rounded-md transition-all",
-                            activeTab === "custom"
-                                ? "bg-white text-slate-900 shadow-sm"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                        )}
-                    >
-                        Precios por Cliente
-                    </button>
-                </div>
-
-                <Card>
-                    <CardHeader className="pb-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                            <div className="flex items-center gap-3 flex-1 max-w-2xl">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <Input
-                                        placeholder="Buscar en el catálogo..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10"
-                                    />
-                                </div>
-                                {clientParam && activeTab === 'custom' && (
-                                    <Badge variant="info" className="gap-2 rounded border-blue-200">
-                                        Filtro: {selectedClientData?.name}
-                                        <button onClick={clearClientFilter} className="hover:text-blue-800">
-                                            <ArrowLeft className="w-3 h-3 rotate-45" />
-                                        </button>
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                    </CardHeader>
-
-                    <CardContent className="px-5 pb-5 pt-0">
-                        {activeTab === "general" ? (
-                            <DataTable
-                                data={filteredServices}
-                                columns={columns}
-                                loading={loading}
-                                searchable={false}
-                                emptyMessage="No hay servicios registrados"
-                            />
-                        ) : (
-                            <DataTable
-                                data={filteredCustomPrices}
-                                columns={customPriceColumns}
-                                loading={loadingCustom}
-                                searchable={false}
-                                emptyMessage="No hay precios personalizados registrados"
-                            />
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-
             {/* Modal Crear/Editar Servicio */}
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent size="xl">
-                    <DialogHeader className="border-b border-slate-100 pb-4">
-                        <DialogTitle className="text-xl font-semibold text-gray-900">
-                            {editingService ? "Editar Servicio" : "Nuevo Servicio"}
-                        </DialogTitle>
-                        <p className="text-sm text-slate-500">
-                            Configuración del catálogo general de servicios
-                        </p>
-                    </DialogHeader>
-
-                    <form onSubmit={handleSubmit} className="space-y-6 py-4">
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                title={editingService ? "Editar Servicio" : "Nuevo Servicio"}
+                size="xl"
+            >
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            Detalles del Servicio
+                        </h4>
                         <div className="grid grid-cols-12 gap-4">
                             <div className="col-span-12 md:col-span-8">
-                                <Label>Nombre del Servicio *</Label>
+                                <Label className="mb-1.5 block">
+                                    Nombre del Servicio *
+                                </Label>
                                 <Input
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            name: e.target.value,
+                                        })
+                                    }
                                     placeholder="Ej: Asesoría Técnica Aduanal"
                                     required
                                 />
                             </div>
                             <div className="col-span-12 md:col-span-4">
-                                <Label>Precio Base ($) *</Label>
+                                <Label className="mb-1.5 block">
+                                    Precio Base ($) *
+                                </Label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                                        $
+                                    </span>
                                     <Input
                                         type="number"
                                         step="0.01"
                                         value={formData.default_price}
-                                        onChange={(e) => setFormData({ ...formData, default_price: e.target.value })}
-                                        className="pl-7"
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                default_price: e.target.value,
+                                            })
+                                        }
+                                        className="pl-7 font-mono font-semibold text-slate-900"
                                         placeholder="0.00"
                                         required
                                     />
                                 </div>
                             </div>
-                            
+
                             <div className="col-span-12">
-                                <Label>Descripción (Opcional)</Label>
+                                <Label className="mb-1.5 block">
+                                    Descripción (Opcional)
+                                </Label>
                                 <textarea
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            description: e.target.value,
+                                        })
+                                    }
                                     rows={2}
-                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none mt-1 min-h-[60px]"
+                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-slate-400 focus:ring-0 min-h-[60px]"
                                     placeholder="Breve descripción del servicio..."
                                 />
                             </div>
 
                             <div className="col-span-12 md:col-span-6">
-                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                                     <input
                                         type="checkbox"
                                         id="applies_iva"
                                         checked={formData.applies_iva}
-                                        onChange={(e) => setFormData({ ...formData, applies_iva: e.target.checked })}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                applies_iva: e.target.checked,
+                                            })
+                                        }
                                         className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <Label htmlFor="applies_iva" className="font-medium text-slate-700 cursor-pointer">Aplicar IVA 13%</Label>
+                                    <Label
+                                        htmlFor="applies_iva"
+                                        className="font-medium text-slate-700 cursor-pointer text-sm"
+                                    >
+                                        Aplicar IVA 13%
+                                    </Label>
                                 </div>
                             </div>
 
                             <div className="col-span-12 md:col-span-6">
-                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                                     <input
                                         type="checkbox"
                                         id="is_active"
                                         checked={formData.is_active}
-                                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                is_active: e.target.checked,
+                                            })
+                                        }
+                                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                                     />
-                                    <Label htmlFor="is_active" className="font-medium text-slate-700 cursor-pointer">Estado Activo</Label>
+                                    <Label
+                                        htmlFor="is_active"
+                                        className="font-medium text-slate-700 cursor-pointer text-sm"
+                                    >
+                                        Servicio Activo
+                                    </Label>
                                 </div>
                             </div>
-                            
+
                             {/* Resumen de Costo */}
-                            <div className="col-span-12 bg-slate-50 p-4 rounded-md border border-slate-200 mt-2">
-                                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3">Resumen de Costo</h4>
+                            <div className="col-span-12 bg-slate-50 p-4 rounded-lg border border-slate-200 mt-2">
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+                                    Simulación de Precio
+                                </h4>
                                 <div className="space-y-2">
-                                    <div className="flex justify-between text-sm text-slate-600">
+                                    <div className="flex justify-between text-xs text-slate-600">
                                         <span>Precio Neto:</span>
-                                        <span>{formatCurrency(formData.default_price || 0)}</span>
-                                    </div>
-                                    <div className="flex justify-between text-sm text-slate-600">
-                                        <span>IVA (13%):</span>
-                                        <span>
-                                            {formData.applies_iva ? formatCurrency(parseFloat(formData.default_price || 0) * 0.13) : "$0.00"}
+                                        <span className="font-mono">
+                                            {formatCurrency(
+                                                formData.default_price || 0
+                                            )}
                                         </span>
                                     </div>
-                                    <div className="pt-2 mt-2 border-t border-slate-300 flex justify-between items-center font-bold text-slate-900">
-                                        <span>Precio Final:</span>
-                                        <span className="text-lg text-blue-700 tabular-nums">
+                                    <div className="flex justify-between text-xs text-slate-600">
+                                        <span>IVA (13%):</span>
+                                        <span className="font-mono">
+                                            {formData.applies_iva
+                                                ? formatCurrency(
+                                                      parseFloat(
+                                                          formData.default_price ||
+                                                              0
+                                                      ) * 0.13
+                                                  )
+                                                : "$0.00"}
+                                        </span>
+                                    </div>
+                                    <div className="pt-2 mt-2 border-t border-slate-200 flex justify-between items-center">
+                                        <span className="text-sm font-bold text-slate-700">
+                                            Precio Final:
+                                        </span>
+                                        <span className="text-lg font-bold text-slate-900 tabular-nums tracking-tight">
                                             {formatCurrency(
-                                                formData.applies_iva 
-                                                ? parseFloat(formData.default_price || 0) * 1.13 
-                                                : parseFloat(formData.default_price || 0)
+                                                formData.applies_iva
+                                                    ? parseFloat(
+                                                          formData.default_price ||
+                                                              0
+                                                      ) * 1.13
+                                                    : parseFloat(
+                                                          formData.default_price ||
+                                                              0
+                                                      )
                                             )}
                                         </span>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <DialogFooter className="bg-slate-50 -mx-6 -mb-6 px-6 py-4 border-t border-slate-200 mt-4">
-                            <Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button>
-                            <Button type="submit">Guardar Servicio</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={handleCloseModal}
+                            className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[140px]"
+                        >
+                            Guardar Servicio
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
 
             {/* Modal Precios Personalizados */}
-            <Dialog open={isCustomModalOpen} onOpenChange={setIsCustomModalOpen}>
-                <DialogContent size="xl">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-semibold text-gray-900">
-                            {editingCustomPrice ? "Editar Tarifa Especial" : "Nueva Tarifa Especial"}
-                        </DialogTitle>
-                        <p className="text-sm text-slate-500">
-                            Configura un precio específico para un cliente
-                        </p>
-                    </DialogHeader>
-
-                    <form onSubmit={handleCustomSubmit} className="space-y-4 py-4">
-                        <div className="grid grid-cols-12 gap-4">
+            <Modal
+                isOpen={isCustomModalOpen}
+                onClose={handleCloseCustomModal}
+                title={
+                    editingCustomPrice
+                        ? "Editar Tarifa Especial"
+                        : "Nueva Tarifa Especial"
+                }
+                size="xl"
+            >
+                <form onSubmit={handleCustomSubmit} className="space-y-6">
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            Configuración de Tarifa
+                        </h4>
+                        <div className="grid grid-cols-12 gap-5">
                             <div className="col-span-12 md:col-span-6">
+                                <Label className="mb-1.5 block">Cliente</Label>
                                 <SelectERP
-                                    label="Cliente"
                                     value={customFormData.client}
-                                    onChange={(value) => setCustomFormData({ ...customFormData, client: value })}
+                                    onChange={(value) =>
+                                        setCustomFormData({
+                                            ...customFormData,
+                                            client: value,
+                                        })
+                                    }
                                     options={clients}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
                                     required
-                                    disabled={!!editingCustomPrice || !!clientParam}
+                                    disabled={
+                                        !!editingCustomPrice || !!clientParam
+                                    }
                                 />
                             </div>
                             <div className="col-span-12 md:col-span-6">
+                                <Label className="mb-1.5 block">
+                                    Servicio Base
+                                </Label>
                                 <SelectERP
-                                    label="Servicio"
                                     value={customFormData.service}
-                                    onChange={(value) => setCustomFormData({ ...customFormData, service: value })}
+                                    onChange={(value) =>
+                                        setCustomFormData({
+                                            ...customFormData,
+                                            service: value,
+                                        })
+                                    }
                                     options={activeServices}
-                                    getOptionLabel={(opt) => `${opt.name} (${formatCurrency(opt.default_price)})`}
+                                    getOptionLabel={(opt) =>
+                                        `${opt.name} (${formatCurrency(
+                                            opt.default_price
+                                        )})`
+                                    }
                                     getOptionValue={(opt) => opt.id}
                                     searchable
                                     required
@@ -802,58 +1009,106 @@ const Services = () => {
                                 />
                             </div>
                             <div className="col-span-12 md:col-span-6">
-                                <Label>Precio Especial *</Label>
+                                <Label className="mb-1.5 block">
+                                    Precio Especial *
+                                </Label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">
+                                        $
+                                    </span>
                                     <Input
                                         type="number"
                                         step="0.01"
                                         value={customFormData.custom_price}
-                                        onChange={(e) => setCustomFormData({ ...customFormData, custom_price: e.target.value })}
-                                        className="pl-7"
+                                        onChange={(e) =>
+                                            setCustomFormData({
+                                                ...customFormData,
+                                                custom_price: e.target.value,
+                                            })
+                                        }
+                                        className="pl-7 font-mono font-bold text-slate-900"
                                         required
                                     />
                                 </div>
                             </div>
                             <div className="col-span-12 md:col-span-6">
-                                <Label>Vigencia Desde</Label>
+                                <Label className="mb-1.5 block">
+                                    Vigencia Desde
+                                </Label>
                                 <Input
                                     type="date"
                                     value={customFormData.effective_date}
-                                    onChange={(e) => setCustomFormData({ ...customFormData, effective_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setCustomFormData({
+                                            ...customFormData,
+                                            effective_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div className="col-span-12">
-                                <Label>Tratamiento Fiscal Especial (Opcional)</Label>
+                                <Label className="mb-1.5 block">
+                                    Tratamiento Fiscal (Opcional)
+                                </Label>
                                 <SelectERP
                                     options={[
-                                        { id: "", name: "Usar configuración del servicio" },
-                                        { id: "gravado", name: "Gravado (13% IVA)" },
+                                        {
+                                            id: "",
+                                            name: "Usar configuración del servicio",
+                                        },
+                                        {
+                                            id: "gravado",
+                                            name: "Gravado (13% IVA)",
+                                        },
                                         { id: "no_sujeto", name: "No Sujeto" },
                                     ]}
                                     value={customFormData.iva_type}
-                                    onChange={(value) => setCustomFormData({ ...customFormData, iva_type: value })}
+                                    onChange={(value) =>
+                                        setCustomFormData({
+                                            ...customFormData,
+                                            iva_type: value,
+                                        })
+                                    }
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                 />
                             </div>
                             <div className="col-span-12">
-                                <Label>Notas</Label>
+                                <Label className="mb-1.5 block">
+                                    Notas Internas
+                                </Label>
                                 <Input
                                     value={customFormData.notes}
-                                    onChange={(e) => setCustomFormData({ ...customFormData, notes: e.target.value })}
+                                    onChange={(e) =>
+                                        setCustomFormData({
+                                            ...customFormData,
+                                            notes: e.target.value,
+                                        })
+                                    }
                                     placeholder="Observaciones adicionales..."
                                 />
                             </div>
                         </div>
+                    </div>
 
-                        <DialogFooter className="bg-slate-50 -mx-6 -mb-6 px-6 py-4 border-t border-slate-200">
-                            <Button type="button" variant="outline" onClick={handleCloseCustomModal}>Cancelar</Button>
-                            <Button type="submit">Guardar Tarifa</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={handleCloseCustomModal}
+                            className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[140px]"
+                        >
+                            Guardar Tarifa
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
 
             <ConfirmDialog
                 open={confirmDialog.open}
@@ -866,7 +1121,9 @@ const Services = () => {
 
             <ConfirmDialog
                 open={confirmCustomDialog.open}
-                onClose={() => setConfirmCustomDialog({ open: false, id: null })}
+                onClose={() =>
+                    setConfirmCustomDialog({ open: false, id: null })
+                }
                 onConfirm={confirmDeleteCustom}
                 title="Eliminar Tarifa Especial"
                 description="¿Estás seguro? Se volverá a aplicar el precio base para este cliente."

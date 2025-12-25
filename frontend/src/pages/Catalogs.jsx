@@ -10,11 +10,8 @@ import {
     CardContent,
     DataTable,
     Button,
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
+    Modal,
+    ModalFooter,
     Input,
     Label,
     Badge,
@@ -31,9 +28,14 @@ import {
     UserCircle,
     Search,
     Tags,
+    Edit2,
+    Trash2,
+    RefreshCw,
+    XCircle,
 } from "lucide-react";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
+import { cn } from "../lib/utils";
 
 function Catalogs() {
     // Estado del tab activo
@@ -220,28 +222,42 @@ function Catalogs() {
         const actionsColumn = {
             accessor: "actions",
             header: "Acciones",
+            className: "w-[100px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openModal(catalog, row);
-                        }}
-                    >
-                        Editar
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(catalog, row.id);
-                        }}
-                    >
-                        Eliminar
-                    </Button>
+                <div
+                    className="grid grid-cols-2 gap-1 w-full max-w-[80px] mx-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openModal(catalog, row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </Button>
+                    </div>
+                    <div className="flex justify-center">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(catalog, row.id);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
             ),
         };
@@ -357,49 +373,255 @@ function Catalogs() {
 
     const renderForm = () => {
         return (
-            <div className="grid grid-cols-12 gap-4">
-                {(() => {
-                    switch (currentCatalog) {
-                        case "providerCategories":
-                            return (
-                                <>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Nombre *</Label>
-                                        <Input
-                                            value={formData.name || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    name: e.target.value,
-                                                })
-                                            }
-                                            required
-                                            placeholder="Ej: Naviera, Agencia de Carga"
-                                        />
-                                    </div>
+            <div>
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    Información General
+                </h4>
+                <div className="grid grid-cols-12 gap-4">
+                    {(() => {
+                        switch (currentCatalog) {
+                            case "providerCategories":
+                                return (
+                                    <>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Nombre *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                                placeholder="Ej: Naviera, Agencia de Carga"
+                                            />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Descripción
+                                            </Label>
+                                            <textarea
+                                                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none transition-colors"
+                                                rows={3}
+                                                value={
+                                                    formData.description || ""
+                                                }
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        description:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                placeholder="Descripción de la categoría de proveedor"
+                                            />
+                                        </div>
+                                    </>
+                                );
+
+                            case "providers":
+                                return (
+                                    <>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Nombre *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Categoría
+                                            </Label>
+                                            <SelectERP
+                                                value={formData.category}
+                                                onChange={(value) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        category: value,
+                                                    })
+                                                }
+                                                options={providerCategories}
+                                                getOptionLabel={(opt) =>
+                                                    opt.name
+                                                }
+                                                getOptionValue={(opt) => opt.id}
+                                                placeholder="Seleccionar categoría..."
+                                                clearable
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-4">
+                                            <Label className="mb-1.5 block">
+                                                NIT
+                                            </Label>
+                                            <Input
+                                                value={formData.nit || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        nit: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-4">
+                                            <Label className="mb-1.5 block">
+                                                Teléfono
+                                            </Label>
+                                            <Input
+                                                value={formData.phone || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        phone: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-4">
+                                            <Label className="mb-1.5 block">
+                                                Email
+                                            </Label>
+                                            <Input
+                                                type="email"
+                                                value={formData.email || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        email: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Dirección
+                                            </Label>
+                                            <textarea
+                                                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none transition-colors"
+                                                rows={2}
+                                                value={formData.address || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        address: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                );
+
+                            case "banks":
+                                return (
+                                    <>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Nombre del Banco *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Teléfono
+                                            </Label>
+                                            <Input
+                                                value={
+                                                    formData.contact_phone || ""
+                                                }
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        contact_phone:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                );
+
+                            case "shipmentTypes":
+                                return (
+                                    <>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Nombre *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Código
+                                            </Label>
+                                            <Input
+                                                value={formData.code || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        code: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Descripción
+                                            </Label>
+                                            <textarea
+                                                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none transition-colors"
+                                                rows={2}
+                                                value={
+                                                    formData.description || ""
+                                                }
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        description:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                );
+
+                            case "subClients":
+                                return (
                                     <div className="col-span-12">
-                                        <Label>Descripción</Label>
-                                        <textarea
-                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                            rows={3}
-                                            value={formData.description || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    description: e.target.value,
-                                                })
-                                            }
-                                            placeholder="Descripción de la categoría de proveedor"
-                                        />
-                                    </div>
-                                </>
-                            );
-
-                        case "providers":
-                            return (
-                                <>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Nombre *</Label>
+                                        <Label className="mb-1.5 block">
+                                            Nombre *
+                                        </Label>
                                         <Input
                                             value={formData.name || ""}
                                             onChange={(e) =>
@@ -411,174 +633,13 @@ function Catalogs() {
                                             required
                                         />
                                     </div>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Categoría</Label>
-                                        <SelectERP
-                                            value={formData.category}
-                                            onChange={(value) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    category: value,
-                                                })
-                                            }
-                                            options={providerCategories}
-                                            getOptionLabel={(opt) => opt.name}
-                                            getOptionValue={(opt) => opt.id}
-                                            placeholder="Seleccionar categoría..."
-                                            clearable
-                                        />
-                                    </div>
-                                    <div className="col-span-12 md:col-span-4">
-                                        <Label>NIT</Label>
-                                        <Input
-                                            value={formData.nit || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    nit: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="col-span-12 md:col-span-4">
-                                        <Label>Teléfono</Label>
-                                        <Input
-                                            value={formData.phone || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    phone: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="col-span-12 md:col-span-4">
-                                        <Label>Email</Label>
-                                        <Input
-                                            type="email"
-                                            value={formData.email || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    email: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="col-span-12">
-                                        <Label>Dirección</Label>
-                                        <textarea
-                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                            rows={2}
-                                            value={formData.address || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    address: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </>
-                            );
+                                );
 
-                        case "banks":
-                            return (
-                                <>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Nombre del Banco *</Label>
-                                        <Input
-                                            value={formData.name || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    name: e.target.value,
-                                                })
-                                            }
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Teléfono</Label>
-                                        <Input
-                                            value={formData.contact_phone || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    contact_phone: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </>
-                            );
-
-                        case "shipmentTypes":
-                            return (
-                                <>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Nombre *</Label>
-                                        <Input
-                                            value={formData.name || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    name: e.target.value,
-                                                })
-                                            }
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-12 md:col-span-6">
-                                        <Label>Código</Label>
-                                        <Input
-                                            value={formData.code || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    code: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="col-span-12">
-                                        <Label>Descripción</Label>
-                                        <textarea
-                                            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                                            rows={2}
-                                            value={formData.description || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    description: e.target.value,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </>
-                            );
-
-                        case "subClients":
-                            return (
-                                <div className="col-span-12">
-                                    <Label>Nombre *</Label>
-                                    <Input
-                                        value={formData.name || ""}
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                name: e.target.value,
-                                            })
-                                        }
-                                        required
-                                    />
-                                </div>
-                            );
-
-                        default:
-                            return null;
-                    }
-                })()}
+                            default:
+                                return null;
+                        }
+                    })()}
+                </div>
             </div>
         );
     };
@@ -607,272 +668,245 @@ function Catalogs() {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                    Catálogos Generales
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Gestiona proveedores, aforadores, bancos y más
-                </p>
-            </div>
-
+        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="w-full justify-start overflow-x-auto">
-                    <TabsTrigger value="providerCategories">
-                        <Tags className="h-4 w-4 mr-2" />
-                        Categorías de Proveedores
-                    </TabsTrigger>
-                    <TabsTrigger value="providers">
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Proveedores
-                    </TabsTrigger>
-                    <TabsTrigger value="banks">
-                        <Landmark className="h-4 w-4 mr-2" />
-                        Bancos
-                    </TabsTrigger>
-                    <TabsTrigger value="shipmentTypes">
-                        <Ship className="h-4 w-4 mr-2" />
-                        Tipos de Embarque
-                    </TabsTrigger>
-                    <TabsTrigger value="subClients">
-                        <UserCircle className="h-4 w-4 mr-2" />
-                        Subclientes
-                    </TabsTrigger>
-                </TabsList>
+                {/* Tabs Navigation con estilo corporativo */}
+                <div className="flex items-center justify-between gap-4 mb-6">
+                    <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => setActiveTab("providerCategories")}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                activeTab === "providerCategories"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <Tags className="h-4 w-4" />
+                            Categorías
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("providers")}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                activeTab === "providers"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <Building2 className="h-4 w-4" />
+                            Proveedores
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("banks")}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                activeTab === "banks"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <Landmark className="h-4 w-4" />
+                            Bancos
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("shipmentTypes")}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                activeTab === "shipmentTypes"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <Ship className="h-4 w-4" />
+                            Embarques
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("subClients")}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                activeTab === "subClients"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <UserCircle className="h-4 w-4" />
+                            Subclientes
+                        </button>
+                    </div>
+                </div>
 
-                {/* Categorías de Proveedores */}
-                <TabsContent value="providerCategories" key="providerCategories">
-                    <Card>
-                        <CardHeader className="flex flex-col gap-4 pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Categorías de Proveedores</CardTitle>
-                                <Button onClick={() => openModal("providerCategories")}>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nueva Categoría
-                                </Button>
+                {/* Content for each Tab with Corporate Design */}
+                {[
+                    "providerCategories",
+                    "providers",
+                    "banks",
+                    "shipmentTypes",
+                    "subClients",
+                ].map((tab) => (
+                    <TabsContent value={tab} key={tab}>
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                            {/* Barra de Herramientas Unificada */}
+                            <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
+                                {/* Izquierda: Buscador */}
+                                <div className="flex items-center gap-3 flex-1 w-full lg:max-w-lg">
+                                    <div className="relative flex-1 group">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                                        <input
+                                            type="text"
+                                            placeholder={`Buscar ${
+                                                tab === "banks"
+                                                    ? "bancos"
+                                                    : tab === "providers"
+                                                    ? "proveedores"
+                                                    : tab ===
+                                                      "providerCategories"
+                                                    ? "categorías"
+                                                    : tab === "shipmentTypes"
+                                                    ? "tipos de embarque"
+                                                    : "subclientes"
+                                            }...`}
+                                            value={searchTerm}
+                                            onChange={(e) =>
+                                                setSearchTerm(e.target.value)
+                                            }
+                                            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                        />
+                                    </div>
+                                    {searchTerm && (
+                                        <button
+                                            onClick={() => setSearchTerm("")}
+                                            className="flex items-center gap-2 text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
+                                        >
+                                            <XCircle className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Derecha: Contador y Botón */}
+                                <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                                    <div className="text-sm text-slate-500 hidden md:block">
+                                        <span className="font-semibold text-slate-900">
+                                            {getFilteredData(tab).length}
+                                        </span>{" "}
+                                        registros
+                                    </div>
+                                    <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => fetchAllCatalogs()}
+                                        disabled={loading}
+                                        className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                                    >
+                                        <RefreshCw
+                                            className={cn(
+                                                "w-3.5 h-3.5 mr-2",
+                                                loading && "animate-spin"
+                                            )}
+                                        />
+                                        Actualizar
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => openModal(tab)}
+                                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                                    >
+                                        <Plus className="w-3.5 h-3.5 mr-2" />
+                                        {tab === "providerCategories" &&
+                                            "Nueva Categoría"}
+                                        {tab === "providers" &&
+                                            "Nuevo Proveedor"}
+                                        {tab === "banks" && "Nuevo Banco"}
+                                        {tab === "shipmentTypes" &&
+                                            "Nuevo Tipo"}
+                                        {tab === "subClients" &&
+                                            "Nuevo Subcliente"}
+                                    </Button>
+                                </div>
                             </div>
-                            <div className="relative flex-1 max-w-lg">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="Buscar categorías..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 h-9"
-                                />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
+
+                            {/* Tabla */}
                             <DataTable
-                                columns={getColumns("providerCategories")}
-                                data={getFilteredData("providerCategories")}
+                                columns={getColumns(tab)}
+                                data={getFilteredData(tab)}
                                 searchable={false}
                                 pagination
+                                emptyMessage="No hay registros"
                             />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Proveedores */}
-                <TabsContent value="providers" key="providers">
-                    <Card>
-                        <CardHeader className="flex flex-col gap-4 pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Proveedores</CardTitle>
-                                <Button onClick={() => openModal("providers")}>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nuevo Proveedor
-                                </Button>
-                            </div>
-                            <div className="relative flex-1 max-w-lg">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="Buscar proveedores..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 h-9"
-                                />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
-                            <DataTable
-                                columns={getColumns("providers")}
-                                data={getFilteredData("providers")}
-                                searchable={false}
-                                pagination
-                            />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Bancos */}
-                <TabsContent value="banks" key="banks">
-                    <Card>
-                        <CardHeader className="flex flex-col gap-4 pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Bancos</CardTitle>
-                                <Button onClick={() => openModal("banks")}>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nuevo Banco
-                                </Button>
-                            </div>
-                            <div className="relative flex-1 max-w-lg">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="Buscar bancos..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 h-9"
-                                />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
-                            <DataTable
-                                columns={getColumns("banks")}
-                                data={getFilteredData("banks")}
-                                searchable={false}
-                                pagination
-                            />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Tipos de Embarque */}
-                <TabsContent value="shipmentTypes" key="shipmentTypes">
-                    <Card>
-                        <CardHeader className="flex flex-col gap-4 pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Tipos de Embarque</CardTitle>
-                                <Button onClick={() => openModal("shipmentTypes")}>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nuevo Tipo
-                                </Button>
-                            </div>
-                            <div className="relative flex-1 max-w-lg">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="Buscar tipos..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 h-9"
-                                />
-                            </div>
-                        </CardHeader>                        <CardContent className="px-5 pb-5 pt-0">
-                            <DataTable
-                                columns={getColumns("shipmentTypes")}
-                                data={getFilteredData("shipmentTypes")}
-                                searchable={false}
-                                pagination
-                            />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Subclientes */}
-                <TabsContent value="subClients" key="subClients">
-                    <Card>
-                        <CardHeader className="flex flex-col gap-4 pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle>Subclientes</CardTitle>
-                                <Button onClick={() => openModal("subClients")}>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nuevo Subcliente
-                                </Button>
-                            </div>
-                            <div className="relative flex-1 max-w-lg">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input
-                                    placeholder="Buscar subclientes..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 h-9"
-                                />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5 pt-0">
-                            <DataTable
-                                columns={getColumns("subClientes")}
-                                data={getFilteredData("subClients")}
-                                searchable={false}
-                                pagination
-                            />
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                        </div>
+                    </TabsContent>
+                ))}
             </Tabs>
 
             {/* Modal Universal */}
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent size="xl">
-                    <DialogHeader>
-                        <DialogTitle className="text-xl font-semibold text-gray-900">
-                            {getModalTitle()}
-                        </DialogTitle>
-                        <p className="text-sm text-gray-500 mt-1">
-                            {editingItem ? "Modifica" : "Completa"} los datos
-                            requeridos
-                        </p>
-                    </DialogHeader>
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title={getModalTitle()}
+                size="lg"
+            >
+                <form onSubmit={handleSubmit}>
+                    <div className="space-y-6 py-4">
+                        {/* Campos del formulario */}
+                        <div className="space-y-4">{renderForm()}</div>
 
-                    <form onSubmit={handleSubmit}>
-                        <div className="space-y-6 py-4">
-                            {/* Campos del formulario */}
-                            <div className="space-y-4">{renderForm()}</div>
-
-                            {/* Separador */}
-                            <div className="border-t border-gray-200 pt-4">
-                                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                                    <input
-                                        type="checkbox"
-                                        id="is_active"
-                                        checked={
-                                            formData.is_active !== undefined
-                                                ? formData.is_active
-                                                : true
-                                        }
-                                        onChange={(e) =>
-                                            setFormData({
-                                                ...formData,
-                                                is_active: e.target.checked,
-                                            })
-                                        }
-                                        className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                                    />
-                                    <div className="flex flex-col">
-                                        <Label
-                                            htmlFor="is_active"
-                                            className="font-medium text-gray-900 cursor-pointer"
-                                        >
-                                            Estado Activo
-                                        </Label>
-                                        <span className="text-xs text-gray-500">
-                                            El registro estará disponible para
-                                            su uso
-                                        </span>
-                                    </div>
+                        {/* Separador */}
+                        <div className="border-t border-slate-200 pt-4">
+                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    id="is_active"
+                                    checked={
+                                        formData.is_active !== undefined
+                                            ? formData.is_active
+                                            : true
+                                    }
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            is_active: e.target.checked,
+                                        })
+                                    }
+                                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                />
+                                <div className="flex flex-col">
+                                    <Label
+                                        htmlFor="is_active"
+                                        className="font-medium text-slate-900 cursor-pointer"
+                                    >
+                                        Estado Activo
+                                    </Label>
+                                    <span className="text-xs text-slate-500">
+                                        El registro estará disponible para su
+                                        uso en el sistema
+                                    </span>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Footer con botones */}
-                        <DialogFooter className="bg-gray-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setIsModalOpen(false)}
-                                className="min-w-[100px]"
-                            >
-                                Cancelar
-                            </Button>
-                            <Button type="submit" className="min-w-[100px]">
-                                {editingItem ? "Actualizar" : "Guardar"}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+                    {/* Footer con botones */}
+                    <ModalFooter>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setIsModalOpen(false)}
+                            className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 min-w-[120px] transition-all active:scale-95"
+                        >
+                            {editingItem ? "Actualizar" : "Guardar"}
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
 
             {/* Confirm Delete Dialog */}
             <ConfirmDialog

@@ -30,6 +30,7 @@ import {
     Edit2,
     Trash2,
     FileMinus,
+    ArrowUpRight,
 } from "lucide-react";
 import {
     Button,
@@ -204,7 +205,6 @@ const ClientCard = ({ client, isSelected, onClick }) => {
                         {formatCurrency(client.total_pending || 0)}
                     </span>
                 </div>
-
             </div>
         </div>
     );
@@ -411,7 +411,7 @@ function AccountStatements() {
                     year: selectedYear,
                     status: statusFilter,
                     search: searchQuery,
-                    ...filters
+                    ...filters,
                 };
 
                 response = await axios.get(
@@ -544,7 +544,8 @@ function AccountStatements() {
             }
         } catch (error) {
             toast.error(
-                error.response?.data?.error || "Error al registrar nota de crédito"
+                error.response?.data?.error ||
+                    "Error al registrar nota de crédito"
             );
         } finally {
             setIsSubmitting(false);
@@ -757,16 +758,17 @@ function AccountStatements() {
         {
             header: "Factura",
             accessor: "invoice_number",
+            sortable: false,
             cell: (row) => (
                 <div className="flex items-center gap-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center border border-blue-200">
-                        <Receipt className="w-4 h-4 text-blue-600" />
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200">
+                        <Receipt className="w-4 h-4 text-slate-500" />
                     </div>
                     <div>
-                        <div className="font-mono text-sm font-semibold text-gray-900">
+                        <div className="font-mono text-xs font-bold text-slate-900">
                             {row.invoice_number || "Sin número"}
                         </div>
-                        <div className="text-xs text-gray-500 uppercase">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">
                             {row.invoice_type || "DTE"}
                         </div>
                     </div>
@@ -776,58 +778,58 @@ function AccountStatements() {
         {
             header: "Orden de Servicio",
             accessor: "service_order_number",
+            sortable: false,
             cell: (row) => (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200 rounded-lg">
-                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                <div className="flex flex-col">
                     {row.service_order ? (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/service-orders/${row.service_order}`);
+                                navigate(
+                                    `/service-orders/${row.service_order}`
+                                );
                             }}
-                            className="font-mono text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                            className="font-mono text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit flex items-center gap-1"
                         >
                             {row.service_order_number}
+                            <ArrowUpRight className="w-2.5 h-2.5 opacity-50" />
                         </button>
                     ) : (
-                        <span className="font-mono text-xs font-medium text-slate-700">
-                            {row.service_order_number || "—"}
+                        <span className="font-mono text-[11px] text-slate-400 italic">
+                            —
                         </span>
                     )}
-                </div>
-            ),
-        },
-        {
-            header: "Emisión",
-            accessor: "issue_date",
-            cell: (row) => (
-                <div className="text-sm text-gray-700">
-                    {formatDate(row.issue_date, { format: "short" })}
+                    <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        {formatDate(row.issue_date, { format: "short" })}
+                    </span>
                 </div>
             ),
         },
         {
             header: "Vencimiento",
             accessor: "due_date",
+            sortable: false,
             cell: (row) => {
                 const isOverdue =
                     row.due_date &&
                     new Date(row.due_date) < new Date() &&
                     row.status !== "paid";
                 return (
-                    <div
-                        className={cn(
-                            "text-sm",
-                            isOverdue
-                                ? "text-red-600 font-medium"
-                                : "text-gray-700"
-                        )}
-                    >
-                        {row.due_date
-                            ? formatDate(row.due_date, { format: "short" })
-                            : "—"}
+                    <div className="flex flex-col">
+                        <span
+                            className={cn(
+                                "text-xs font-medium tabular-nums",
+                                isOverdue ? "text-red-600" : "text-slate-600"
+                            )}
+                        >
+                            {row.due_date
+                                ? formatDate(row.due_date, { format: "short" })
+                                : "—"}
+                        </span>
                         {isOverdue && (
-                            <div className="text-xs text-red-500">Vencida</div>
+                            <span className="text-[9px] text-red-500 font-bold uppercase">
+                                Vencida
+                            </span>
                         )}
                     </div>
                 );
@@ -836,8 +838,11 @@ function AccountStatements() {
         {
             header: "Total",
             accessor: "total_amount",
+            className: "text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="text-right font-semibold text-gray-900 tabular-nums">
+                <div className="font-semibold text-slate-900 tabular-nums text-sm tracking-tight py-1">
                     {formatCurrency(row.total_amount)}
                 </div>
             ),
@@ -845,8 +850,11 @@ function AccountStatements() {
         {
             header: "Pagado",
             accessor: "paid_amount",
+            className: "text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="text-right text-emerald-600 tabular-nums">
+                <div className="text-emerald-700 tabular-nums font-medium text-sm tracking-tight py-1">
                     {formatCurrency(row.paid_amount || 0)}
                 </div>
             ),
@@ -854,130 +862,106 @@ function AccountStatements() {
         {
             header: "Saldo",
             accessor: "balance",
+            className: "text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
                 <div
                     className={cn(
-                        "text-right font-semibold tabular-nums",
-                        parseFloat(row.balance) > 0
-                            ? "text-amber-600"
+                        "font-bold tabular-nums text-sm tracking-tight py-1",
+                        parseFloat(row.balance) > 0.01
+                            ? "text-slate-900"
                             : "text-emerald-600"
                     )}
                 >
-                    {formatCurrency(row.balance || 0)}
+                    {parseFloat(row.balance) > 0.01 ? (
+                        formatCurrency(row.balance)
+                    ) : (
+                        <span className="flex items-center justify-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> $0.00
+                        </span>
+                    )}
                 </div>
             ),
         },
         {
             header: "Estado",
             accessor: "status",
+            sortable: false,
             cell: (row) => <StatusBadge status={row.status} />,
-        },
-        {
-            header: "PDF",
-            accessor: "pdf_file",
-            className: "w-16 text-center",
-            cell: (row) =>
-                row.pdf_file ? (
-                    <div className="relative group">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(row.pdf_file, "_blank");
-                            }}
-                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                            title="Ver factura PDF (click para ver, click derecho para descargar)"
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Descargar PDF
-                                const link = document.createElement("a");
-                                link.href = row.pdf_file;
-                                link.setAttribute(
-                                    "download",
-                                    `factura_${
-                                        row.invoice_number || row.id
-                                    }.pdf`
-                                );
-                                document.body.appendChild(link);
-                                link.click();
-                                link.remove();
-                                toast.success("Descargando factura...");
-                            }}
-                        >
-                            <FileText className="w-4 h-4" />
-                        </Button>
-                    </div>
-                ) : (
-                    <span className="text-gray-400 text-xs">—</span>
-                ),
         },
         {
             header: "Acciones",
             accessor: "actions",
+            className: "w-[140px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
             cell: (row) => (
-                <div className="flex items-center justify-end gap-1">
-                    {/* Registrar pago - Solo si no está pagada o cancelada */}
-                    {row.status !== "paid" && row.status !== "cancelled" && (
-                        <>
-                            <Button
-                                variant="ghost"
-                                size="sm"
+                <div className="grid grid-cols-4 gap-1 w-full max-w-[120px] mx-auto">
+                    <div className="flex justify-center">
+                        {row.pdf_file ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(row.pdf_file, "_blank");
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+                                title="Ver PDF"
+                            >
+                                <FileText className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
+                    <div className="flex justify-center">
+                        {row.status !== "paid" && row.status !== "cancelled" ? (
+                            <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     openPaymentModal(row);
                                 }}
-                                className="text-gray-500 hover:text-amber-600"
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
                                 title="Registrar pago"
                             >
                                 <Banknote className="w-4 h-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    openCreditNoteModal(row);
-                                }}
-                                className="text-gray-500 hover:text-purple-600"
-                                title="Registrar Nota de Crédito"
-                            >
-                                <FileMinus className="w-4 h-4" />
-                            </Button>
-                        </>
-                    )}
-
-                    {/* Ver detalles */}
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedInvoice(row);
-                            setIsDetailModalOpen(true);
-                        }}
-                        className="text-gray-500 hover:text-blue-600"
-                        title="Ver detalles"
-                    >
-                        <Eye className="w-4 h-4" />
-                    </Button>
-
-                    {/* Eliminar - Solo si no está pagada */}
-                    {row.status !== "paid" && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
+                    <div className="flex justify-center">
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setDeleteConfirm({ open: true, id: row.id });
+                                setSelectedInvoice(row);
+                                setIsDetailModalOpen(true);
                             }}
-                            className="text-gray-400 hover:text-red-600"
-                            title="Eliminar"
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                            title="Ver detalles"
                         >
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
-                    )}
+                            <Eye className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        {row.status !== "paid" ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteConfirm({
+                                        open: true,
+                                        id: row.id,
+                                    });
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                title="Eliminar"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
                 </div>
             ),
         },
@@ -994,7 +978,7 @@ function AccountStatements() {
                         e.stopPropagation();
                         navigate(`/service-orders/${row.id}`);
                     }}
-                    className="font-mono text-sm font-semibold text-brand-600 hover:text-brand-800 hover:underline"
+                    className="font-mono text-sm font-semibold text-slate-900 hover:text-slate-700 hover:underline"
                 >
                     {row.order_number}
                 </button>
@@ -1053,131 +1037,118 @@ function AccountStatements() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">
-                        Estados de Cuenta
-                    </h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Gestión de cuentas por cobrar y facturación por cliente
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <SelectERP
-                        value={selectedYear}
-                        onChange={(val) => setSelectedYear(val)}
-                        options={YEAR_OPTIONS}
-                        getOptionLabel={(opt) => opt.name}
-                        getOptionValue={(opt) => opt.id}
-                        size="sm"
+            <div className="flex justify-end gap-2">
+                <SelectERP
+                    value={selectedYear}
+                    onChange={(val) => setSelectedYear(val)}
+                    options={YEAR_OPTIONS}
+                    getOptionLabel={(opt) => opt.name}
+                    getOptionValue={(opt) => opt.id}
+                    size="sm"
+                    className="w-24"
+                />
+                <Button
+                    variant="outline"
+                    onClick={() => {
+                        fetchClients();
+                        if (selectedClient) {
+                            fetchStatement(selectedClient.id);
+                            fetchInvoices(selectedClient.id);
+                        }
+                    }}
+                    disabled={loading}
+                >
+                    <RefreshCw
+                        className={cn(
+                            "w-4 h-4 mr-2",
+                            loading && "animate-spin"
+                        )}
                     />
+                    Actualizar
+                </Button>
+                {/* Menú de Exportación */}
+                <div className="relative">
                     <Button
                         variant="outline"
-                        onClick={() => {
-                            fetchClients();
-                            if (selectedClient) {
-                                fetchStatement(selectedClient.id);
-                                fetchInvoices(selectedClient.id);
-                            }
-                        }}
-                        disabled={loading}
+                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                        disabled={isExporting || !selectedClient}
+                        className="gap-2"
                     >
-                        <RefreshCw
+                        <Download
                             className={cn(
-                                "w-4 h-4 mr-2",
-                                loading && "animate-spin"
+                                "w-4 h-4",
+                                isExporting && "animate-bounce"
                             )}
                         />
-                        Actualizar
+                        Exportar
+                        <ChevronDown className="w-4 h-4" />
                     </Button>
-                    {/* Menú de Exportación */}
-                    <div className="relative">
-                        <Button
-                            variant="outline"
-                            onClick={() =>
-                                setIsExportMenuOpen(!isExportMenuOpen)
-                            }
-                            disabled={isExporting || !selectedClient}
-                            className="gap-2"
-                        >
-                            <Download
-                                className={cn(
-                                    "w-4 h-4",
-                                    isExporting && "animate-bounce"
-                                )}
+
+                    {/* Dropdown Menu */}
+                    {isExportMenuOpen && !isExporting && selectedClient && (
+                        <>
+                            {/* Overlay para cerrar al hacer click afuera */}
+                            <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setIsExportMenuOpen(false)}
                             />
-                            Exportar
-                            <ChevronDown className="w-4 h-4" />
-                        </Button>
 
-                        {/* Dropdown Menu */}
-                        {isExportMenuOpen && !isExporting && selectedClient && (
-                            <>
-                                {/* Overlay para cerrar al hacer click afuera */}
-                                <div
-                                    className="fixed inset-0 z-10"
-                                    onClick={() => setIsExportMenuOpen(false)}
-                                />
-
-                                {/* Menu */}
-                                <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-20 overflow-hidden">
-                                    <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                                        <p className="text-xs font-semibold text-gray-700 px-2">
-                                            Opciones de Exportación
-                                        </p>
-                                    </div>
-
-                                    <div className="p-1">
-                                        {/* Exportar Estado de Cuenta Completo */}
-                                        <button
-                                            onClick={() =>
-                                                handleExportExcel("full")
-                                            }
-                                            className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-blue-50 rounded-lg transition-colors text-left group"
-                                        >
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                                                <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900">
-                                                    Estado de Cuenta Completo
-                                                </p>
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    Exportar todas las facturas
-                                                    del año {selectedYear}
-                                                </p>
-                                            </div>
-                                        </button>
-
-                                        {/* Exportar Solo Facturas Filtradas */}
-                                        <button
-                                            onClick={() =>
-                                                handleExportExcel("filtered")
-                                            }
-                                            disabled={
-                                                filteredInvoices.length === 0
-                                            }
-                                            className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                                                <Table className="w-4 h-4 text-emerald-600" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900">
-                                                    Facturas Filtradas
-                                                </p>
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    Exportar{" "}
-                                                    {filteredInvoices.length}{" "}
-                                                    factura(s) visible(s)
-                                                </p>
-                                            </div>
-                                        </button>
-                                    </div>
+                            {/* Menu */}
+                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-20 overflow-hidden">
+                                <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                                    <p className="text-xs font-semibold text-gray-700 px-2">
+                                        Opciones de Exportación
+                                    </p>
                                 </div>
-                            </>
-                        )}
-                    </div>
+
+                                <div className="p-1">
+                                    {/* Exportar Estado de Cuenta Completo */}
+                                    <button
+                                        onClick={() =>
+                                            handleExportExcel("full")
+                                        }
+                                        className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-blue-50 rounded-lg transition-colors text-left group"
+                                    >
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                                            <FileSpreadsheet className="w-4 h-4 text-slate-700" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-900">
+                                                Estado de Cuenta Completo
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                Exportar todas las facturas del
+                                                año {selectedYear}
+                                            </p>
+                                        </div>
+                                    </button>
+
+                                    {/* Exportar Solo Facturas Filtradas */}
+                                    <button
+                                        onClick={() =>
+                                            handleExportExcel("filtered")
+                                        }
+                                        disabled={filteredInvoices.length === 0}
+                                        className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
+                                            <Table className="w-4 h-4 text-emerald-600" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-900">
+                                                Facturas Filtradas
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                Exportar{" "}
+                                                {filteredInvoices.length}{" "}
+                                                factura(s) visible(s)
+                                            </p>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1291,7 +1262,11 @@ function AccountStatements() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => window.open(`tel:${selectedClient.phone}`)}
+                                                    onClick={() =>
+                                                        window.open(
+                                                            `tel:${selectedClient.phone}`
+                                                        )
+                                                    }
                                                 >
                                                     <Phone className="w-4 h-4 mr-2" />
                                                     {selectedClient.phone}
@@ -1301,7 +1276,11 @@ function AccountStatements() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => window.open(`mailto:${selectedClient.email}`)}
+                                                    onClick={() =>
+                                                        window.open(
+                                                            `mailto:${selectedClient.email}`
+                                                        )
+                                                    }
                                                 >
                                                     <Mail className="w-4 h-4" />
                                                 </Button>
@@ -1367,50 +1346,70 @@ function AccountStatements() {
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Corriente</span>
+                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        Corriente
+                                                    </span>
                                                 </div>
-                                                <div className="text-xl font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(statement.aging.current)}
+                                                <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                                    {formatCurrency(
+                                                        statement.aging.current
+                                                    )}
                                                 </div>
                                             </div>
                                             {/* 1-30 */}
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">1-30 Días</span>
+                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        1-30 Días
+                                                    </span>
                                                 </div>
-                                                <div className="text-xl font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(statement.aging['1-30'])}
+                                                <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                                    {formatCurrency(
+                                                        statement.aging["1-30"]
+                                                    )}
                                                 </div>
                                             </div>
                                             {/* 31-60 */}
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">31-60 Días</span>
+                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        31-60 Días
+                                                    </span>
                                                 </div>
-                                                <div className="text-xl font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(statement.aging['31-60'])}
+                                                <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                                    {formatCurrency(
+                                                        statement.aging["31-60"]
+                                                    )}
                                                 </div>
                                             </div>
                                             {/* 61-90 */}
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">61-90 Días</span>
+                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        61-90 Días
+                                                    </span>
                                                 </div>
-                                                <div className="text-xl font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(statement.aging['61-90'])}
+                                                <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                                    {formatCurrency(
+                                                        statement.aging["61-90"]
+                                                    )}
                                                 </div>
                                             </div>
                                             {/* 90+ */}
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <span className="w-2 h-2 rounded-full bg-red-600"></span>
-                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">+90 Días</span>
+                                                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                                        +90 Días
+                                                    </span>
                                                 </div>
-                                                <div className="text-xl font-bold text-slate-900 tabular-nums">
-                                                    {formatCurrency(statement.aging['90+'])}
+                                                <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                                    {formatCurrency(
+                                                        statement.aging["90+"]
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -1456,20 +1455,34 @@ function AccountStatements() {
                                                 <Input
                                                     placeholder="Buscar por factura, orden de servicio..."
                                                     value={searchQuery}
-                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    onChange={(e) =>
+                                                        setSearchQuery(
+                                                            e.target.value
+                                                        )
+                                                    }
                                                     className="pl-9"
                                                 />
                                             </div>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                                                className={cn(isFiltersOpen && "bg-slate-100")}
+                                                onClick={() =>
+                                                    setIsFiltersOpen(
+                                                        !isFiltersOpen
+                                                    )
+                                                }
+                                                className={cn(
+                                                    isFiltersOpen &&
+                                                        "bg-slate-100"
+                                                )}
                                             >
                                                 <Filter className="w-4 h-4 mr-2" />
                                                 Filtros
                                                 {activeFiltersCount > 0 && (
-                                                    <Badge variant="primary" className="ml-2 px-1.5 py-0.5 h-5">
+                                                    <Badge
+                                                        variant="primary"
+                                                        className="ml-2 px-1.5 py-0.5 h-5"
+                                                    >
                                                         {activeFiltersCount}
                                                     </Badge>
                                                 )}
@@ -1478,9 +1491,13 @@ function AccountStatements() {
                                         <div className="min-w-[180px]">
                                             <SelectERP
                                                 value={statusFilter}
-                                                onChange={(val) => setStatusFilter(val)}
+                                                onChange={(val) =>
+                                                    setStatusFilter(val)
+                                                }
                                                 options={STATUS_OPTIONS}
-                                                getOptionLabel={(opt) => opt.name}
+                                                getOptionLabel={(opt) =>
+                                                    opt.name
+                                                }
                                                 getOptionValue={(opt) => opt.id}
                                                 clearable
                                                 placeholder="Estado"
@@ -1495,13 +1512,13 @@ function AccountStatements() {
                                             <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 space-y-4">
                                                 <div className="flex items-center justify-between mb-3">
                                                     <div className="flex items-center gap-2">
-                                                        <Filter className="w-4 h-4 text-blue-600" />
+                                                        <Filter className="w-4 h-4 text-slate-700" />
                                                         <h4 className="text-sm font-semibold text-gray-900">
                                                             Filtros Avanzados
                                                         </h4>
                                                         {activeFiltersCount >
                                                             0 && (
-                                                            <span className="text-xs text-blue-600 font-medium">
+                                                            <span className="text-xs text-slate-700 font-medium">
                                                                 (
                                                                 {
                                                                     activeFiltersCount
@@ -1681,7 +1698,7 @@ function AccountStatements() {
                                                 <div className="pt-2 border-t border-blue-100">
                                                     <p className="text-xs text-gray-600">
                                                         Mostrando{" "}
-                                                        <span className="font-semibold text-blue-600">
+                                                        <span className="font-semibold text-slate-700">
                                                             {
                                                                 filteredInvoices.length
                                                             }
@@ -1730,249 +1747,232 @@ function AccountStatements() {
                     setIsPaymentModalOpen(false);
                     setSelectedInvoice(null);
                 }}
-                title="Registrar Pago / Abono"
-                size="2xl"
+                title="Registrar Abono / Pago"
+                size="lg"
             >
-                <form onSubmit={handleAddPayment} className="space-y-6">
-                    {/* Información de Factura */}
-                    {selectedInvoice && (
-                        <div className="p-5 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
-                                        Factura a Pagar
+                {selectedInvoice && (
+                    <form onSubmit={handleAddPayment} className="space-y-6">
+                        {/* Summary Box */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                        <Building2 className="w-5 h-5 text-slate-500" />
                                     </div>
-                                    <div className="font-mono text-xl font-bold text-slate-900">
-                                        {selectedInvoice.invoice_number}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <Badge variant="outline">
-                                            {selectedInvoice.invoice_type ||
-                                                "DTE"}
-                                        </Badge>
-                                        {selectedInvoice.service_order_number && (
-                                            <span className="text-xs text-slate-600">
-                                                OS:{" "}
-                                                {
-                                                    selectedInvoice.service_order_number
-                                                }
-                                            </span>
-                                        )}
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Documento
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-700 font-mono">
+                                            {selectedInvoice.invoice_number}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="text-left sm:text-right">
-                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                         Saldo Pendiente
-                                    </div>
-                                    <div className="font-bold text-3xl text-slate-900 tabular-nums">
+                                    </p>
+                                    <p className="text-2xl font-black text-red-600 tabular-nums tracking-tight">
                                         {formatCurrency(
                                             selectedInvoice.balance
                                         )}
-                                    </div>
-                                    {selectedInvoice.total_amount && (
-                                        <div className="text-xs text-slate-500 mt-1">
-                                            Total:{" "}
-                                            {formatCurrency(
-                                                selectedInvoice.total_amount
-                                            )}
-                                        </div>
-                                    )}
+                                    </p>
                                 </div>
                             </div>
                         </div>
-                    )}
 
-                    {/* Sección 1: Datos del Pago */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
-                                1
-                            </span>
-                            Datos del Pago
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <Label>Monto del Pago *</Label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                                        $
-                                    </span>
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Detalle del Cobro
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Monto del Pago *
+                                    </Label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                                            $
+                                        </span>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0.01"
+                                            max={selectedInvoice?.balance}
+                                            value={paymentForm.amount}
+                                            onChange={(e) =>
+                                                setPaymentForm({
+                                                    ...paymentForm,
+                                                    amount: e.target.value,
+                                                })
+                                            }
+                                            className="pl-7 font-mono font-semibold text-slate-700 text-lg"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Fecha de Pago *
+                                    </Label>
                                     <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0.01"
-                                        max={selectedInvoice?.balance}
-                                        value={paymentForm.amount}
+                                        type="date"
+                                        value={paymentForm.payment_date}
                                         onChange={(e) =>
                                             setPaymentForm({
                                                 ...paymentForm,
-                                                amount: e.target.value,
+                                                payment_date: e.target.value,
                                             })
                                         }
-                                        placeholder="0.00"
-                                        className="pl-7 font-mono"
                                         required
                                     />
                                 </div>
-                                <p className="text-xs text-slate-500 leading-5">
-                                    Máximo:{" "}
-                                    {formatCurrency(
-                                        selectedInvoice?.balance || 0
+
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Método de Pago
+                                    </Label>
+                                    <SelectERP
+                                        value={paymentForm.payment_method}
+                                        onChange={(val) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                payment_method: val,
+                                            })
+                                        }
+                                        options={[
+                                            {
+                                                id: "transferencia",
+                                                name: "Transferencia Bancaria",
+                                            },
+                                            {
+                                                id: "efectivo",
+                                                name: "Efectivo",
+                                            },
+                                            { id: "cheque", name: "Cheque" },
+                                            {
+                                                id: "tarjeta",
+                                                name: "Tarjeta de Crédito/Débito",
+                                            },
+                                        ]}
+                                        getOptionLabel={(opt) => opt.name}
+                                        getOptionValue={(opt) => opt.id}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Referencia / No. Documento
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.reference}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                reference: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: TRANS-12345"
+                                        className="font-mono"
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Comprobante de Pago (Opcional)
+                                    </Label>
+                                    <FileUpload
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onFileChange={(file) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                payment_proof: file,
+                                            })
+                                        }
+                                        helperText="Sube el soporte del pago"
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Notas Adicionales
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.notes}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                notes: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Observaciones adicionales..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Impact Preview */}
+                        {paymentForm.amount &&
+                            parseFloat(paymentForm.amount) > 0 && (
+                                <div className="bg-slate-900 rounded-xl p-5 text-white shadow-lg">
+                                    <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                            Saldo Proyectado
+                                        </span>
+                                        <span className="text-2xl font-black tabular-nums">
+                                            {formatCurrency(
+                                                Math.max(
+                                                    0,
+                                                    parseFloat(
+                                                        selectedInvoice.balance
+                                                    ) -
+                                                        parseFloat(
+                                                            paymentForm.amount ||
+                                                                0
+                                                        )
+                                                )
+                                            )}
+                                        </span>
+                                    </div>
+                                    {parseFloat(selectedInvoice.balance) -
+                                        parseFloat(paymentForm.amount || 0) <=
+                                        0.01 && (
+                                        <div className="flex items-center gap-2 text-emerald-400">
+                                            <CheckCircle2 className="w-4 h-4" />
+                                            <span className="text-xs font-bold uppercase tracking-wider">
+                                                Factura será marcada como pagada
+                                            </span>
+                                        </div>
                                     )}
-                                </p>
-                            </div>
-                            <div className="space-y-1">
-                                <Label>Fecha de Pago *</Label>
-                                <Input
-                                    type="date"
-                                    value={paymentForm.payment_date}
-                                    onChange={(e) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            payment_date: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                                <div className="text-xs leading-5 invisible">
-                                    Spacer
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border-t border-gray-100" />
-
-                    {/* Sección 2: Información de Transacción */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
-                                2
-                            </span>
-                            Información de Transacción
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 items-start">
-                            <div className="space-y-1">
-                                <Label>Método de Pago</Label>
-                                <SelectERP
-                                    label={null}
-                                    value={paymentForm.payment_method}
-                                    onChange={(val) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            payment_method: val,
-                                        })
-                                    }
-                                    options={[
-                                        {
-                                            id: "transferencia",
-                                            name: "Transferencia Bancaria",
-                                        },
-                                        { id: "efectivo", name: "Efectivo" },
-                                        { id: "cheque", name: "Cheque" },
-                                        {
-                                            id: "tarjeta",
-                                            name: "Tarjeta de Crédito/Débito",
-                                        },
-                                    ]}
-                                    getOptionLabel={(opt) => opt.name}
-                                    required
-                                    getOptionValue={(opt) => opt.id}
-                                />
-                                <div className="text-xs leading-5 invisible">
-                                    placeholder
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <Label>Referencia / No. Documento</Label>
-                                <Input
-                                    value={paymentForm.reference}
-                                    onChange={(e) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            reference: e.target.value,
-                                        })
-                                    }
-                                    placeholder="Ej: TRF-12345, CHQ-789"
-                                    className="font-mono"
-                                />
-                                <p className="text-xs text-slate-500 leading-5">
-                                    Número de transferencia, cheque, etc.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="border-t border-gray-100" />
-
-                    {/* Sección 3: Comprobante */}
-                    <div>
-                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold">
-                                3
-                            </span>
-                            Comprobante de Pago
-                        </h4>
-                        <div>
-                            <Label>Archivo de Comprobante (Opcional)</Label>
-                            <FileUpload
-                                accept=".pdf,.jpg,.jpeg,.png"
-                                onFileChange={(file) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        payment_proof: file,
-                                    })
-                                }
-                            />
-                            <p className="text-xs text-slate-500 mt-2">
-                                Sube el comprobante de pago (transferencia,
-                                captura, recibo, etc.)
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Notas */}
-                    <div>
-                        <Label>Notas Adicionales</Label>
-                        <textarea
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={paymentForm.notes}
-                            onChange={(e) =>
-                                setPaymentForm({
-                                    ...paymentForm,
-                                    notes: e.target.value,
-                                })
-                            }
-                            placeholder="Observaciones adicionales sobre el pago..."
-                        />
-                    </div>
-
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setIsPaymentModalOpen(false);
-                                setSelectedInvoice(null);
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? (
-                                <>
-                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                    Procesando...
-                                </>
-                            ) : (
-                                <>
-                                    <Banknote className="w-4 h-4 mr-2" />
-                                    Registrar Pago
-                                </>
                             )}
-                        </Button>
-                    </ModalFooter>
-                </form>
+
+                        <ModalFooter>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                    setIsPaymentModalOpen(false);
+                                    setSelectedInvoice(null);
+                                }}
+                                className="text-slate-500 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
+                            >
+                                {isSubmitting
+                                    ? "Procesando..."
+                                    : "Confirmar Pago"}
+                            </Button>
+                        </ModalFooter>
+                    </form>
+                )}
             </Modal>
 
             {/* Credit Note Modal */}
@@ -1983,130 +1983,164 @@ function AccountStatements() {
                     setSelectedInvoice(null);
                 }}
                 title="Registrar Nota de Crédito"
-                size="2xl"
+                size="lg"
             >
-                <form onSubmit={handleAddCreditNote} className="space-y-6">
-                    {/* Información de Factura */}
-                    {selectedInvoice && (
-                        <div className="p-5 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                                <div>
-                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
-                                        Aplicar a Factura
+                {selectedInvoice && (
+                    <form onSubmit={handleAddCreditNote} className="space-y-6">
+                        {/* Summary Box */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                        <Receipt className="w-5 h-5 text-slate-500" />
                                     </div>
-                                    <div className="font-mono text-xl font-bold text-slate-900">
-                                        {selectedInvoice.invoice_number}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <Badge variant="outline">
-                                            {selectedInvoice.invoice_type || "DTE"}
-                                        </Badge>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Aplicar a Factura
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-700 font-mono">
+                                            {selectedInvoice.invoice_number}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="text-left sm:text-right">
-                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
-                                        Saldo Actual
-                                    </div>
-                                    <div className="font-bold text-3xl text-slate-900 tabular-nums">
-                                        {formatCurrency(selectedInvoice.balance)}
-                                    </div>
-                                    {selectedInvoice.total_amount && (
-                                        <div className="text-xs text-slate-500 mt-1">
-                                            Total: {formatCurrency(selectedInvoice.total_amount)}
-                                        </div>
-                                    )}
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Saldo Ajustable
+                                    </p>
+                                    <p className="text-2xl font-black text-slate-900 tabular-nums tracking-tight">
+                                        {formatCurrency(
+                                            selectedInvoice.balance
+                                        )}
+                                    </p>
                                 </div>
                             </div>
                         </div>
-                    )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <Label>Número de Nota de Crédito *</Label>
-                            <Input
-                                value={creditNoteForm.note_number}
-                                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, note_number: e.target.value })}
-                                placeholder="Ej: NC-00123"
-                                className="font-mono"
-                                required
-                            />
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                                Detalle del Ajuste
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Monto a Acreditar *
+                                    </Label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                                            $
+                                        </span>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0.01"
+                                            max={selectedInvoice.balance}
+                                            value={creditNoteForm.amount}
+                                            onChange={(e) =>
+                                                setCreditNoteForm({
+                                                    ...creditNoteForm,
+                                                    amount: e.target.value,
+                                                })
+                                            }
+                                            className="pl-7 font-mono font-semibold text-slate-700"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Fecha de Emisión *
+                                    </Label>
+                                    <Input
+                                        type="date"
+                                        value={creditNoteForm.issue_date}
+                                        onChange={(e) =>
+                                            setCreditNoteForm({
+                                                ...creditNoteForm,
+                                                issue_date: e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Número de Nota de Crédito *
+                                    </Label>
+                                    <Input
+                                        value={creditNoteForm.note_number}
+                                        onChange={(e) =>
+                                            setCreditNoteForm({
+                                                ...creditNoteForm,
+                                                note_number: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: NC-001"
+                                        className="font-mono uppercase"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Motivo / Razón *
+                                    </Label>
+                                    <Input
+                                        value={creditNoteForm.reason}
+                                        onChange={(e) =>
+                                            setCreditNoteForm({
+                                                ...creditNoteForm,
+                                                reason: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: Devolución, Error en precio..."
+                                        required
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Copia Digital (PDF)
+                                    </Label>
+                                    <FileUpload
+                                        accept=".pdf"
+                                        onFileChange={(file) =>
+                                            setCreditNoteForm({
+                                                ...creditNoteForm,
+                                                pdf_file: file,
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <Label>Fecha de Emisión *</Label>
-                            <Input
-                                type="date"
-                                value={creditNoteForm.issue_date}
-                                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, issue_date: e.target.value })}
-                                required
-                            />
-                        </div>
-                    </div>
 
-                    <div>
-                        <Label>Monto a Acreditar *</Label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                            <Input
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                max={selectedInvoice?.balance}
-                                value={creditNoteForm.amount}
-                                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, amount: e.target.value })}
-                                className="pl-7 font-mono text-lg"
-                                placeholder="0.00"
-                                required
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1">
-                            El monto no puede exceder el saldo pendiente ({formatCurrency(selectedInvoice?.balance || 0)})
-                        </p>
-                    </div>
-
-                    <div>
-                        <Label>Motivo / Razón *</Label>
-                        <Input
-                            value={creditNoteForm.reason}
-                            onChange={(e) => setCreditNoteForm({ ...creditNoteForm, reason: e.target.value })}
-                            placeholder="Ej: Devolución de mercadería, Error en facturación..."
-                            required
-                        />
-                    </div>
-
-                    <div>
-                        <Label>Archivo PDF (Opcional)</Label>
-                        <FileUpload
-                            accept=".pdf"
-                            onFileChange={(file) => setCreditNoteForm({ ...creditNoteForm, pdf_file: file })}
-                        />
-                    </div>
-
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                setIsCreditNoteModalOpen(false);
-                                setSelectedInvoice(null);
-                            }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting} className="bg-purple-600 hover:bg-purple-700 text-white">
-                            {isSubmitting ? (
-                                <>
-                                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                    Procesando...
-                                </>
-                            ) : (
-                                <>
-                                    <FileMinus className="w-4 h-4 mr-2" />
-                                    Registrar Nota de Crédito
-                                </>
-                            )}
-                        </Button>
-                    </ModalFooter>
-                </form>
+                        <ModalFooter>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                    setIsCreditNoteModalOpen(false);
+                                    setSelectedInvoice(null);
+                                }}
+                                className="text-slate-500 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
+                            >
+                                {isSubmitting
+                                    ? "Procesando..."
+                                    : "Confirmar Nota"}
+                            </Button>
+                        </ModalFooter>
+                    </form>
+                )}
             </Modal>
 
             {/* Invoice Detail Modal */}
@@ -2144,7 +2178,7 @@ function AccountStatements() {
                                 <div className="text-sm text-slate-500">
                                     Total
                                 </div>
-                                <div className="text-2xl font-bold text-slate-900 tabular-nums">
+                                <div className="text-2xl font-semibold text-slate-700 tabular-nums">
                                     {formatCurrency(
                                         selectedInvoice.total_amount
                                     )}
@@ -2194,20 +2228,23 @@ function AccountStatements() {
                                     <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                                         Monto Pagado
                                     </div>
-                                    <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                    <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                         {formatCurrency(
                                             selectedInvoice.paid_amount || 0
                                         )}
                                     </div>
                                 </div>
-                                {parseFloat(selectedInvoice.credited_amount || 0) > 0 && (
+                                {parseFloat(
+                                    selectedInvoice.credited_amount || 0
+                                ) > 0 && (
                                     <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                                             Notas de Crédito
                                         </div>
-                                        <div className="text-xl font-bold text-slate-900 tabular-nums">
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
-                                                selectedInvoice.credited_amount || 0
+                                                selectedInvoice.credited_amount ||
+                                                    0
                                             )}
                                         </div>
                                     </div>
@@ -2216,10 +2253,16 @@ function AccountStatements() {
                                     <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                                         Saldo Pendiente
                                     </div>
-                                    <div className={cn(
-                                        "text-xl font-bold tabular-nums",
-                                        parseFloat(selectedInvoice.balance) > 0 ? "text-red-600" : "text-slate-900"
-                                    )}>
+                                    <div
+                                        className={cn(
+                                            "text-xl font-bold tabular-nums",
+                                            parseFloat(
+                                                selectedInvoice.balance
+                                            ) > 0
+                                                ? "text-red-600"
+                                                : "text-slate-900"
+                                        )}
+                                    >
                                         {formatCurrency(
                                             selectedInvoice.balance || 0
                                         )}
@@ -2242,7 +2285,10 @@ function AccountStatements() {
                                         </div>
                                         <div>
                                             <p className="text-sm font-medium text-slate-900">
-                                                {selectedInvoice.invoice_type || "DTE"} - {selectedInvoice.invoice_number}
+                                                {selectedInvoice.invoice_type ||
+                                                    "DTE"}{" "}
+                                                -{" "}
+                                                {selectedInvoice.invoice_number}
                                             </p>
                                             <p className="text-xs text-slate-500">
                                                 Documento PDF
@@ -2268,58 +2314,92 @@ function AccountStatements() {
                         )}
 
                         {/* Credit Note History Table */}
-                        {selectedInvoice.credit_notes && selectedInvoice.credit_notes.length > 0 && (
-                            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                                <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                                    <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
-                                        <FileMinus className="w-4 h-4" />
-                                        Notas de Crédito Aplicadas
-                                    </h4>
-                                </div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-white text-slate-500 font-medium text-xs uppercase border-b border-slate-100">
-                                        <tr>
-                                            <th className="px-4 py-2.5 text-left">Número</th>
-                                            <th className="px-4 py-2.5 text-left">Fecha</th>
-                                            <th className="px-4 py-2.5 text-left">Motivo</th>
-                                            <th className="px-4 py-2.5 text-right">Monto</th>
-                                            <th className="px-4 py-2.5 text-center w-16">PDF</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {selectedInvoice.credit_notes.map((nc) => (
-                                            <tr key={nc.id} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-4 py-2.5 font-mono font-medium text-slate-900">
-                                                    {nc.note_number}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-slate-600">
-                                                    {formatDate(nc.issue_date, { format: 'short' })}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate" title={nc.reason}>
-                                                    {nc.reason}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-right font-semibold text-purple-700">
-                                                    -{formatCurrency(nc.amount)}
-                                                </td>
-                                                <td className="px-4 py-2.5 text-center">
-                                                    {nc.pdf_file ? (
-                                                        <button 
-                                                            onClick={() => window.open(nc.pdf_file, '_blank')}
-                                                            className="text-slate-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded transition-all"
-                                                            title="Ver Documento"
-                                                        >
-                                                            <FileText className="w-4 h-4" />
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-slate-300 text-xs">—</span>
-                                                    )}
-                                                </td>
+                        {selectedInvoice.credit_notes &&
+                            selectedInvoice.credit_notes.length > 0 && (
+                                <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
+                                        <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
+                                            <FileMinus className="w-4 h-4" />
+                                            Notas de Crédito Aplicadas
+                                        </h4>
+                                    </div>
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-white text-slate-500 font-medium text-xs uppercase border-b border-slate-100">
+                                            <tr>
+                                                <th className="px-4 py-2.5 text-left">
+                                                    Número
+                                                </th>
+                                                <th className="px-4 py-2.5 text-left">
+                                                    Fecha
+                                                </th>
+                                                <th className="px-4 py-2.5 text-left">
+                                                    Motivo
+                                                </th>
+                                                <th className="px-4 py-2.5 text-right">
+                                                    Monto
+                                                </th>
+                                                <th className="px-4 py-2.5 text-center w-16">
+                                                    PDF
+                                                </th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {selectedInvoice.credit_notes.map(
+                                                (nc) => (
+                                                    <tr
+                                                        key={nc.id}
+                                                        className="hover:bg-slate-50 transition-colors"
+                                                    >
+                                                        <td className="px-4 py-2.5 font-mono font-medium text-slate-900">
+                                                            {nc.note_number}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-slate-600">
+                                                            {formatDate(
+                                                                nc.issue_date,
+                                                                {
+                                                                    format: "short",
+                                                                }
+                                                            )}
+                                                        </td>
+                                                        <td
+                                                            className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate"
+                                                            title={nc.reason}
+                                                        >
+                                                            {nc.reason}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-right font-semibold text-purple-700">
+                                                            -
+                                                            {formatCurrency(
+                                                                nc.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2.5 text-center">
+                                                            {nc.pdf_file ? (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        window.open(
+                                                                            nc.pdf_file,
+                                                                            "_blank"
+                                                                        )
+                                                                    }
+                                                                    className="text-slate-400 hover:text-slate-900 hover:bg-slate-100 p-1.5 rounded transition-all"
+                                                                    title="Ver Documento"
+                                                                >
+                                                                    <FileText className="w-4 h-4" />
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-xs">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
 
                         {/* Payment History */}
                         {selectedInvoice.payments &&

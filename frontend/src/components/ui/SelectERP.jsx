@@ -25,6 +25,7 @@ const SelectERP = ({
     required = false,
     helperText,
     size = "md", // sm, md, lg
+    className = "",
     getOptionLabel = (option) => option.label || option.name || option,
     getOptionValue = (option) => option.value || option.id || option,
 }) => {
@@ -79,7 +80,7 @@ const SelectERP = ({
     const currentSize = sizeClasses[size];
 
     return (
-        <div className="w-full">
+        <div className={className || "w-full"}>
             {/* Label */}
             {label && (
                 <label className="inline-flex items-center gap-1 text-xs font-medium text-slate-700 mb-1">
@@ -106,17 +107,13 @@ const SelectERP = ({
                                     ${currentSize.button}
                                     transition-colors duration-150
                                     hover:border-slate-400
-                                    focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500
+                                    focus:outline-none focus:border-slate-900
                                     ${
                                         disabled
                                             ? "bg-slate-50 text-slate-500 cursor-not-allowed border-slate-200"
                                             : "text-slate-900"
                                     }
-                                    ${
-                                        open
-                                            ? "border-brand-500 ring-1 ring-brand-500"
-                                            : ""
-                                    }
+                                    ${open ? "border-slate-900" : ""}
                                     ${
                                         error && open
                                             ? "border-danger-500 ring-1 ring-danger-500"
@@ -186,7 +183,7 @@ const SelectERP = ({
                                             <input
                                                 ref={searchInputRef}
                                                 type="text"
-                                                className="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-slate-300 rounded-sm transition-colors duration-150 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400"
+                                                className="w-full pl-9 pr-3 py-1.5 text-sm bg-white border border-slate-300 rounded-sm transition-colors duration-150 focus:outline-none focus:border-slate-900 placeholder:text-slate-400"
                                                 placeholder="Buscar..."
                                                 value={searchTerm}
                                                 onChange={(e) =>
@@ -236,7 +233,7 @@ const SelectERP = ({
                                                         {/* Icono de check */}
                                                         {selected && (
                                                             <span
-                                                                className={`absolute inset-y-0 left-0 flex items-center pl-3 text-brand-600`}
+                                                                className={`absolute inset-y-0 left-0 flex items-center pl-3 text-slate-900`}
                                                             >
                                                                 <CheckIcon
                                                                     className={
