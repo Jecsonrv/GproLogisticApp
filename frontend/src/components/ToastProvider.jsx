@@ -76,9 +76,20 @@ const ToastProvider = () => {
 /**
  * Funciones helper para mostrar toasts con mensajes de error del backend
  */
+
+const ERROR_TRANSLATIONS = {
+    "Network Error": "Error de conexión. Por favor, verifique su internet.",
+    "Request failed with status code 404": "El recurso solicitado no fue encontrado.",
+    "Request failed with status code 500": "Error interno del servidor. Contacte a soporte.",
+    "Request failed with status code 403": "No tiene permisos para realizar esta acción.",
+    "No active account found with the given credentials": "Credenciales incorrectas. Verifique usuario y contraseña.",
+    "Token is invalid or expired": "Su sesión ha expirado. Por favor ingrese nuevamente.",
+    "Given token not valid for any token type": "Sesión inválida. Por favor ingrese nuevamente.",
+};
+
 export const showErrorToast = (
     error,
-    fallbackMessage = "Ha ocurrido un error"
+    fallbackMessage = "Ha ocurrido un error inesperado"
 ) => {
     // Extraer mensaje del error del backend
     let message = fallbackMessage;
@@ -110,6 +121,11 @@ export const showErrorToast = (
         }
     } else if (error?.message) {
         message = error.message;
+    }
+
+    // Traducir mensajes técnicos conocidos
+    if (ERROR_TRANSLATIONS[message]) {
+        message = ERROR_TRANSLATIONS[message];
     }
 
     toast.error(message, { duration: 6000 });

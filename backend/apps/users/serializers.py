@@ -1,6 +1,31 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
 from .models import User, Notification
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Serializer personalizado para login con mensajes de error en español
+    """
+    default_error_messages = {
+        'no_active_account': 'Credenciales incorrectas. Por favor, verifique su usuario y contraseña.',
+    }
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except AuthenticationFailed:
+            raise AuthenticationFailed(
+                self.error_messages['no_active_account'],
+                'no_active_account',
+            )
+        except InvalidToken:
+            raise InvalidToken(
+                'Token inválido o expirado.',
+                'invalid_token'
+            )
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, validators=[validate_password])

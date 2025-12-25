@@ -474,15 +474,15 @@ const ServiceOrders = () => {
                     (row.total_direct_costs || 0) +
                     (row.total_admin_costs || 0);
                 return (
-                    <div className="flex flex-col items-center gap-0.5">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="text-slate-400 font-bold uppercase text-[9px]">Ing:</span>
+                    <div className="flex flex-col gap-0.5">
+                        <div className="flex justify-between items-center gap-2 text-xs w-full px-2">
+                            <span className="text-slate-500 font-semibold text-[10px]">Ingresos:</span>
                             <span className="font-semibold text-slate-700 tabular-nums">
                                 {formatCurrency(row.total_amount)}
                             </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-slate-400 font-bold uppercase text-[9px]">Gas:</span>
+                        <div className="flex justify-between items-center gap-2 text-[10px] w-full px-2">
+                            <span className="text-slate-400 font-semibold text-[10px]">Gastos:</span>
                             <span className="font-medium text-slate-600 tabular-nums">
                                 {formatCurrency(totalCosts)}
                             </span>
@@ -497,13 +497,17 @@ const ServiceOrders = () => {
             className: "w-[120px]",
             sortable: false,
             cell: (row) => (
-                <div className="flex flex-col gap-1">
-                    <StatusBadge status={row.status} />
+                <div className="flex flex-col gap-1.5">
+                    <StatusBadge status={row.status} className="w-fit" />
                     {row.facturado && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Facturado
-                        </span>
+                        <Badge
+                            variant="success"
+                            size="sm"
+                            className="w-fit bg-success-50/50 border-success-100 text-success-600 font-bold"
+                        >
+                            <Check className="w-3 h-3" />
+                            FACTURADO
+                        </Badge>
                     )}
                 </div>
             ),

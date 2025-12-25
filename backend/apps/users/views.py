@@ -13,7 +13,8 @@ from .serializers import (
     ChangePasswordSerializer,
     UserProfileSerializer,
     NotificationSerializer,
-    NotificationListSerializer
+    NotificationListSerializer,
+    CustomTokenObtainPairSerializer
 )
 from .permissions import IsAdminUser
 
@@ -30,6 +31,7 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
     """
     throttle_classes = [LoginRateThrottle]
     permission_classes = [AllowAny]
+    serializer_class = CustomTokenObtainPairSerializer
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

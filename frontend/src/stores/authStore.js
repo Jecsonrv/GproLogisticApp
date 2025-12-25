@@ -42,7 +42,7 @@ const useAuthStore = create((set) => ({
             return true;
         } catch (error) {
             set({
-                error: error.response?.data?.detail || "Login failed",
+                error: error.response?.data?.detail || "Error al iniciar sesión. Por favor, intente nuevamente.",
                 loading: false,
             });
             return false;

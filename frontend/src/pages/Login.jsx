@@ -45,7 +45,7 @@ function Login() {
                             G-PRO LOGISTIC
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Plataforma Integral de Gestión Logística
+                            Sistema de Adminitración y Gestión
                         </p>
                     </div>
 

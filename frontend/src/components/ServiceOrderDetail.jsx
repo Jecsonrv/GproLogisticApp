@@ -309,10 +309,11 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         </Badge>
                         {order.facturado && (
                             <Badge
-                                variant="outline"
-                                className="text-emerald-600 border-emerald-200 bg-emerald-50"
+                                variant="success"
+                                className="bg-success-50/50 border-success-100 text-success-600 font-bold"
                             >
-                                Facturado
+                                <Check className="w-3.5 h-3.5" />
+                                FACTURADO
                             </Badge>
                         )}
                     </div>
