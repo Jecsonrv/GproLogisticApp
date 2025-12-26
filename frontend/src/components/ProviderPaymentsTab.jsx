@@ -597,8 +597,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             {formatCurrency(totals.admin)}
                         </div>
                     </div>
-                    <div className="bg-gradient-to-br from-slate-700 to-slate-800 p-3 rounded-lg border border-slate-600 shadow-sm">
-                        <div className="text-xs font-medium text-slate-100 uppercase tracking-wide">
+                    <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 shadow-sm transition-shadow hover:shadow-md">
+                        <div className="text-xs font-medium text-slate-300 uppercase tracking-wide">
                             Total General
                         </div>
                         <div className="text-lg font-bold text-white mt-1 tabular-nums">

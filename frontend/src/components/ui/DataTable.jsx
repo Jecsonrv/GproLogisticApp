@@ -6,6 +6,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "@heroicons/react/24/outline";
+import { usePersistentPageSize, PAGE_SIZE_OPTIONS } from "../../hooks/usePersistentPageSize";
 
 /**
  * DataTable - Tabla Corporativa Enterprise
@@ -20,15 +21,17 @@ const DataTable = ({
     onRowClick,
     loading = false,
     emptyMessage = "No hay datos disponibles",
-    pageSize = 10,
+    pageSize: initialPageSize = 10,
     showPagination = true,
     compact = false, // Modo compacto para pantallas pequeñas
     stickyHeader = true, // Header fijo para scroll
+    showPageSizeSelector = true, // Mostrar selector de items por página
 }) => {
     const [searchTerm, setSearchTerm] = useState("");
     const [sortColumn, setSortColumn] = useState(null);
     const [sortDirection, setSortDirection] = useState("asc");
     const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = usePersistentPageSize(initialPageSize);
 
     // Filtrar datos por búsqueda
     const filteredData = useMemo(() => {
@@ -86,6 +89,11 @@ const DataTable = ({
 
     const handlePageChange = (page) => {
         setCurrentPage(page);
+    };
+
+    const handlePageSizeChange = (newPageSize) => {
+        setPageSize(newPageSize);
+        setCurrentPage(1); // Resetear a la primera página
     };
 
     // Loading state con skeleton corporativo
@@ -268,89 +276,115 @@ const DataTable = ({
             </div>
 
             {/* Paginación - Estilo corporativo compacto */}
-            {showPagination && totalPages > 1 && (
-                <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    {/* Info de resultados */}
-                    <div className="text-xs text-slate-500">
-                        Mostrando{" "}
-                        <span className="font-medium text-slate-700">
-                            {(currentPage - 1) * pageSize + 1}
-                        </span>
-                        {" - "}
-                        <span className="font-medium text-slate-700">
-                            {Math.min(
-                                currentPage * pageSize,
-                                sortedData.length
-                            )}
-                        </span>
-                        {" de "}
-                        <span className="font-medium text-slate-700">
-                            {sortedData.length}
-                        </span>
+            {showPagination && sortedData.length > 0 && (
+                <div className="mt-5 mb-3 px-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    {/* Info de resultados y selector de items por página */}
+                    <div className="flex items-center gap-4">
+                        <div className="text-xs text-slate-500">
+                            Mostrando{" "}
+                            <span className="font-medium text-slate-700">
+                                {(currentPage - 1) * pageSize + 1}
+                            </span>
+                            {" - "}
+                            <span className="font-medium text-slate-700">
+                                {Math.min(
+                                    currentPage * pageSize,
+                                    sortedData.length
+                                )}
+                            </span>
+                            {" de "}
+                            <span className="font-medium text-slate-700">
+                                {sortedData.length}
+                            </span>
+                        </div>
+
+                        {/* Selector de items por página */}
+                        {showPageSizeSelector && (
+                            <div className="flex items-center gap-2">
+                                <label htmlFor="pageSize" className="text-xs text-slate-500">
+                                    Ver:
+                                </label>
+                                <select
+                                    id="pageSize"
+                                    value={pageSize}
+                                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                                    className="text-xs border border-slate-300 rounded-sm bg-white px-2 py-1 text-slate-700 focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-colors duration-150"
+                                >
+                                    {PAGE_SIZE_OPTIONS.map((size) => (
+                                        <option key={size} value={size}>
+                                            {size}
+                                        </option>
+                                    ))}
+                                </select>
+                                <span className="text-xs text-slate-500">por página</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Controles de paginación */}
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
-                            aria-label="Página anterior"
-                        >
-                            <ChevronLeftIcon className="h-4 w-4" />
-                        </button>
-
-                        {/* Números de página - compactos */}
+                    {totalPages > 1 && (
                         <div className="flex items-center gap-1">
-                            {[...Array(totalPages)].map((_, i) => {
-                                const page = i + 1;
-                                if (
-                                    page === 1 ||
-                                    page === totalPages ||
-                                    (page >= currentPage - 1 &&
-                                        page <= currentPage + 1)
-                                ) {
-                                    return (
-                                        <button
-                                            key={page}
-                                            onClick={() =>
-                                                handlePageChange(page)
-                                            }
-                                            className={`min-w-[28px] h-7 px-2 text-xs font-medium rounded-sm border transition-colors duration-150 ${
-                                                currentPage === page
-                                                    ? "bg-slate-900 text-white border-slate-900"
-                                                    : "border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
-                                            }`}
-                                        >
-                                            {page}
-                                        </button>
-                                    );
-                                } else if (
-                                    page === currentPage - 2 ||
-                                    page === currentPage + 2
-                                ) {
-                                    return (
-                                        <span
-                                            key={page}
-                                            className="px-1 text-slate-400 text-xs"
-                                        >
-                                            ⋯
-                                        </span>
-                                    );
-                                }
-                                return null;
-                            })}
-                        </div>
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
+                                aria-label="Página anterior"
+                            >
+                                <ChevronLeftIcon className="h-4 w-4" />
+                            </button>
 
-                        <button
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
-                            aria-label="Página siguiente"
-                        >
-                            <ChevronRightIcon className="h-4 w-4" />
-                        </button>
-                    </div>
+                            {/* Números de página - compactos */}
+                            <div className="flex items-center gap-1">
+                                {[...Array(totalPages)].map((_, i) => {
+                                    const page = i + 1;
+                                    if (
+                                        page === 1 ||
+                                        page === totalPages ||
+                                        (page >= currentPage - 1 &&
+                                            page <= currentPage + 1)
+                                    ) {
+                                        return (
+                                            <button
+                                                key={page}
+                                                onClick={() =>
+                                                    handlePageChange(page)
+                                                }
+                                                className={`min-w-[28px] h-7 px-2 text-xs font-medium rounded-sm border transition-colors duration-150 ${
+                                                    currentPage === page
+                                                        ? "bg-slate-900 text-white border-slate-900"
+                                                        : "border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
+                                                }`}
+                                            >
+                                                {page}
+                                            </button>
+                                        );
+                                    } else if (
+                                        page === currentPage - 2 ||
+                                        page === currentPage + 2
+                                    ) {
+                                        return (
+                                            <span
+                                                key={page}
+                                                className="px-1 text-slate-400 text-xs"
+                                            >
+                                                ⋯
+                                            </span>
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="p-1.5 border border-slate-300 rounded-sm text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
+                                aria-label="Página siguiente"
+                            >
+                                <ChevronRightIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

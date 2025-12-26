@@ -10,7 +10,7 @@ from .serializers import TransferSerializer, TransferListSerializer, BatchPaymen
 from apps.users.permissions import IsAnyOperativo, IsOperativo2OrAdmin, TransferApprovalPermission, IsOperativo
 import openpyxl
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from datetime import datetime
 import os
 
@@ -104,62 +104,107 @@ class TransferViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], permission_classes=[IsAnyOperativo])
     def export_excel(self, request):
-        """Exportar transfers a Excel"""
+        """Exportar transfers a Excel con formato profesional"""
         queryset = self.filter_queryset(self.get_queryset())
-        
+
         # Crear workbook
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Transferencias"
-        
-        # Estilos
-        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        
-        # Encabezado
-        ws['A1'] = "REPORTE DE TRANSFERENCIAS Y GASTOS"
-        ws['A1'].font = Font(size=14, bold=True)
+
+        # Estilos profesionales - Diseño GPRO
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="1F4E79")
+        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        currency_format = '#,##0.00'
+
+        # === ENCABEZADO ===
+        ws['A1'] = "TRANSFERENCIAS Y GASTOS"
+        ws['A1'].font = title_font
         ws.merge_cells('A1:J1')
-        
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:J2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === TABLA DE DATOS ===
+        start_row = 5
+        ws.cell(row=start_row, column=1, value="DETALLE DE PAGOS").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:J{start_row}')
+
         # Headers de tabla
-        headers = ['Fecha', 'Tipo', 'Estado', 'Monto', 'Descripción', 'OS', 
+        headers = ['Fecha', 'Tipo', 'Estado', 'Monto', 'Descripción', 'OS',
                    'Proveedor', 'Método Pago', 'Factura', 'Fecha Pago']
+        header_row = start_row + 1
+
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=3, column=col_num)
-            cell.value = header
+            cell = ws.cell(row=header_row, column=col_num, value=header)
             cell.fill = header_fill
             cell.font = header_font
-        
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
         # Datos
-        row = 4
+        data_row = header_row + 1
+        total_amount = 0
+
         for transfer in queryset:
-            ws.cell(row=row, column=1, value=transfer.transaction_date.strftime('%Y-%m-%d'))
-            ws.cell(row=row, column=2, value=transfer.get_transfer_type_display())
-            ws.cell(row=row, column=3, value=transfer.get_status_display())
-            ws.cell(row=row, column=4, value=float(transfer.amount))
-            ws.cell(row=row, column=5, value=transfer.description)
-            ws.cell(row=row, column=6, value=transfer.service_order.order_number if transfer.service_order else '')
-            ws.cell(row=row, column=7, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '')
-            ws.cell(row=row, column=8, value=transfer.get_payment_method_display() if transfer.payment_method else '')
-            ws.cell(row=row, column=9, value=transfer.invoice_number)
-            ws.cell(row=row, column=10, value=transfer.payment_date.strftime('%Y-%m-%d') if transfer.payment_date else '')
-            row += 1
-        
-        # Totales
-        total_amount = queryset.aggregate(Sum('amount'))['amount__sum'] or 0
-        ws.cell(row=row + 1, column=3, value='TOTAL:').font = Font(bold=True)
-        ws.cell(row=row + 1, column=4, value=float(total_amount)).font = Font(bold=True)
-        
-        # Ajustar anchos
-        for col in range(1, 11):
-            ws.column_dimensions[get_column_letter(col)].width = 16
-        
+            ws.cell(row=data_row, column=1, value=transfer.transaction_date.strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=2, value=transfer.get_transfer_type_display()).border = thin_border
+            ws.cell(row=data_row, column=3, value=transfer.get_status_display()).border = thin_border
+
+            # Columna de monto con formato
+            amount_cell = ws.cell(row=data_row, column=4, value=float(transfer.amount))
+            amount_cell.number_format = currency_format
+            amount_cell.border = thin_border
+            amount_cell.alignment = Alignment(horizontal='right')
+
+            ws.cell(row=data_row, column=5, value=transfer.description or '').border = thin_border
+            ws.cell(row=data_row, column=6, value=transfer.service_order.order_number if transfer.service_order else '').border = thin_border
+            ws.cell(row=data_row, column=7, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '').border = thin_border
+            ws.cell(row=data_row, column=8, value=transfer.get_payment_method_display() if transfer.payment_method else '').border = thin_border
+            ws.cell(row=data_row, column=9, value=transfer.invoice_number or '').border = thin_border
+            ws.cell(row=data_row, column=10, value=transfer.payment_date.strftime('%d/%m/%Y') if transfer.payment_date else '').border = thin_border
+
+            total_amount += float(transfer.amount)
+            data_row += 1
+
+        # Fila de totales
+        ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
+        ws.cell(row=data_row, column=1).border = thin_border
+        for col in range(2, 4):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        total_cell = ws.cell(row=data_row, column=4, value=total_amount)
+        total_cell.number_format = currency_format
+        total_cell.font = Font(bold=True)
+        total_cell.border = thin_border
+        total_cell.alignment = Alignment(horizontal='right')
+
+        for col in range(5, 11):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        # Ajustar anchos de columna
+        column_widths = [12, 14, 12, 14, 30, 15, 25, 16, 15, 12]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
         # Respuesta
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename=transferencias_{datetime.now().strftime("%Y%m%d")}.xlsx'
-        
+        response['Content-Disposition'] = f'attachment; filename=GPRO_Pagos_Proveedores_{datetime.now().strftime("%Y%m%d")}.xlsx'
+
         wb.save(response)
         return response
 

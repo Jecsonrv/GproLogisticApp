@@ -37,7 +37,10 @@ import {
     StatCard,
 } from "../components/ui/Card";
 import { Badge, StatusBadge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
+import { 
+    Button,
+    SelectERP,
+} from "../components/ui";
 import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
 import api from "../lib/axios";
 import { cn, formatCurrency } from "../lib/utils";
@@ -52,6 +55,9 @@ function Dashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
     const [stats, setStats] = useState({
         totalClients: 0,
         activeOrders: 0,
@@ -78,7 +84,12 @@ function Dashboard() {
             setLoading(true);
             setError(null);
 
-            const response = await api.get("/dashboard/");
+            const response = await api.get("/dashboard/", {
+                params: {
+                    month: selectedMonth,
+                    year: selectedYear
+                }
+            });
             const data = response.data;
 
             // Establecer estadísticas reales - sin fallbacks ficticios
@@ -126,40 +137,54 @@ function Dashboard() {
             // Alertas reales del sistema
             setAlerts(data.alerts || []);
 
-            // Generar datos de gráficos solo con el mes actual si hay datos
-            // No inventamos historial que no existe
-            const currentMonthName = new Date().toLocaleDateString("es-SV", {
-                month: "short",
-            });
-            const prevMonthName = new Date(
-                Date.now() - 30 * 24 * 60 * 60 * 1000
-            ).toLocaleDateString("es-SV", { month: "short" });
-
             // Construir chartData solo con datos reales disponibles
             const chartDataPoints = [];
 
-            // Si hay datos del mes anterior, incluirlos
-            if (
-                data.previous_month?.billed_amount > 0 ||
-                data.previous_month?.operating_costs > 0
-            ) {
+            if (data.monthly_breakdown && data.monthly_breakdown.length > 0) {
+                // Annual View: Use full breakdown
+                data.monthly_breakdown.forEach(m => {
+                    chartDataPoints.push({
+                        name: m.name,
+                        ingresos: m.ingresos,
+                        gastos: m.gastos,
+                        value: m.total_os
+                    });
+                });
+            } else {
+                // Monthly View: Current vs Previous
+                // Generar datos de gráficos solo con el mes actual si hay datos
+                // No inventamos historial que no existe
+                const currentMonthName = new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString("es-SV", {
+                    month: "short",
+                });
+                // Fix prev month name calculation for UI
+                const prevDate = new Date(selectedYear, selectedMonth - 1, 1);
+                prevDate.setMonth(prevDate.getMonth() - 1);
+                const prevMonthName = prevDate.toLocaleDateString("es-SV", { month: "short" });
+
+                // Si hay datos del mes anterior, incluirlos
+                if (
+                    data.previous_month?.billed_amount > 0 ||
+                    data.previous_month?.operating_costs > 0
+                ) {
+                    chartDataPoints.push({
+                        name: prevMonthName,
+                        ingresos: data.previous_month.billed_amount || 0,
+                        gastos: data.previous_month.operating_costs || 0,
+                        value: data.previous_month.total_os || 0,
+                    });
+                }
+
+                // Siempre incluir el mes actual
                 chartDataPoints.push({
-                    name: prevMonthName,
-                    ingresos: data.previous_month.billed_amount || 0,
-                    gastos: data.previous_month.operating_costs || 0,
-                    value: data.previous_month.total_os || 0,
+                    name: currentMonthName,
+                    ingresos: data.current_month?.billed_amount || 0,
+                    gastos:
+                        (data.current_month?.operating_costs || 0) +
+                        (data.current_month?.admin_costs || 0),
+                    value: data.current_month?.total_os_month || 0,
                 });
             }
-
-            // Siempre incluir el mes actual
-            chartDataPoints.push({
-                name: currentMonthName,
-                ingresos: data.current_month?.billed_amount || 0,
-                gastos:
-                    (data.current_month?.operating_costs || 0) +
-                    (data.current_month?.admin_costs || 0),
-                value: data.current_month?.total_os_month || 0,
-            });
 
             setChartData({
                 monthlyOrders: chartDataPoints.map((d) => ({
@@ -173,20 +198,40 @@ function Dashboard() {
                 })),
                 statusDistribution: [
                     {
-                        name: "Abiertas",
-                        value: data.overall?.os_abiertas || 0,
-                        color: "#0052cc",
+                        name: "Pendiente",
+                        value: data.overall?.os_pendiente || 0,
+                        color: "#94a3b8",
                     },
                     {
-                        name: "Cerradas",
+                        name: "En Tránsito",
+                        value: data.overall?.os_en_transito || 0,
+                        color: "#6366f1",
+                    },
+                    {
+                        name: "En Puerto",
+                        value: data.overall?.os_en_puerto || 0,
+                        color: "#0ea5e9",
+                    },
+                    {
+                        name: "En Almacenadora",
+                        value: data.overall?.os_en_almacen || 0,
+                        color: "#f59e0b",
+                    },
+                    {
+                        name: "Finalizada",
+                        value: data.overall?.os_finalizada || 0,
+                        color: "#10b981",
+                    },
+                    {
+                        name: "Cerrada",
                         value: data.overall?.os_cerradas || 0,
-                        color: "#16a34a",
+                        color: "#1e293b",
                     },
                 ].filter((i) => i.value > 0),
             });
         } catch {
             setError(
-                "No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo."
+                "No se pudo conectar con el servidor. Verifique su conexión e intente de nuevo."
             );
 
             // En caso de error, mostrar estados vacíos en lugar de datos ficticios
@@ -213,7 +258,7 @@ function Dashboard() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedMonth, selectedYear]);
 
     useEffect(() => {
         fetchDashboardData();
@@ -314,22 +359,52 @@ function Dashboard() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-end gap-2">
-                {error && (
-                    <Badge variant="warning" className="gap-1.5">
-                        <AlertCircle className="w-3 h-3" />
-                        Modo Offline
-                    </Badge>
-                )}
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={fetchDashboardData}
-                    className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-                >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Actualizar
-                </Button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-900">Panel de Control</h2>
+                    <p className="text-sm text-slate-500">Resumen operativo y financiero</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <SelectERP
+                        value={selectedMonth}
+                        onChange={(val) => setSelectedMonth(val)}
+                        options={[
+                            { id: 0, name: "Todo el Año" },
+                            { id: 1, name: "Enero" }, { id: 2, name: "Febrero" },
+                            { id: 3, name: "Marzo" }, { id: 4, name: "Abril" },
+                            { id: 5, name: "Mayo" }, { id: 6, name: "Junio" },
+                            { id: 7, name: "Julio" }, { id: 8, name: "Agosto" },
+                            { id: 9, name: "Septiembre" }, { id: 10, name: "Octubre" },
+                            { id: 11, name: "Noviembre" }, { id: 12, name: "Diciembre" },
+                        ]}
+                        getOptionLabel={(opt) => opt.name}
+                        getOptionValue={(opt) => opt.id}
+                        className="w-32"
+                        size="sm"
+                        isClearable={false}
+                    />
+                    <SelectERP
+                        value={selectedYear}
+                        onChange={(val) => setSelectedYear(val)}
+                        options={Array.from({ length: 5 }, (_, i) => ({
+                            id: new Date().getFullYear() - 2 + i,
+                            name: String(new Date().getFullYear() - 2 + i)
+                        }))}
+                        getOptionLabel={(opt) => opt.name}
+                        getOptionValue={(opt) => opt.id}
+                        className="w-24"
+                        size="sm"
+                        isClearable={false}
+                    />
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchDashboardData}
+                        className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 h-9"
+                    >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                    </Button>
+                </div>
             </div>
 
             {/* Error Alert */}
@@ -484,7 +559,7 @@ function Dashboard() {
                                         Sin órdenes registradas
                                     </p>
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Crea tu primera orden de servicio
+                                        Cree su primera orden de servicio
                                     </p>
                                 </div>
                             ) : (
@@ -637,6 +712,10 @@ function Dashboard() {
                                         severityConfig.medium;
                                     const AlertIcon = config.icon;
 
+                                    const shouldShowSubtext = 
+                                        (alert.client && !alert.message.includes(alert.client)) || 
+                                        (alert.order && !alert.message.includes(alert.order));
+
                                     return (
                                         <div
                                             key={alert.id}
@@ -657,8 +736,7 @@ function Dashboard() {
                                                     <p className="text-sm font-medium text-slate-900">
                                                         {alert.message}
                                                     </p>
-                                                    {(alert.client ||
-                                                        alert.order) && (
+                                                    {shouldShowSubtext && (
                                                         <p className="text-xs text-slate-600 mt-0.5">
                                                             {alert.client
                                                                 ? `Cliente: ${alert.client}`

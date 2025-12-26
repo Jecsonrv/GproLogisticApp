@@ -50,6 +50,7 @@ import {
     FileUpload,
     ConfirmDialog,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
@@ -251,7 +252,6 @@ function AccountStatements() {
     const [selectedYear, setSelectedYear] = useState(2025);
     const [statusFilter, setStatusFilter] = useState("");
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [filters, setFilters] = useState({
         dateFrom: "",
         dateTo: "",
@@ -394,7 +394,6 @@ function AccountStatements() {
 
         try {
             setIsExporting(true);
-            setIsExportMenuOpen(false);
 
             let filename = "";
             let response;
@@ -1067,89 +1066,18 @@ function AccountStatements() {
                     Actualizar
                 </Button>
                 {/* Menú de Exportación */}
-                <div className="relative">
-                    <Button
-                        variant="outline"
-                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
-                        disabled={isExporting || !selectedClient}
-                        className="gap-2"
-                    >
-                        <Download
-                            className={cn(
-                                "w-4 h-4",
-                                isExporting && "animate-bounce"
-                            )}
-                        />
-                        Exportar
-                        <ChevronDown className="w-4 h-4" />
-                    </Button>
-
-                    {/* Dropdown Menu */}
-                    {isExportMenuOpen && !isExporting && selectedClient && (
-                        <>
-                            {/* Overlay para cerrar al hacer click afuera */}
-                            <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setIsExportMenuOpen(false)}
-                            />
-
-                            {/* Menu */}
-                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-20 overflow-hidden">
-                                <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
-                                    <p className="text-xs font-semibold text-gray-700 px-2">
-                                        Opciones de Exportación
-                                    </p>
-                                </div>
-
-                                <div className="p-1">
-                                    {/* Exportar Estado de Cuenta Completo */}
-                                    <button
-                                        onClick={() =>
-                                            handleExportExcel("full")
-                                        }
-                                        className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-blue-50 rounded-lg transition-colors text-left group"
-                                    >
-                                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                                            <FileSpreadsheet className="w-4 h-4 text-slate-700" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-900">
-                                                Estado de Cuenta Completo
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-0.5">
-                                                Exportar todas las facturas del
-                                                año {selectedYear}
-                                            </p>
-                                        </div>
-                                    </button>
-
-                                    {/* Exportar Solo Facturas Filtradas */}
-                                    <button
-                                        onClick={() =>
-                                            handleExportExcel("filtered")
-                                        }
-                                        disabled={filteredInvoices.length === 0}
-                                        className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-emerald-50 rounded-lg transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
-                                            <Table className="w-4 h-4 text-emerald-600" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-900">
-                                                Facturas Filtradas
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-0.5">
-                                                Exportar{" "}
-                                                {filteredInvoices.length}{" "}
-                                                factura(s) visible(s)
-                                            </p>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
+                <ExportButton
+                    onExportAll={() => handleExportExcel("full")}
+                    onExportFiltered={() => handleExportExcel("filtered")}
+                    filteredCount={filteredInvoices.length}
+                    totalCount={invoices.length}
+                    isExporting={isExporting}
+                    disabled={!selectedClient}
+                    allLabel="Estado de Cuenta Completo"
+                    allDescription={`Exportar todas las facturas del año ${selectedYear}`}
+                    filteredLabel="Facturas Filtradas"
+                    filteredDescription="Exportar solo las facturas visibles actualmente"
+                />
             </div>
 
             {/* Main Content Grid */}

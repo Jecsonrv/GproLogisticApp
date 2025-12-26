@@ -29,6 +29,10 @@ const badgeVariants = cva(
                 outline: "border-slate-300 bg-transparent text-slate-700",
                 // Purple - Estados especiales
                 purple: "border-purple-200 bg-purple-50 text-purple-700",
+                // Indigo - En Tránsito
+                indigo: "border-indigo-200 bg-indigo-50 text-indigo-700",
+                // White - Cerrada
+                white: "border-slate-200 bg-white text-slate-900",
             },
             size: {
                 sm: "text-2xs px-1.5 py-0.5",
@@ -58,13 +62,16 @@ function Badge({ className, variant, size, children, ...props }) {
  * StatusBadge - Badge preconfigurado para estados comunes
  */
 const statusConfigs = {
-    // Estados de orden de servicio
-    abierta: { variant: "info", label: "En Proceso" },
-    cerrada: { variant: "success", label: "Cerrada" },
+    // Estados de orden de servicio (Flujo Logístico)
+    pendiente: { variant: "secondary", label: "Pendiente" },
+    en_transito: { variant: "indigo", label: "En Tránsito" },
+    en_puerto: { variant: "info", label: "En Puerto" },
+    en_almacen: { variant: "warning", label: "En Almacenadora" },
+    finalizada: { variant: "success", label: "Finalizada" },
+    cerrada: { variant: "white", label: "Cerrada" },
     cancelada: { variant: "default", label: "Cancelada" },
 
     // Estados de pago/factura
-    pendiente: { variant: "warning", label: "Pendiente" },
     pagado: { variant: "success", label: "Pagado" },
     pagada: { variant: "success", label: "Pagada" },
     vencido: { variant: "danger", label: "Vencido" },

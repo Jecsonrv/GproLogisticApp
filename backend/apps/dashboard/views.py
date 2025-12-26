@@ -22,10 +22,22 @@ class DashboardView(APIView):
     permission_classes = [IsOperativo]
 
     def get(self, request):
+        # Obtener parámetros de fecha
+        try:
+            year = int(request.query_params.get('year', datetime.now().year))
+            month = int(request.query_params.get('month', datetime.now().month))
+            reference_date = datetime(year, month, 1)
+        except (ValueError, TypeError):
+            # Fallback a fecha actual si hay error
+            reference_date = datetime.now()
+            year = reference_date.year
+            month = reference_date.month
+
         # Check if caching is available and use it
         if CACHE_ENABLED and CacheManager:
             cache_manager = CacheManager()
-            cache_key = 'dashboard_main_metrics'
+            # Cache key único por periodo
+            cache_key = f'dashboard_metrics_{year}_{month}'
             
             # Try to get from cache first
             cached_data = cache_manager.get(cache_key)
@@ -33,89 +45,168 @@ class DashboardView(APIView):
                 return Response(cached_data)
             
             # Generate data and cache it
-            data = self._generate_dashboard_data()
+            data = self._generate_dashboard_data(reference_date)
             cache_manager.set(cache_key, data, timeout=60)  # Cache for 1 minute
             return Response(data)
         else:
-            return Response(self._generate_dashboard_data())
+            return Response(self._generate_dashboard_data(reference_date))
     
-    def _generate_dashboard_data(self):
-        """Generate all dashboard metrics"""
-        today = datetime.now()
-        current_month = today.month
-        current_year = today.year
+    def _generate_dashboard_data(self, reference_date):
+        """Generate all dashboard metrics relative to reference_date"""
+        current_month = reference_date.month
+        current_year = reference_date.year
+        real_today = datetime.now()
+
+        monthly_breakdown = []
+        is_annual_view = (self.request.query_params.get('month') == '0') if hasattr(self, 'request') else False
         
-        # Mes anterior
-        previous_month = today - relativedelta(months=1)
-        prev_month = previous_month.month
-        prev_year = previous_month.year
+        # Override if passed from get() method context logic
+        if current_month == 1 and hasattr(self, 'request') and self.request.query_params.get('month') == '0':
+             # This is a bit hacky because reference_date was forced to month=1 in get()
+             # We rely on the flag passed or logic below.
+             # Better: check if current_month passed to this func logic.
+             # Actually, let's trust the logic we build here.
+             pass
 
-        # KPIs del mes actual
-        total_os_month = ServiceOrder.objects.filter(
-            created_at__year=current_year, 
-            created_at__month=current_month
-        ).count()
+        if is_annual_view:
+            # === ANNUAL VIEW LOGIC ===
+            
+            # Current Year Totals
+            total_os_month = ServiceOrder.objects.filter(created_at__year=current_year).count()
+            billed_amount = Transfer.objects.filter(
+                transfer_type__in=['cargos', 'terceros'],
+                transaction_date__year=current_year
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            operating_costs = Transfer.objects.filter(
+                transfer_type__in=['costos', 'propios'],
+                transaction_date__year=current_year
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            admin_costs = Transfer.objects.filter(
+                transfer_type='admin',
+                transaction_date__year=current_year
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            # Previous Year Totals (for Trend)
+            prev_year = current_year - 1
+            total_os_prev_month = ServiceOrder.objects.filter(created_at__year=prev_year).count()
+            billed_amount_prev = Transfer.objects.filter(
+                transfer_type__in=['cargos', 'terceros'],
+                transaction_date__year=prev_year
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            operating_costs_prev = Transfer.objects.filter(
+                transfer_type__in=['costos', 'propios'],
+                transaction_date__year=prev_year
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            # Generate 12-month breakdown for Charts
+            for m in range(1, 13):
+                m_billed = Transfer.objects.filter(
+                    transfer_type__in=['cargos', 'terceros'],
+                    transaction_date__year=current_year,
+                    transaction_date__month=m
+                ).aggregate(Sum('amount'))['amount__sum'] or 0
+                
+                m_costs = Transfer.objects.filter(
+                    transfer_type__in=['costos', 'propios', 'admin'], # Include admin in chart costs
+                    transaction_date__year=current_year,
+                    transaction_date__month=m
+                ).aggregate(Sum('amount'))['amount__sum'] or 0
+                
+                m_os = ServiceOrder.objects.filter(
+                    created_at__year=current_year,
+                    created_at__month=m
+                ).count()
+
+                month_name = datetime(current_year, m, 1).strftime('%b').capitalize() # Ene, Feb...
+                # Note: Locale depends on system, we might want fixed names but this works for now.
+                
+                if m_billed > 0 or m_costs > 0 or m_os > 0:
+                     monthly_breakdown.append({
+                        'name': month_name,
+                        'month': m,
+                        'ingresos': float(m_billed),
+                        'gastos': float(m_costs),
+                        'total_os': m_os
+                    })
+            
+            # Status counts (Annual)
+            os_abiertas_month = ServiceOrder.objects.filter(created_at__year=current_year, status='abierta').count()
+            os_cerradas_month = ServiceOrder.objects.filter(created_at__year=current_year, status='cerrada').count()
+            
+            # Top Clients (Annual)
+            top_clients_qs = ServiceOrder.objects.filter(created_at__year=current_year)
+
+        else:
+            # === MONTHLY VIEW LOGIC (Existing) ===
+            
+            # Mes anterior relativo a la fecha seleccionada
+            previous_month_date = reference_date - relativedelta(months=1)
+            prev_month = previous_month_date.month
+            prev_year = previous_month_date.year
+
+            total_os_month = ServiceOrder.objects.filter(
+                created_at__year=current_year, 
+                created_at__month=current_month
+            ).count()
+            
+            total_os_prev_month = ServiceOrder.objects.filter(
+                created_at__year=prev_year, 
+                created_at__month=prev_month
+            ).count()
+
+            billed_amount = Transfer.objects.filter(
+                transfer_type__in=['cargos', 'terceros'],
+                transaction_date__year=current_year,
+                transaction_date__month=current_month
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            billed_amount_prev = Transfer.objects.filter(
+                transfer_type__in=['cargos', 'terceros'],
+                transaction_date__year=prev_year,
+                transaction_date__month=prev_month
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            operating_costs = Transfer.objects.filter(
+                transfer_type__in=['costos', 'propios'],
+                transaction_date__year=current_year,
+                transaction_date__month=current_month
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            operating_costs_prev = Transfer.objects.filter(
+                transfer_type__in=['costos', 'propios'],
+                transaction_date__year=prev_year,
+                transaction_date__month=prev_month
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            admin_costs = Transfer.objects.filter(
+                transfer_type='admin',
+                transaction_date__year=current_year,
+                transaction_date__month=current_month
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+            os_abiertas_month = ServiceOrder.objects.filter(
+                created_at__year=current_year,
+                created_at__month=current_month,
+                status='abierta'
+            ).count()
+            
+            os_cerradas_month = ServiceOrder.objects.filter(
+                created_at__year=current_year,
+                created_at__month=current_month,
+                status='cerrada'
+            ).count()
+
+            top_clients_qs = ServiceOrder.objects.filter(
+                created_at__year=current_year,
+                created_at__month=current_month
+            )
+
+        # Common logic (Trends, Top Clients aggregation, etc.)
         
-        total_os_prev_month = ServiceOrder.objects.filter(
-            created_at__year=prev_year, 
-            created_at__month=prev_month
-        ).count()
-
-        # Monto facturado (cargos a clientes: 'cargos' actual + 'terceros' legacy)
-        billed_amount = Transfer.objects.filter(
-            transfer_type__in=['cargos', 'terceros'],
-            transaction_date__year=current_year,
-            transaction_date__month=current_month
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-
-        billed_amount_prev = Transfer.objects.filter(
-            transfer_type__in=['cargos', 'terceros'],
-            transaction_date__year=prev_year,
-            transaction_date__month=prev_month
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-
-        # Gastos operativos del mes ('costos' actual + 'propios' legacy)
-        operating_costs = Transfer.objects.filter(
-            transfer_type__in=['costos', 'propios'],
-            transaction_date__year=current_year,
-            transaction_date__month=current_month
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-
-        operating_costs_prev = Transfer.objects.filter(
-            transfer_type__in=['costos', 'propios'],
-            transaction_date__year=prev_year,
-            transaction_date__month=prev_month
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
-        # Gastos administrativos del mes
-        admin_costs = Transfer.objects.filter(
-            transfer_type='admin',
-            transaction_date__year=current_year,
-            transaction_date__month=current_month
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-
-        # OS por estado
-        os_abiertas = ServiceOrder.objects.filter(status='abierta').count()
-        os_cerradas = ServiceOrder.objects.filter(status='cerrada').count()
-        
-        # OS del mes por estado
-        os_abiertas_month = ServiceOrder.objects.filter(
-            created_at__year=current_year,
-            created_at__month=current_month,
-            status='abierta'
-        ).count()
-        
-        os_cerradas_month = ServiceOrder.objects.filter(
-            created_at__year=current_year,
-            created_at__month=current_month,
-            status='cerrada'
-        ).count()
-
-        # Top 5 clientes por facturación del mes (cargos + terceros legacy)
-        top_clients = ServiceOrder.objects.filter(
-            created_at__year=current_year,
-            created_at__month=current_month
-        ).values(
+        # Top 5 clientes (Queryset defined above)
+        top_clients = top_clients_qs.values(
             'client__id',
             'client__name'
         ).annotate(
@@ -123,7 +214,7 @@ class DashboardView(APIView):
             total_amount=Sum('transfers__amount', filter=Q(transfers__transfer_type__in=['cargos', 'terceros']))
         ).order_by('-total_amount')[:5]
 
-        # Calcular tendencias (% cambio vs mes anterior)
+        # Calcular tendencias (% cambio)
         os_trend = 0
         if total_os_prev_month > 0:
             os_trend = ((total_os_month - total_os_prev_month) / total_os_prev_month) * 100
@@ -136,26 +227,45 @@ class DashboardView(APIView):
         if operating_costs_prev > 0:
             costs_trend = ((float(operating_costs) - float(operating_costs_prev)) / float(operating_costs_prev)) * 100
 
-        # Transferencias pendientes de pago ('pendiente' actual + 'provisionada' legacy)
+        # ... (Rest of status counts / alerts is mostly strictly "Current State" so we keep it same for now, 
+        # except maybe we want to know how many orders created in 2024 are currently pending? 
+        # But the original logic was generic "Status counts" not filtered by date.
+        # Original: ServiceOrder.objects.values('status').annotate... -> This counts ALL orders in DB.
+        # This is correct for "Operational Status" (How many pending total?).
+        
+        # Reuse existing status count logic (Global state)
+        status_counts = ServiceOrder.objects.values('status').annotate(count=Count('id'))
+        status_map = {item['status']: item['count'] for item in status_counts}
+        
+        os_pendiente = status_map.get('pendiente', 0)
+        os_en_transito = status_map.get('en_transito', 0)
+        os_en_puerto = status_map.get('en_puerto', 0)
+        os_en_almacen = status_map.get('en_almacen', 0)
+        os_finalizada = status_map.get('finalizada', 0)
+        os_cerradas = status_map.get('cerrada', 0)
+        
+        os_abiertas = os_pendiente + os_en_transito + os_en_puerto + os_en_almacen + os_finalizada
+
+        # Transferencias pendientes (Global)
         pending_transfers_qs = Transfer.objects.filter(status__in=['pendiente', 'provisionada'])
         pending_transfers = pending_transfers_qs.count()
         pending_transfers_amount = pending_transfers_qs.aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # Facturas (CXC)
+        # Facturas (CXC Global)
         pending_invoices = Invoice.objects.filter(
             Q(status='pending') | Q(status='partial')
         ).count()
 
         # Facturas vencidas
         overdue_invoices = Invoice.objects.filter(
-            due_date__lt=today.date(),
+            due_date__lt=real_today.date(),
             balance__gt=0
         ).exclude(status='paid')
 
         # Facturas próximas a vencer (próximos 7 días)
         upcoming_due = Invoice.objects.filter(
-            due_date__gte=today.date(),
-            due_date__lte=(today + timedelta(days=7)).date(),
+            due_date__gte=real_today.date(),
+            due_date__lte=(real_today + timedelta(days=7)).date(),
             balance__gt=0
         ).exclude(status='paid')
 
@@ -164,7 +274,7 @@ class DashboardView(APIView):
 
         # Alertas de facturas vencidas
         for invoice in overdue_invoices[:5]:  # Máximo 5 alertas
-            days_overdue = (today.date() - invoice.due_date).days
+            days_overdue = (real_today.date() - invoice.due_date).days
             alerts.append({
                 'id': f'invoice_overdue_{invoice.id}',
                 'type': 'invoice_overdue',
@@ -179,7 +289,7 @@ class DashboardView(APIView):
 
         # Alertas de facturas próximas a vencer
         for invoice in upcoming_due[:3]:  # Máximo 3 alertas
-            days_until_due = (invoice.due_date - today.date()).days
+            days_until_due = (invoice.due_date - real_today.date()).days
             alerts.append({
                 'id': f'invoice_due_soon_{invoice.id}',
                 'type': 'invoice_due_soon',
@@ -272,6 +382,11 @@ class DashboardView(APIView):
             },
             'overall': {
                 'os_abiertas': os_abiertas,
+                'os_pendiente': os_pendiente,
+                'os_en_transito': os_en_transito,
+                'os_en_puerto': os_en_puerto,
+                'os_en_almacen': os_en_almacen,
+                'os_finalizada': os_finalizada,
                 'os_cerradas': os_cerradas,
                 'pending_transfers': pending_transfers,
                 'pending_transfers_amount': float(pending_transfers_amount),
@@ -287,6 +402,7 @@ class DashboardView(APIView):
                 }
                 for client in top_clients
             ],
+            'monthly_breakdown': monthly_breakdown,
             'alerts': alerts,
             'recent_orders': recent_orders_data
         }

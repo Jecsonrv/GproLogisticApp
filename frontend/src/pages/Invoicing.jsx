@@ -43,6 +43,7 @@ import { Label } from "../components/ui/Label";
 import Modal, { ModalFooter } from "../components/ui/Modal";
 import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
+import ExportButton from "../components/ui/ExportButton";
 import { FileUpload, SelectERP, ConfirmDialog, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, Skeleton, SkeletonTable } from "../components/ui";
 import api from "../lib/axios";
 import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
@@ -277,7 +278,7 @@ const Invoicing = () => {
             const response = await api.get("/orders/invoices/");
             setInvoices(response.data);
         } catch (error) {
-            toast.error("Error al cargar facturas");
+            toast.error("No se pudieron cargar las facturas.");
         } finally {
             setLoading(false);
         }
@@ -321,7 +322,7 @@ const Invoicing = () => {
             );
             setAllServiceOrders(ordersWithAmount);
         } catch (error) {
-            toast.error("Error al cargar órdenes de servicio");
+            toast.error("No se pudieron cargar las órdenes de servicio.");
             console.error(error);
         }
     };
@@ -443,7 +444,7 @@ const Invoicing = () => {
             setSelectedItemIds(items.map((item) => item.id));
         } catch (error) {
             console.error("Error fetching billable items:", error);
-            toast.error("Error al cargar items facturables");
+            toast.error("No se pudieron cargar los items facturables.");
             setBillableItems([]);
             setSelectedItemIds([]);
         } finally {
@@ -505,7 +506,7 @@ const Invoicing = () => {
                 setIsEditingCN(true);
                 setIsCreditNoteModalOpen(true);
             })
-            .catch(() => toast.error("Error al cargar datos para edición"))
+            .catch(() => toast.error("No se pudieron cargar los datos para edición."))
             .finally(() => setLoading(false));
     };
 
@@ -532,7 +533,7 @@ const Invoicing = () => {
                         headers: { "Content-Type": "multipart/form-data" },
                     }
                 );
-                toast.success("Nota de crédito actualizada exitosamente");
+                toast.success("La nota de crédito ha sido actualizada correctamente.");
             } else {
                 await api.post(
                     `/orders/invoices/${selectedInvoice.id}/add_credit_note/`,
@@ -541,7 +542,7 @@ const Invoicing = () => {
                         headers: { "Content-Type": "multipart/form-data" },
                     }
                 );
-                toast.success("Nota de crédito registrada exitosamente");
+                toast.success("La nota de crédito ha sido registrada correctamente.");
             }
 
             setIsCreditNoteModalOpen(false);
@@ -563,7 +564,7 @@ const Invoicing = () => {
         } catch (error) {
             toast.error(
                 error.response?.data?.error ||
-                    "Error al procesar nota de crédito"
+                    "No se pudo procesar la nota de crédito."
             );
         } finally {
             setIsSubmitting(false);
@@ -626,13 +627,13 @@ const Invoicing = () => {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
-            toast.success("Factura actualizada exitosamente");
+            toast.success("La factura ha sido actualizada correctamente.");
             fetchInvoices();
             fetchSummary();
             setIsEditModalOpen(false);
         } catch (error) {
             toast.error(
-                error.response?.data?.error || "Error al actualizar factura"
+                error.response?.data?.error || "No se pudo actualizar la factura."
             );
             console.error(error);
         }
@@ -649,13 +650,13 @@ const Invoicing = () => {
                 `/orders/invoices/${selectedInvoice.id}/add_payment/`,
                 paymentForm
             );
-            toast.success("Pago registrado exitosamente");
+            toast.success("El pago ha sido registrado correctamente.");
             fetchInvoices();
             fetchSummary();
             setIsPaymentModalOpen(false);
         } catch (error) {
             toast.error(
-                error.response?.data?.error || "Error al registrar pago"
+                error.response?.data?.error || "No se pudo registrar el pago."
             );
         }
     };
@@ -718,7 +719,7 @@ const Invoicing = () => {
 
             const invoiceNumber = response.data.invoice_number || "sin número";
             toast.success(
-                `Pre-factura ${invoiceNumber} registrada exitosamente. Puede editar los items antes de marcar como DTE emitido.`,
+                `La pre-factura ${invoiceNumber} ha sido registrada correctamente. Puede editarla antes de emitir el DTE.`,
                 { duration: 5000 }
             );
             fetchInvoices();
@@ -728,7 +729,7 @@ const Invoicing = () => {
             resetGenerateForm();
         } catch (error) {
             toast.error(
-                error.response?.data?.error || "Error al registrar factura"
+                error.response?.data?.error || "No se pudo registrar la factura."
             );
             console.error(error);
         }
@@ -762,32 +763,43 @@ const Invoicing = () => {
         setSearchQuery("");
     };
 
-    const handleExportExcel = async () => {
-        if (filteredInvoices.length === 0) {
+    const handleExportExcel = async (exportType = "all") => {
+        const dataToExport = exportType === "filtered" ? filteredInvoices : invoices;
+
+        if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
             return;
         }
 
         try {
             setIsExporting(true);
+
+            const params = exportType === "filtered" ? filters : {};
+
             const response = await api.get("/orders/invoices/export_excel/", {
                 responseType: "blob",
-                params: filters,
+                params: params,
             });
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toLocaleDateString("en-CA");
-            link.setAttribute("download", `GPRO_CXC_${timestamp}.xlsx`);
+            const filename = exportType === "filtered"
+                ? `GPRO_CXC_Filtradas_${timestamp}.xlsx`
+                : `GPRO_CXC_${timestamp}.xlsx`;
+            link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            toast.success("Archivo exportado correctamente");
+            const message = exportType === "filtered"
+                ? `${dataToExport.length} factura(s) exportada(s)`
+                : "Todas las facturas exportadas correctamente";
+            toast.success(message);
         } catch (error) {
-            toast.error("Error al exportar");
+            toast.error("No se pudo exportar el archivo.");
         } finally {
             setIsExporting(false);
         }
@@ -798,13 +810,13 @@ const Invoicing = () => {
 
         try {
             await api.delete(`/orders/invoices/${deleteConfirm.id}/`);
-            toast.success("Factura eliminada correctamente");
+            toast.success("La factura ha sido eliminada.");
             setDeleteConfirm({ open: false, id: null });
             fetchInvoices();
             fetchSummary();
         } catch (error) {
             toast.error(
-                error.response?.data?.error || "Error al eliminar factura"
+                error.response?.data?.error || "No se pudo eliminar la factura."
             );
         }
     };
@@ -814,13 +826,13 @@ const Invoicing = () => {
 
         try {
             await api.delete(`/orders/credit-notes/${deleteConfirm.id}/`);
-            toast.success("Nota de crédito eliminada correctamente");
+            toast.success("La nota de crédito ha sido eliminada.");
             setDeleteConfirm({ open: false, id: null, type: null });
             fetchCreditNotes();
             fetchInvoices();
             fetchSummary();
         } catch (error) {
-            toast.error("Error al eliminar nota de crédito");
+            toast.error("No se pudo eliminar la nota de crédito.");
         }
     };
 
@@ -830,7 +842,7 @@ const Invoicing = () => {
             setSelectedInvoice(response.data);
             setIsDetailModalOpen(true);
         } catch (error) {
-            toast.error("Error al cargar detalles de la factura");
+            toast.error("No se pudieron cargar los detalles de la factura.");
         }
     };
 
@@ -1309,22 +1321,20 @@ const Invoicing = () => {
                     {/* Derecha: Botones de Acción */}
                     <div className="flex items-center gap-3 w-full xl:w-auto justify-end">
                         <div className="h-6 w-px bg-slate-200 hidden xl:block" />
-                        
+
+                        <ExportButton
+                            onExportAll={() => handleExportExcel("all")}
+                            onExportFiltered={() => handleExportExcel("filtered")}
+                            filteredCount={filteredInvoices.length}
+                            totalCount={invoices.length}
+                            isExporting={isExporting}
+                            allLabel="Todas las Facturas"
+                            allDescription="Exportar el registro completo de facturas"
+                            filteredLabel="Facturas Filtradas"
+                            filteredDescription="Exportar solo las facturas visibles actualmente"
+                        />
+
                         <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportExcel}
-                            disabled={isExporting || filteredInvoices.length === 0}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            {isExporting ? (
-                                <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
-                            ) : (
-                                <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            )}
-                            Exportar
-                        </Button>
-                        <Button 
                             size="sm"
                             onClick={() => setIsGenerateModalOpen(true)}
                             className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
@@ -1729,35 +1739,37 @@ const Invoicing = () => {
                         </h4>
                         
                         <div className="grid grid-cols-1 gap-4">
-                            <SelectERP
-                                label="Orden de Servicio"
-                                value={generateForm.service_order}
-                                onChange={handleServiceOrderSelect}
-                                options={[
-                                    { id: "", name: "Seleccionar orden de servicio..." },
-                                    ...allServiceOrders.map((o) => ({
-                                        id: o.id,
-                                        name: `${o.order_number} - ${o.client_name} - ${formatCurrency(o.total_amount || 0)}`,
-                                    })),
-                                ]}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                searchable
-                                placeholder="Buscar por número de OS o cliente..."
-                                required
-                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                                <SelectERP
+                                    label="Orden de Servicio"
+                                    value={generateForm.service_order}
+                                    onChange={handleServiceOrderSelect}
+                                    options={[
+                                        { id: "", name: "Seleccionar orden de servicio..." },
+                                        ...allServiceOrders.map((o) => ({
+                                            id: o.id,
+                                            name: `${o.order_number} - ${o.client_name} - ${formatCurrency(o.total_amount || 0)}`,
+                                        })),
+                                    ]}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    placeholder="Buscar por número de OS o cliente..."
+                                    required
+                                />
 
-                            {generateForm.client_name && (
-                                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-blue-200 flex items-center justify-center shadow-sm">
-                                        <Building2 className="w-5 h-5 text-blue-600" />
+                                {generateForm.client_name && (
+                                    <div className="mt-6 md:mt-0 p-3 bg-slate-50 border border-slate-200 rounded-md flex items-center gap-3">
+                                        <div className="p-2 bg-white border border-slate-200 rounded-full shrink-0">
+                                            <Building2 className="w-4 h-4 text-slate-500" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-0.5">Cliente de Facturación</span>
+                                            <p className="text-sm font-bold text-slate-900 truncate" title={generateForm.client_name}>{generateForm.client_name}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Cliente de Facturación</p>
-                                        <p className="text-sm font-bold text-blue-900">{generateForm.client_name}</p>
-                                    </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1775,10 +1787,12 @@ const Invoicing = () => {
                                     <p className="text-sm text-slate-500 font-medium">Cargando items disponibles...</p>
                                 </div>
                             ) : billableItems.length === 0 ? (
-                                <div className="text-center py-12 bg-amber-50 rounded-xl border border-amber-200">
-                                    <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto mb-3" />
-                                    <p className="text-sm text-amber-700 font-bold">No hay items pendientes</p>
-                                    <p className="text-xs text-amber-600 mt-1">Todos los conceptos de esta orden ya han sido facturados.</p>
+                                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30">
+                                    <div className="p-3 bg-white rounded-full mb-3 border border-slate-200 shadow-sm">
+                                        <CheckCircle className="w-6 h-6 text-slate-300" />
+                                    </div>
+                                    <p className="text-sm font-medium text-slate-900">Sin cargos pendientes</p>
+                                    <p className="text-xs text-slate-500 mt-1">Todos los conceptos de esta orden ya han sido facturados.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">

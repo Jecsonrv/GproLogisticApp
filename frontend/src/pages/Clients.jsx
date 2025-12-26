@@ -31,6 +31,7 @@ import {
     Spinner,
     EmptyState,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -78,6 +79,7 @@ function Clients() {
     const [selectedClient, setSelectedClient] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     // Stats
     const stats = useMemo(() => {
@@ -161,17 +163,30 @@ function Clients() {
     };
 
     // Export to Excel
-    const exportToExcel = async () => {
+    const exportToExcel = async (exportType = "all") => {
+        const dataToExport = exportType === "filtered" ? filteredClients : clients;
+
+        if (dataToExport.length === 0) {
+            toast.error("No hay datos para exportar");
+            return;
+        }
+
         try {
+            setIsExporting(true);
+
             const params = new URLSearchParams();
-            if (searchTerm) params.append("search", searchTerm);
-            if (statusFilter)
-                params.append(
-                    "is_active",
-                    statusFilter === "active" ? "True" : "False"
-                );
-            if (paymentFilter)
-                params.append("payment_condition", paymentFilter);
+
+            // Solo aplicar filtros si es exportación filtrada
+            if (exportType === "filtered") {
+                if (searchTerm) params.append("search", searchTerm);
+                if (statusFilter)
+                    params.append(
+                        "is_active",
+                        statusFilter === "active" ? "True" : "False"
+                    );
+                if (paymentFilter)
+                    params.append("payment_condition", paymentFilter);
+            }
 
             const response = await axios.get("/clients/export_clients_excel/", {
                 params,
@@ -181,16 +196,24 @@ function Clients() {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
             link.href = url;
-            link.setAttribute(
-                "download",
-                `clientes_gpro_${new Date().toISOString().slice(0, 10)}.xlsx`
-            );
+            const timestamp = new Date().toISOString().slice(0, 10);
+            const filename = exportType === "filtered"
+                ? `GPRO_Clientes_Filtrados_${timestamp}.xlsx`
+                : `GPRO_Clientes_${timestamp}.xlsx`;
+            link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
-            toast.success("Listado de clientes exportado correctamente");
+            window.URL.revokeObjectURL(url);
+
+            const message = exportType === "filtered"
+                ? `${dataToExport.length} cliente(s) exportado(s)`
+                : "Todos los clientes exportados correctamente";
+            toast.success(message);
         } catch {
             toast.error("Error al exportar clientes");
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -445,16 +468,19 @@ function Clients() {
                             />
                             Actualizar
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={exportToExcel}
-                            disabled={filteredClients.length === 0}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            Exportar
-                        </Button>
+
+                        <ExportButton
+                            onExportAll={() => exportToExcel("all")}
+                            onExportFiltered={() => exportToExcel("filtered")}
+                            filteredCount={filteredClients.length}
+                            totalCount={clients.length}
+                            isExporting={isExporting}
+                            allLabel="Todos los Clientes"
+                            allDescription="Exportar el registro completo de clientes"
+                            filteredLabel="Clientes Filtrados"
+                            filteredDescription="Exportar solo los clientes visibles actualmente"
+                        />
+
                         <Button
                             size="sm"
                             onClick={() => navigate("/clients/new")}

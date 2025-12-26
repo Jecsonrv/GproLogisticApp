@@ -22,6 +22,7 @@ import {
     CardContent,
     DataTable,
     Badge,
+    ConfirmDialog,
     Dialog,
     DialogContent,
     DialogHeader,
@@ -89,11 +90,15 @@ function Users() {
         new_password: "",
         confirm_password: "",
     });
+    const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
+        open: false,
+        id: null
+    });
 
     useEffect(() => {
         // Solo admin puede ver usuarios
         if (currentUser?.role !== "admin") {
-            toast.error("No tienes permisos para acceder a esta sección");
+            toast.error("No tiene permisos para acceder a esta sección.");
             return;
         }
         fetchUsers();
@@ -119,7 +124,7 @@ function Users() {
             const response = await axios.get("/users/");
             setUsers(response.data);
         } catch (error) {
-            toast.error("Error al cargar usuarios");
+            toast.error("No se pudieron cargar los usuarios.");
         } finally {
             setLoading(false);
         }
@@ -136,13 +141,13 @@ function Users() {
 
         try {
             await axios.post("/users/", formData);
-            toast.success("Usuario creado exitosamente");
+            toast.success("El usuario ha sido creado correctamente.");
             setIsCreateModalOpen(false);
             resetForm();
             fetchUsers();
         } catch (error) {
             toast.error(
-                error.response?.data?.message || "Error al crear usuario"
+                error.response?.data?.message || "No se pudo crear el usuario."
             );
         }
     };
@@ -154,12 +159,12 @@ function Users() {
             delete dataToSend.password; // No enviar password en edición
 
             await axios.patch(`/users/${selectedUser.id}/`, dataToSend);
-            toast.success("Usuario actualizado exitosamente");
+            toast.success("El usuario ha sido actualizado correctamente.");
             setIsEditModalOpen(false);
             resetForm();
             fetchUsers();
         } catch (error) {
-            toast.error("Error al actualizar usuario");
+            toast.error("No se pudo actualizar el usuario.");
         }
     };
 
@@ -167,7 +172,7 @@ function Users() {
         e.preventDefault();
 
         if (passwordData.new_password !== passwordData.confirm_password) {
-            toast.error("Las contraseñas no coinciden");
+            toast.error("Las contraseñas no coinciden. Verifique nuevamente.");
             return;
         }
 
@@ -175,28 +180,27 @@ function Users() {
             await axios.post(`/users/${selectedUser.id}/change_password/`, {
                 password: passwordData.new_password,
             });
-            toast.success("Contraseña actualizada exitosamente");
+            toast.success("La contraseña ha sido actualizada correctamente.");
             setIsChangePasswordModalOpen(false);
             setPasswordData({ new_password: "", confirm_password: "" });
         } catch (error) {
-            toast.error("Error al cambiar contraseña");
+            toast.error("No se pudo actualizar la contraseña.");
         }
     };
 
-    const handleDelete = async (id) => {
-        if (
-            !window.confirm(
-                "¿Eliminar este usuario? Esta acción no se puede deshacer."
-            )
-        )
-            return;
+    const handleDelete = (id) => {
+        setConfirmDeleteDialog({ open: true, id });
+    };
 
+    const confirmDelete = async () => {
         try {
-            await axios.delete(`/users/${id}/`);
-            toast.success("Usuario eliminado exitosamente");
+            await axios.delete(`/users/${confirmDeleteDialog.id}/`);
+            toast.success("El usuario ha sido eliminado correctamente.");
             fetchUsers();
         } catch (error) {
-            toast.error("Error al eliminar usuario");
+            toast.error("No se pudo eliminar el usuario.");
+        } finally {
+            setConfirmDeleteDialog({ open: false, id: null });
         }
     };
 
@@ -859,6 +863,17 @@ function Users() {
                     </form>
                 </DialogContent>
             </Dialog>
+
+            <ConfirmDialog
+                open={confirmDeleteDialog.open}
+                onClose={() => setConfirmDeleteDialog({ open: false, id: null })}
+                onConfirm={confirmDelete}
+                title="¿Eliminar Usuario?"
+                description="Esta acción eliminará permanentemente al usuario y no se podrá deshacer."
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+                variant="danger"
+            />
         </div>
     );
 }

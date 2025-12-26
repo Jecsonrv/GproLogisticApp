@@ -31,9 +31,17 @@ class ClientSerializer(serializers.ModelSerializer):
         
         return float(credit_used)
 
+    def validate_nit(self, value):
+        """Convertir cadenas vacías a None para evitar error de unicidad"""
+        if value == "" or value is None:
+            return None
+        return value
+
 class ClientListSerializer(serializers.ModelSerializer):
     """Serializer para listados con todos los campos necesarios"""
     credit_available = serializers.SerializerMethodField()
+    taxpayer_type_display = serializers.CharField(source='get_taxpayer_type_display', read_only=True)
+    taxpayer_type_short = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
@@ -41,9 +49,14 @@ class ClientListSerializer(serializers.ModelSerializer):
             'id', 'name', 'legal_name', 'nit', 'iva_registration',
             'address', 'phone', 'secondary_phone', 'email', 'contact_person',
             'payment_condition', 'credit_days', 'credit_limit', 'credit_available',
-            'is_gran_contribuyente', 'is_active', 'notes',
+            'taxpayer_type', 'taxpayer_type_display', 'taxpayer_type_short',
+            'is_gran_contribuyente',  # Legacy field for compatibility
+            'is_active', 'notes',
             'created_at', 'updated_at'
         ]
 
     def get_credit_available(self, obj):
         return obj.get_credit_available()
+
+    def get_taxpayer_type_short(self, obj):
+        return obj.get_taxpayer_type_display_short()

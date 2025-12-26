@@ -87,6 +87,18 @@ const ERROR_TRANSLATIONS = {
     "Given token not valid for any token type": "Sesión inválida. Por favor ingrese nuevamente.",
 };
 
+const FIELD_TRANSLATIONS = {
+    new_password: "Nueva contraseña",
+    old_password: "", // Mostrar solo el mensaje (ej: "Contraseña incorrecta")
+    password: "",
+    email: "Correo electrónico",
+    username: "Usuario",
+    first_name: "Nombre",
+    last_name: "Apellido",
+    detail: "", 
+    non_field_errors: "",
+};
+
 export const showErrorToast = (
     error,
     fallbackMessage = "Ha ocurrido un error inesperado"
@@ -110,12 +122,22 @@ export const showErrorToast = (
         } else {
             // Si es un objeto con errores de validación
             const errors = Object.entries(data)
-                .map(
-                    ([key, value]) =>
-                        `${key}: ${
-                            Array.isArray(value) ? value.join(", ") : value
-                        }`
-                )
+                .map(([key, value]) => {
+                    const errorText = Array.isArray(value) ? value.join(", ") : value;
+                    const fieldName = FIELD_TRANSLATIONS[key];
+                    
+                    // Si el fieldName es explícitamente "" o el key contiene 'password', 
+                    // solo mostrar el error (ej: "Contraseña incorrecta")
+                    if (fieldName === "" || key.includes('password')) return errorText;
+                    
+                    // Si hay traducción, usarla
+                    if (fieldName) return `${fieldName}: ${errorText}`;
+                    
+                    // Fallback: usar key original (limpiando guiones bajos)
+                    const cleanKey = key.replace(/_/g, ' ');
+                    const capitalizedKey = cleanKey.charAt(0).toUpperCase() + cleanKey.slice(1);
+                    return `${capitalizedKey}: ${errorText}`;
+                })
                 .join(". ");
             if (errors) message = errors;
         }

@@ -248,14 +248,14 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                 </div>
 
                 {/* Nota informativa sobre restricciones */}
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <div className="flex items-start gap-2">
-                        <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="text-xs text-blue-800">
-                            <strong>Nota:</strong> El monto base (costo) no es
-                            editable ya que proviene del pago al proveedor. Solo
-                            puede modificar el margen de utilidad y el tipo de
-                            IVA.
+                <div className="mb-4 p-3 border border-dashed border-slate-300 rounded-md bg-slate-50/50">
+                    <div className="flex items-start gap-3">
+                        <div className="p-1 bg-white border border-slate-200 rounded-full shadow-sm mt-0.5">
+                            <Lock className="h-3 w-3 text-slate-500" />
+                        </div>
+                        <div className="text-sm text-slate-600">
+                            <span className="font-semibold text-slate-800 uppercase tracking-wide text-xs block mb-0.5">Restricciones de Edición</span>
+                            El costo base es inmutable (proviene de cuentas por pagar). Solo se permite modificar el margen de utilidad y la configuración fiscal.
                         </div>
                     </div>
                 </div>

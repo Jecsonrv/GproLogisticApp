@@ -68,12 +68,12 @@ class Transfer(SoftDeleteModel):
     )
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True, verbose_name="Método de Pago")
 
-    # Moneda
+    # Moneda - SIEMPRE DOLARES
     CURRENCY_CHOICES = (
-        ('GTQ', 'Quetzales (GTQ)'),
         ('USD', 'Dólares (USD)'),
+        ('GTQ', 'Quetzales (GTQ)'),
     )
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='GTQ', verbose_name="Moneda")
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', verbose_name="Moneda")
     exchange_rate = models.DecimalField(
         max_digits=10, 
         decimal_places=4, 
@@ -221,15 +221,25 @@ class Transfer(SoftDeleteModel):
         # Calcular balance
         self.balance = self.amount - self.paid_amount
 
-        # Actualizar estado basado en saldo
+        # Actualizar estado basado en saldo (con validación estricta)
+        # REGLA 1: Si el saldo es 0 o negativo Y el monto original > 0 -> PAGADO
         if self.balance <= 0 and self.amount > 0:
             self.status = 'pagado'
             if not self.payment_date:
                 self.payment_date = timezone.now().date()
+        # REGLA 2: Si hay monto pagado pero aún queda saldo -> PAGO PARCIAL
         elif self.paid_amount > 0 and self.balance > 0:
             self.status = 'parcial'
+        # REGLA 3: Si estaba marcado como pagado pero ahora tiene saldo (por reversión) -> APROBADO
         elif self.status == 'pagado' and self.balance > 0:
-            self.status = 'aprobado'
+            # Si había un pago que se revirtió, volver a estado anterior
+            if self.paid_amount > 0:
+                self.status = 'parcial'
+            else:
+                self.status = 'aprobado'
+        # REGLA 4: Si NO tiene pagos y estaba en parcial, regresar a pendiente/aprobado
+        elif self.paid_amount == 0 and self.status == 'parcial':
+            self.status = 'pendiente'
 
         super().save(*args, **kwargs)
 

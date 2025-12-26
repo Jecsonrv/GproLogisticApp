@@ -140,7 +140,7 @@ select,
    ============================================ */
 
 *:focus-visible {
-    outline: 2px solid #0066ff;
+    outline: 2px solid #0f172a;
     outline-offset: 2px;
 }
 
@@ -391,7 +391,7 @@ input[type="number"] {
     .input-corporate {
         @apply w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-sm
            placeholder:text-slate-400
-           focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500
+           focus:outline-none focus:border-slate-900
            disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed
            transition-colors duration-150;
     }
@@ -410,7 +410,7 @@ input[type="number"] {
         @apply inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium
            bg-brand-600 text-white rounded-sm
            hover:bg-brand-700
-           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
+           focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors duration-150;
     }
@@ -419,7 +419,7 @@ input[type="number"] {
         @apply inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium
            bg-white text-slate-700 border border-slate-300 rounded-sm
            hover:bg-slate-50 hover:border-slate-400
-           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1
+           focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors duration-150;
     }
@@ -428,7 +428,7 @@ input[type="number"] {
         @apply inline-flex items-center justify-center px-2 py-1 text-sm font-medium
            text-slate-600 rounded-sm
            hover:bg-slate-100 hover:text-slate-900
-           focus:outline-none focus:ring-2 focus:ring-brand-500
+           focus:outline-none focus:ring-2 focus:ring-slate-900
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors duration-150;
     }
@@ -492,7 +492,7 @@ input[type="number"] {
     .search-input {
         @apply w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-sm
            placeholder:text-slate-400
-           focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500
+           focus:outline-none focus:border-slate-900
            transition-colors duration-150;
     }
 

@@ -107,7 +107,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             setSelectedChargeIds(items.map((c) => c.id));
         } catch (error) {
             console.error("Error fetching charges:", error);
-            toast.error("Error al cargar los cargos disponibles");
+            toast.error("No se pudieron cargar los cargos pendientes. Intente recargar.");
         } finally {
             setLoading(false);
         }
@@ -179,7 +179,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
 
     const handleCreateInvoice = async () => {
         if (selectedChargeIds.length === 0) {
-            toast.error("Seleccione al menos un cargo");
+            toast.error("Debe seleccionar al menos un cargo para generar la factura.");
             return;
         }
 
@@ -214,7 +214,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             };
 
             await axios.post("/orders/invoices/", payload);
-            toast.success("Factura generada correctamente");
+            toast.success("La factura ha sido generada exitosamente.");
             if (onInvoiceCreated) onInvoiceCreated();
             onClose();
         } catch (error) {
@@ -237,16 +237,16 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                             }`;
                         })
                         .join("\n");
-                    toast.error(errorMessages || "Error al crear factura");
+                    toast.error(errorMessages || "No se pudo generar la factura.");
                 } else {
                     toast.error(
                         errors.error ||
                             errors.detail ||
-                            "Error al crear factura"
+                            "No se pudo generar la factura. Verifique los datos."
                     );
                 }
             } else {
-                toast.error("Error al crear factura");
+                toast.error("No se pudo generar la factura. Intente nuevamente.");
             }
         } finally {
             setLoading(false);

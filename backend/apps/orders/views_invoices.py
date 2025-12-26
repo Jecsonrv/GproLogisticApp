@@ -901,6 +901,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
     def export_excel(self, request):
         """Export invoices to Excel with professional formatting"""
+        from django.utils import timezone
+        from datetime import datetime
+
         queryset = self.get_queryset()
 
         # Apply filters from request
@@ -925,10 +928,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         ws = wb.active
         ws.title = "Cuentas por Cobrar"
 
-        # Styles
-        header_font = Font(bold=True, color="FFFFFF", size=11)
-        header_fill = PatternFill(start_color="0066CC", end_color="0066CC", fill_type="solid")
-        header_alignment = Alignment(horizontal="center", vertical="center")
+        # Estilos profesionales - Diseño GPRO
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="1F4E79")
+        subtitle_font = Font(size=12, bold=True, color="2F5496")
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -937,18 +941,36 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         )
         currency_format = '#,##0.00'
 
-        # Headers
+        # === ENCABEZADO ===
+        ws['A1'] = "CUENTAS POR COBRAR"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:K1')
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:K2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === TABLA DE DATOS ===
+        start_row = 5
+        ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:K{start_row}')
+
+        # Headers de la tabla
         headers = [
             'No. Factura', 'Cliente', 'Orden de Servicio', 'CCF',
             'Fecha Emisión', 'Fecha Vencimiento', 'Total', 'Pagado',
             'Saldo', 'Estado', 'Días Vencida'
         ]
+        header_row = start_row + 1
 
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.font = header_font
+            cell = ws.cell(row=header_row, column=col_num, value=header)
             cell.fill = header_fill
-            cell.alignment = header_alignment
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = thin_border
 
         # Data rows
@@ -960,52 +982,86 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'cancelled': 'Anulada',
         }
 
-        from django.utils import timezone
         today = timezone.now().date()
+        data_row = header_row + 1
+        totals = {'total': 0, 'paid': 0, 'balance': 0}
 
-        for row_num, invoice in enumerate(queryset, 2):
+        for invoice in queryset:
             # Calculate days overdue
             days_overdue = 0
             if invoice.due_date and invoice.balance > 0 and today > invoice.due_date:
                 days_overdue = (today - invoice.due_date).days
 
-            data = [
-                invoice.invoice_number,
-                invoice.service_order.client.name if invoice.service_order else '',
-                invoice.service_order.order_number if invoice.service_order else '',
-                invoice.ccf or '',
-                invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '',
-                invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '',
-                float(invoice.total_amount),
-                float(invoice.paid_amount),
-                float(invoice.balance),
-                status_display.get(invoice.status, invoice.status),
-                days_overdue if days_overdue > 0 else '',
-            ]
+            ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
+            ws.cell(row=data_row, column=2, value=invoice.service_order.client.name if invoice.service_order else '').border = thin_border
+            ws.cell(row=data_row, column=3, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
+            ws.cell(row=data_row, column=4, value=invoice.ccf or '').border = thin_border
+            ws.cell(row=data_row, column=5, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            ws.cell(row=data_row, column=6, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
 
-            for col_num, value in enumerate(data, 1):
-                cell = ws.cell(row=row_num, column=col_num, value=value)
-                cell.border = thin_border
+            # Monetary columns with format
+            total_cell = ws.cell(row=data_row, column=7, value=float(invoice.total_amount))
+            total_cell.number_format = currency_format
+            total_cell.border = thin_border
+            total_cell.alignment = Alignment(horizontal='right')
 
-                # Apply currency format to monetary columns
-                if col_num in [7, 8, 9]:
-                    cell.number_format = currency_format
-                    cell.alignment = Alignment(horizontal="right")
+            paid_cell = ws.cell(row=data_row, column=8, value=float(invoice.paid_amount))
+            paid_cell.number_format = currency_format
+            paid_cell.border = thin_border
+            paid_cell.alignment = Alignment(horizontal='right')
 
-        # Auto-adjust column widths
-        for col_num, _ in enumerate(headers, 1):
-            ws.column_dimensions[get_column_letter(col_num)].width = 15
+            balance_cell = ws.cell(row=data_row, column=9, value=float(invoice.balance))
+            balance_cell.number_format = currency_format
+            balance_cell.border = thin_border
+            balance_cell.alignment = Alignment(horizontal='right')
 
-        # Wider columns for specific fields
-        ws.column_dimensions['A'].width = 18  # Invoice number
-        ws.column_dimensions['B'].width = 30  # Client name
-        ws.column_dimensions['C'].width = 15  # Order number
+            ws.cell(row=data_row, column=10, value=status_display.get(invoice.status, invoice.status)).border = thin_border
+            ws.cell(row=data_row, column=11, value=days_overdue if days_overdue > 0 else '').border = thin_border
+
+            # Sumar totales
+            totals['total'] += float(invoice.total_amount)
+            totals['paid'] += float(invoice.paid_amount)
+            totals['balance'] += float(invoice.balance)
+
+            data_row += 1
+
+        # Fila de totales
+        ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
+        ws.cell(row=data_row, column=1).border = thin_border
+        for col in range(2, 7):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        total_total = ws.cell(row=data_row, column=7, value=totals['total'])
+        total_total.number_format = currency_format
+        total_total.font = Font(bold=True)
+        total_total.border = thin_border
+        total_total.alignment = Alignment(horizontal='right')
+
+        total_paid = ws.cell(row=data_row, column=8, value=totals['paid'])
+        total_paid.number_format = currency_format
+        total_paid.font = Font(bold=True)
+        total_paid.border = thin_border
+        total_paid.alignment = Alignment(horizontal='right')
+
+        total_balance = ws.cell(row=data_row, column=9, value=totals['balance'])
+        total_balance.number_format = currency_format
+        total_balance.font = Font(bold=True)
+        total_balance.border = thin_border
+        total_balance.alignment = Alignment(horizontal='right')
+
+        for col in range(10, 12):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        # Ajustar anchos de columna
+        column_widths = [18, 30, 18, 15, 14, 14, 14, 14, 14, 15, 12]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
 
         # Create response
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = 'attachment; filename=cuentas_por_cobrar.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=GPRO_CXC_Facturas.xlsx'
         wb.save(response)
         return response
 

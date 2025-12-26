@@ -189,7 +189,7 @@ const Services = () => {
             const response = await axios.get("/catalogs/services/");
             setServices(response.data);
         } catch (error) {
-            toast.error("Error al cargar servicios");
+            toast.error("No se pudieron cargar los servicios.");
         } finally {
             setLoading(false);
         }
@@ -204,7 +204,7 @@ const Services = () => {
             );
             setCustomPrices(response.data);
         } catch (error) {
-            toast.error("Error al cargar precios personalizados");
+            toast.error("No se pudieron cargar las tarifas personalizadas.");
         } finally {
             setLoadingCustom(false);
         }
@@ -259,16 +259,16 @@ const Services = () => {
                     `/catalogs/services/${editingService.id}/`,
                     formData
                 );
-                toast.success("Servicio actualizado exitosamente");
+                toast.success("El servicio ha sido actualizado correctamente.");
             } else {
                 await axios.post("/catalogs/services/", formData);
-                toast.success("Servicio creado exitosamente");
+                toast.success("El servicio ha sido creado correctamente.");
             }
             fetchServices();
             handleCloseModal();
         } catch (error) {
             toast.error(
-                error.response?.data?.message || "Error al guardar servicio"
+                error.response?.data?.message || "No se pudo guardar el servicio."
             );
         }
     };
@@ -281,10 +281,10 @@ const Services = () => {
         const { id } = confirmDialog;
         try {
             await axios.delete(`/catalogs/services/${id}/`);
-            toast.success("Servicio eliminado exitosamente");
+            toast.success("El servicio ha sido eliminado correctamente.");
             fetchServices();
         } catch (error) {
-            toast.error("Error al eliminar servicio");
+            toast.error("No se pudo eliminar el servicio.");
         }
     };
 
@@ -332,18 +332,18 @@ const Services = () => {
                     `/catalogs/client-service-prices/${editingCustomPrice.id}/`,
                     customFormData
                 );
-                toast.success("Precio personalizado actualizado exitosamente");
+                toast.success("La tarifa personalizada ha sido actualizada correctamente.");
             } else {
                 await axios.post(
                     "/catalogs/client-service-prices/",
                     customFormData
                 );
-                toast.success("Precio personalizado creado exitosamente");
+                toast.success("La tarifa personalizada ha sido creada correctamente.");
             }
             fetchCustomPrices();
             handleCloseCustomModal();
         } catch (error) {
-            toast.error("Error al guardar precio personalizado");
+            toast.error("No se pudo guardar la tarifa personalizada.");
         }
     };
 
@@ -355,10 +355,10 @@ const Services = () => {
         const { id } = confirmCustomDialog;
         try {
             await axios.delete(`/catalogs/client-service-prices/${id}/`);
-            toast.success("Precio personalizado eliminado exitosamente");
+            toast.success("La tarifa personalizada ha sido eliminada correctamente.");
             fetchCustomPrices();
         } catch (error) {
-            toast.error("Error al eliminar precio personalizado");
+            toast.error("No se pudo eliminar la tarifa personalizada.");
         }
     };
 

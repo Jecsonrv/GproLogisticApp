@@ -43,6 +43,7 @@ import {
     FileUpload,
     ConfirmDialog,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
@@ -68,40 +69,32 @@ const STATUS_CONFIG = {
         icon: CheckCircle2,
         iconColor: "text-slate-900",
     },
+    parcial: {
+        label: "Pago Parcial",
+        className: "bg-white border-blue-200 text-blue-700",
+        icon: CreditCard,
+        iconColor: "text-blue-600",
+    },
     pagado: {
         label: "Pagado",
         className: "bg-white border-slate-200 text-slate-900 font-medium",
         icon: Banknote,
         iconColor: "text-emerald-600",
     },
-    provisionada: {
-        label: "Provisionada",
-        className: "bg-slate-50 border-transparent text-slate-500",
-        icon: FileText,
-        iconColor: "text-slate-400",
-    },
 };
 
 const TYPE_CONFIG = {
     costos: {
         label: "Costo Directo",
-        className: "text-slate-700 bg-slate-100 border-transparent",
+        className: "text-slate-700 bg-slate-100 border-slate-200",
     },
     cargos: {
         label: "Cargo Cliente",
-        className: "text-slate-700 bg-slate-100 border-slate-200",
+        className: "text-blue-700 bg-blue-50 border-blue-100",
     },
     admin: {
-        label: "Gasto Op.",
+        label: "Gasto Operación",
         className: "text-purple-700 bg-purple-50 border-purple-100",
-    },
-    terceros: {
-        label: "Terceros",
-        className: "text-orange-700 bg-orange-50 border-orange-100",
-    },
-    propios: {
-        label: "Propios",
-        className: "text-indigo-700 bg-indigo-50 border-indigo-100",
     },
 };
 
@@ -119,17 +112,15 @@ const TRANSFER_TYPE_OPTIONS = [
     { id: "", name: "Todos" },
     { id: "costos", name: "Costos Directos" },
     { id: "cargos", name: "Cargos a Cliente" },
-    { id: "admin", name: "Gastos Operación" },
-    { id: "terceros", name: "Terceros" },
-    { id: "propios", name: "Propios" },
+    { id: "admin", name: "Gastos de Operación" },
 ];
 
 const STATUS_OPTIONS = [
     { id: "", name: "Todos" },
     { id: "pendiente", name: "Pendiente" },
     { id: "aprobado", name: "Aprobado" },
+    { id: "parcial", name: "Pago Parcial" },
     { id: "pagado", name: "Pagado" },
-    { id: "provisionada", name: "Provisionada" },
 ];
 
 const CREATE_TYPE_OPTIONS = [
@@ -169,7 +160,7 @@ const StatusBadge = ({ status }) => {
 };
 
 const TypeBadge = ({ type }) => {
-    const config = TYPE_CONFIG[type] || TYPE_CONFIG.terceros;
+    const config = TYPE_CONFIG[type] || TYPE_CONFIG.costos;
     return (
         <span
             className={cn(
@@ -239,7 +230,6 @@ function ProviderPayments() {
     const [filters, setFilters] = useState({
         transfer_type: "",
         status: "",
-        month: "",
         provider: "",
         dateFrom: "",
         dateTo: "",
@@ -539,19 +529,24 @@ function ProviderPayments() {
         setSelectedPayment(null);
     };
 
-    const handleExportExcel = async () => {
-        if (payments.length === 0) {
+    const handleExportExcel = async (exportType = "all") => {
+        const dataToExport = exportType === "filtered" ? filteredPayments : payments;
+
+        if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
             return;
         }
 
         try {
             setIsExporting(true);
+
+            const params = exportType === "filtered" ? filters : {};
+
             const response = await axios.get(
                 "/transfers/transfers/export_excel/",
                 {
                     responseType: "blob",
-                    params: filters,
+                    params: params,
                 }
             );
 
@@ -559,16 +554,19 @@ function ProviderPayments() {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toISOString().split("T")[0];
-            link.setAttribute(
-                "download",
-                `pagos_proveedores_${timestamp}.xlsx`
-            );
+            const filename = exportType === "filtered"
+                ? `GPRO_Pagos_Filtrados_${timestamp}.xlsx`
+                : `GPRO_Pagos_Proveedores_${timestamp}.xlsx`;
+            link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            toast.success("Archivo exportado exitosamente");
+            const message = exportType === "filtered"
+                ? `${dataToExport.length} pago(s) exportado(s)`
+                : "Todos los pagos exportados exitosamente";
+            toast.success(message);
         } catch (error) {
             toast.error("Error al exportar archivo");
         } finally {
@@ -580,7 +578,6 @@ function ProviderPayments() {
         setFilters({
             transfer_type: "",
             status: "",
-            month: "",
             provider: "",
             dateFrom: "",
             dateTo: "",
@@ -920,22 +917,20 @@ function ProviderPayments() {
                     {/* Derecha: Botones de Acción Operativa */}
                     <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
                         <div className="h-6 w-px bg-slate-200 hidden lg:block" />
-                        
+
+                        <ExportButton
+                            onExportAll={() => handleExportExcel("all")}
+                            onExportFiltered={() => handleExportExcel("filtered")}
+                            filteredCount={filteredPayments.length}
+                            totalCount={payments.length}
+                            isExporting={isExporting}
+                            allLabel="Todos los Pagos"
+                            allDescription="Exportar el registro completo de pagos a proveedores"
+                            filteredLabel="Pagos Filtrados"
+                            filteredDescription="Exportar solo los pagos visibles actualmente"
+                        />
+
                         <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExportExcel()}
-                            disabled={isExporting}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            {isExporting ? (
-                                <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
-                            ) : (
-                                <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            )}
-                            Exportar
-                        </Button>
-                        <Button 
                             size="sm"
                             onClick={() => setIsCreateModalOpen(true)}
                             className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
@@ -1024,25 +1019,79 @@ function ProviderPayments() {
                 size="3xl"
             >
                 {(() => {
+                    // Un registro está bloqueado SOLO si:
+                    // 1. Está completamente pagado (status === 'pagado'), O
+                    // 2. Ya fue facturado al cliente (is_billed === true)
+                    // NOTA: Los pagos parciales (status === 'parcial') NO se bloquean para permitir ajustes
                     const isLocked = selectedPayment && (
-                        selectedPayment.status === 'pagado' || 
-                        parseFloat(selectedPayment.paid_amount || 0) > 0 ||
-                        selectedPayment.is_billed
+                        selectedPayment.status === 'pagado' ||
+                        selectedPayment.is_billed === true
                     );
+
+                    // Determinar mensaje de bloqueo específico
+                    let lockReason = '';
+                    if (selectedPayment?.status === 'pagado') {
+                        lockReason = 'Este gasto ya fue pagado completamente al proveedor.';
+                    } else if (selectedPayment?.is_billed) {
+                        lockReason = 'Este gasto ya fue facturado al cliente.';
+                    }
 
                     return (
                         <form onSubmit={selectedPayment ? handleEdit : handleCreate} className="space-y-6">
+                            {/* Indicador de Registro Bloqueado - Diseño ERP Profesional */}
                             {isLocked && (
-                                <div className="bg-slate-50 border-l-4 border-slate-900 p-4 rounded-r-lg flex items-start gap-3 shadow-sm">
-                                    <div className="p-1.5 bg-white rounded-full border border-slate-200 shadow-sm">
-                                        <LockIcon className="w-4 h-4 text-slate-700" />
+                                <div className="relative overflow-hidden bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-lg">
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-900" />
+                                    <div className="p-4 pl-5 flex items-start gap-3">
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-slate-900 flex items-center justify-center">
+                                            <LockIcon className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="text-sm font-semibold text-slate-900 uppercase tracking-wide">
+                                                    Registro Bloqueado
+                                                </p>
+                                                <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-slate-200 text-slate-700">
+                                                    Solo Lectura
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-slate-600 leading-relaxed">
+                                                {lockReason}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-900">Registro Protegido</p>
-                                        <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                                            Este movimiento financiero ya ha sido procesado (pagado parcial/totalmente o facturado). 
-                                            Para garantizar la integridad contable, los campos críticos han sido bloqueados.
-                                        </p>
+                                </div>
+                            )}
+
+                            {/* Indicador de Pago Parcial - Diseño ERP Informativo */}
+                            {selectedPayment?.status === 'parcial' && !isLocked && (
+                                <div className="relative overflow-hidden bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg">
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
+                                    <div className="p-4 pl-5 flex items-start gap-3">
+                                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center">
+                                            <CreditCard className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="text-sm font-semibold text-blue-900 uppercase tracking-wide">
+                                                    Pago Parcial Aplicado
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                                                <div>
+                                                    <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">Monto Pagado</p>
+                                                    <p className="text-sm font-bold text-blue-900 tabular-nums">
+                                                        {formatCurrency(selectedPayment.paid_amount || 0)}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">Saldo Pendiente</p>
+                                                    <p className="text-sm font-bold text-blue-900 tabular-nums">
+                                                        {formatCurrency(selectedPayment.balance || 0)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}

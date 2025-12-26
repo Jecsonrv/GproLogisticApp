@@ -8,9 +8,11 @@ from .serializers_new import ServiceOrderDetailSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
 import openpyxl
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 import zipfile
 import io
 import os
+from datetime import datetime
 
 class ServiceOrderViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceOrderSerializer
@@ -495,36 +497,81 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        # Create a workbook and add a worksheet.
+        """Exportar órdenes de servicio a Excel con formato profesional"""
+        # Crear workbook
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Ordenes de Servicio"
+        ws.title = "Órdenes de Servicio"
 
-        # Define headers
-        headers = ['Número Orden', 'Cliente', 'Subcliente', 'Tipo Embarque', 'Proveedor', 'PO', 'ETA', 'DUCA', 'Estado', 'Fecha Creación']
+        # Estilos profesionales - Diseño GPRO
+        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="1F4E79")
+        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        # === ENCABEZADO ===
+        ws['A1'] = "ÓRDENES DE SERVICIO"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:J1')
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:J2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === TABLA DE DATOS ===
+        start_row = 5
+        ws.cell(row=start_row, column=1, value="DETALLE DE ÓRDENES").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:J{start_row}')
+
+        # Headers de la tabla
+        headers = ['Número Orden', 'Cliente', 'Subcliente', 'Tipo Embarque',
+                   'Proveedor', 'PO', 'ETA', 'DUCA', 'Estado', 'Fecha Creación']
+        header_row = start_row + 1
+
         for col_num, header in enumerate(headers, 1):
-            col_letter = get_column_letter(col_num)
-            ws[f'{col_letter}1'] = header
-            ws[f'{col_letter}1'].font = openpyxl.styles.Font(bold=True)
+            cell = ws.cell(row=header_row, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
 
-        # Add data
+        # Datos
         queryset = self.filter_queryset(self.get_queryset())
-        for row_num, order in enumerate(queryset, 2):
-            ws[f'A{row_num}'] = order.order_number
-            ws[f'B{row_num}'] = order.client.name if order.client else ''
-            ws[f'C{row_num}'] = order.sub_client.name if order.sub_client else ''
-            ws[f'D{row_num}'] = order.shipment_type.name if order.shipment_type else ''
-            ws[f'E{row_num}'] = order.provider.name if order.provider else ''
-            ws[f'F{row_num}'] = order.purchase_order
-            ws[f'G{row_num}'] = order.eta
-            ws[f'H{row_num}'] = order.duca
-            ws[f'I{row_num}'] = order.get_status_display()
-            ws[f'J{row_num}'] = order.created_at.strftime('%Y-%m-%d')
+        data_row = header_row + 1
 
-        # Set response headers
-        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=ordenes_servicio.xlsx'
-        
+        for order in queryset:
+            ws.cell(row=data_row, column=1, value=order.order_number).border = thin_border
+            ws.cell(row=data_row, column=2, value=order.client.name if order.client else '').border = thin_border
+            ws.cell(row=data_row, column=3, value=order.sub_client.name if order.sub_client else '').border = thin_border
+            ws.cell(row=data_row, column=4, value=order.shipment_type.name if order.shipment_type else '').border = thin_border
+            ws.cell(row=data_row, column=5, value=order.provider.name if order.provider else '').border = thin_border
+            ws.cell(row=data_row, column=6, value=order.purchase_order or '').border = thin_border
+            ws.cell(row=data_row, column=7, value=order.eta.strftime('%d/%m/%Y') if order.eta else '').border = thin_border
+            ws.cell(row=data_row, column=8, value=order.duca or '').border = thin_border
+            ws.cell(row=data_row, column=9, value=order.get_status_display()).border = thin_border
+            ws.cell(row=data_row, column=10, value=order.created_at.strftime('%d/%m/%Y')).border = thin_border
+            data_row += 1
+
+        # Ajustar anchos de columna
+        column_widths = [18, 25, 20, 18, 25, 15, 12, 15, 15, 14]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
+        # Generar respuesta
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=GPRO_Ordenes_Servicio.xlsx'
+
         wb.save(response)
         return response
 

@@ -131,7 +131,10 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
     client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
     client_credit_limit = serializers.DecimalField(source='client.credit_limit', max_digits=15, decimal_places=2, read_only=True)
-    client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
+    # Clasificación fiscal del cliente
+    client_taxpayer_type = serializers.CharField(source='client.taxpayer_type', read_only=True)
+    client_taxpayer_type_display = serializers.CharField(source='client.get_taxpayer_type_display', read_only=True)
+    client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)  # Legacy
     
     def get_customs_agent_name(self, obj):
         if obj.customs_agent:
@@ -149,6 +152,13 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     total_amount = serializers.SerializerMethodField()
     total_transfers = serializers.SerializerMethodField()
 
+    # Desglose fiscal de servicios (para switch Neto/Con IVA)
+    services_fiscal_breakdown = serializers.SerializerMethodField()
+    # Desglose fiscal de gastos terceros
+    third_party_fiscal_breakdown = serializers.SerializerMethodField()
+    # Resumen fiscal consolidado
+    fiscal_summary = serializers.SerializerMethodField()
+
     # Métricas de rentabilidad
     profit = serializers.SerializerMethodField()
     profit_margin = serializers.SerializerMethodField()
@@ -160,7 +170,8 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
         model = ServiceOrder
         fields = [
             'id', 'order_number', 'client', 'client_name',
-            'client_payment_condition', 'client_credit_days', 'client_credit_limit', 'client_is_gran_contribuyente',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
+            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente',
             'sub_client', 'sub_client_name',
             'shipment_type', 'shipment_type_name',
             'provider', 'provider_name',
@@ -173,17 +184,20 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'documents', 'charges',
             'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
             'total_transfers', 'transfers_summary',
+            'services_fiscal_breakdown', 'third_party_fiscal_breakdown', 'fiscal_summary',
             'profit', 'profit_margin'
         ]
         read_only_fields = [
             'id', 'order_number', 'mes', 'created_at', 'updated_at',
             'closed_at', 'documents', 'charges',
             'client_name', 'sub_client_name', 'shipment_type_name',
-            'client_payment_condition', 'client_credit_days', 'client_credit_limit', 'client_is_gran_contribuyente',
+            'client_payment_condition', 'client_credit_days', 'client_credit_limit',
+            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente',
             'provider_name', 'customs_agent_name',
             'created_by_username', 'closed_by_username', 'status_display',
             'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',
             'total_transfers', 'transfers_summary',
+            'services_fiscal_breakdown', 'third_party_fiscal_breakdown', 'fiscal_summary',
             'profit', 'profit_margin'
         ]
 
@@ -217,6 +231,137 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'cargos_cliente': obj.transfers.filter(transfer_type__in=['cargos', 'terceros']).aggregate(Sum('amount'))['amount__sum'] or 0,
             'costos_directos': obj.transfers.filter(transfer_type__in=['costos', 'propios']).aggregate(Sum('amount'))['amount__sum'] or 0,
             'admin': obj.transfers.filter(transfer_type='admin').aggregate(Sum('amount'))['amount__sum'] or 0,
+        }
+
+    def get_services_fiscal_breakdown(self, obj):
+        """
+        Desglose fiscal de servicios (OrderCharge) para cálculos correctos en frontend.
+
+        Retorna subtotal y IVA separados por tipo fiscal:
+        - gravado: servicios con IVA 13%
+        - no_sujeto: servicios sin IVA (exportación, etc.)
+        - exento: servicios exentos de IVA
+        """
+        charges = obj.charges.filter(is_deleted=False)
+
+        # Totales por tipo fiscal
+        gravado_subtotal = Decimal('0.00')
+        gravado_iva = Decimal('0.00')
+        no_sujeto_subtotal = Decimal('0.00')
+        exento_subtotal = Decimal('0.00')
+
+        for charge in charges:
+            iva_type = getattr(charge, 'iva_type', 'gravado')
+            if iva_type == 'gravado':
+                gravado_subtotal += charge.subtotal
+                gravado_iva += charge.iva_amount
+            elif iva_type == 'no_sujeto':
+                no_sujeto_subtotal += charge.subtotal
+            else:  # exento
+                exento_subtotal += charge.subtotal
+
+        total_subtotal = gravado_subtotal + no_sujeto_subtotal + exento_subtotal
+        total_iva = gravado_iva
+        total_con_iva = total_subtotal + total_iva
+
+        return {
+            'gravado': {
+                'subtotal': float(gravado_subtotal),
+                'iva': float(gravado_iva),
+                'total': float(gravado_subtotal + gravado_iva)
+            },
+            'no_sujeto': {
+                'subtotal': float(no_sujeto_subtotal),
+                'iva': 0.0,
+                'total': float(no_sujeto_subtotal)
+            },
+            'exento': {
+                'subtotal': float(exento_subtotal),
+                'iva': 0.0,
+                'total': float(exento_subtotal)
+            },
+            'totals': {
+                'subtotal_neto': float(total_subtotal),
+                'iva_total': float(total_iva),
+                'total_con_iva': float(total_con_iva)
+            }
+        }
+
+    def get_third_party_fiscal_breakdown(self, obj):
+        """
+        Desglose fiscal de gastos a terceros (Transfer) para cálculos correctos.
+
+        Considera el margen de utilidad y el tipo de IVA configurado para cobro al cliente.
+        """
+        transfers = obj.transfers.filter(
+            transfer_type__in=['cargos', 'terceros', 'costos'],
+            is_deleted=False
+        )
+
+        gravado_subtotal = Decimal('0.00')
+        gravado_iva = Decimal('0.00')
+        no_sujeto_subtotal = Decimal('0.00')
+
+        for transfer in transfers:
+            base_price = transfer.get_customer_base_price()
+            iva_type = getattr(transfer, 'customer_iva_type', 'no_sujeto')
+
+            if iva_type == 'gravado':
+                gravado_subtotal += base_price
+                gravado_iva += transfer.get_customer_iva_amount()
+            else:
+                no_sujeto_subtotal += base_price
+
+        total_subtotal = gravado_subtotal + no_sujeto_subtotal
+        total_iva = gravado_iva
+        total_con_iva = total_subtotal + total_iva
+
+        return {
+            'gravado': {
+                'subtotal': float(gravado_subtotal),
+                'iva': float(gravado_iva),
+                'total': float(gravado_subtotal + gravado_iva)
+            },
+            'no_sujeto': {
+                'subtotal': float(no_sujeto_subtotal),
+                'iva': 0.0,
+                'total': float(no_sujeto_subtotal)
+            },
+            'totals': {
+                'subtotal_neto': float(total_subtotal),
+                'iva_total': float(total_iva),
+                'total_con_iva': float(total_con_iva)
+            }
+        }
+
+    def get_fiscal_summary(self, obj):
+        """
+        Resumen fiscal consolidado de la orden (servicios + gastos terceros).
+
+        Proporciona los totales correctos para el switch Neto/Con IVA en el frontend.
+        """
+        services = self.get_services_fiscal_breakdown(obj)
+        third_party = self.get_third_party_fiscal_breakdown(obj)
+
+        # Consolidar totales
+        total_subtotal = (
+            Decimal(str(services['totals']['subtotal_neto'])) +
+            Decimal(str(third_party['totals']['subtotal_neto']))
+        )
+        total_iva = (
+            Decimal(str(services['totals']['iva_total'])) +
+            Decimal(str(third_party['totals']['iva_total']))
+        )
+        total_con_iva = total_subtotal + total_iva
+
+        return {
+            'services': services['totals'],
+            'third_party': third_party['totals'],
+            'consolidated': {
+                'subtotal_neto': float(total_subtotal),
+                'iva_total': float(total_iva),
+                'total_con_iva': float(total_con_iva)
+            }
         }
 
 
@@ -253,11 +398,12 @@ class ServiceOrderCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_duca(self, value):
-        """Validar que el DUCA no esté duplicado"""
-        if ServiceOrder.objects.filter(duca=value).exists():
-            raise serializers.ValidationError(
-                f"Ya existe una OS con el DUCA {value}"
-            )
+        """Validar que el DUCA no esté duplicado (solo si no está vacío)"""
+        if value and value.strip():
+            if ServiceOrder.objects.filter(duca=value).exists():
+                raise serializers.ValidationError(
+                    f"Ya existe una OS con el DUCA {value}"
+                )
         return value
 
     def create(self, validated_data):

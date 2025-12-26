@@ -85,7 +85,7 @@ function ServiceOrderDetailPage() {
         e.preventDefault();
         try {
             await updateOrderMutation.mutateAsync({ id, ...editFormData });
-            toast.success("Orden actualizada exitosamente");
+            toast.success("La orden ha sido actualizada correctamente.");
             setIsEditModalOpen(false);
             // Invalidar el cache para refrescar los datos sin recargar la página
             queryClient.invalidateQueries({ queryKey: ["service-orders", id] });
@@ -93,7 +93,7 @@ function ServiceOrderDetailPage() {
             refetchOrder();
         } catch (error) {
             const errorMsg =
-                error.response?.data?.message || "Error al actualizar orden";
+                error.response?.data?.message || "No se pudo actualizar la orden. Intente nuevamente.";
             toast.error(errorMsg);
         }
     };

@@ -33,6 +33,17 @@ const HistoryTab = ({ orderId }) => {
     const [filterType, setFilterType] = useState("all");
     const [expandedEvents, setExpandedEvents] = useState({});
 
+    const STATUS_LABELS = {
+        pendiente: "Pendiente",
+        en_transito: "En Tránsito",
+        en_puerto: "En Puerto",
+        en_almacen: "En Almacenadora",
+        finalizada: "Finalizada",
+        cerrada: "Cerrada",
+        cancelada: "Cancelada",
+        abierta: "Abierta", // Legacy
+    };
+
     useEffect(() => {
         fetchHistory();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -222,8 +233,31 @@ const HistoryTab = ({ orderId }) => {
         );
     };
 
+    const getVisibleMetadata = (event) => {
+        if (!event.metadata) return {};
+        const visible = { ...event.metadata };
+        
+        // Filter out redundant keys for specific event types
+        if (event.event_type === 'status_changed') {
+            delete visible.previous_status;
+            delete visible.new_status;
+        }
+        
+        return visible;
+    };
+
     const formatMetadataValue = (key, value) => {
         if (value === null || value === undefined || value === "") return "—";
+
+        // Try to parse stringified JSON if it looks like an array/object
+        if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+            try {
+                const parsed = JSON.parse(value);
+                value = parsed;
+            } catch (e) {
+                // Not valid JSON, treat as string
+            }
+        }
 
         if (["amount", "total", "unit_price"].includes(key) && !isNaN(value)) {
             return new Intl.NumberFormat("es-SV", {
@@ -242,14 +276,7 @@ const HistoryTab = ({ orderId }) => {
         }
 
         if (["status", "previous_status", "new_status"].includes(key)) {
-            const statuses = {
-                pendiente: "Pendiente",
-                aprobado: "Aprobado",
-                pagado: "Pagado",
-                abierta: "Abierta",
-                cerrada: "Cerrada",
-            };
-            return statuses[value] || value;
+            return STATUS_LABELS[value] || value;
         }
 
         if (key === "document_type") {
@@ -260,6 +287,30 @@ const HistoryTab = ({ orderId }) => {
                 otros: "Otros",
             };
             return types[value] || value;
+        }
+
+        // Handle list of changes (JSON Array)
+        if (key === "changes" && Array.isArray(value)) {
+            if (value.length === 0) return "Sin cambios";
+            return value.map(change => {
+                const parts = [];
+                // Handle different change formats
+                if (typeof change === 'string') return change;
+                
+                if (change.description) parts.push(change.description);
+                
+                // Formateo inteligente de cambios
+                if (change.field) {
+                     // Formato genérico {field, old, new}
+                     parts.push(`${change.field}: ${change.old} → ${change.new}`);
+                } else {
+                    // Formatos específicos (ej: markup)
+                    if (change.old_markup !== undefined) parts.push(`Margen: ${change.old_markup}% → ${change.new_markup}%`);
+                    if (change.old_iva_type) parts.push(`IVA: ${change.old_iva_type} → ${change.new_iva_type}`);
+                }
+                
+                return parts.join(" | ");
+            }).join("\n");
         }
 
         if (typeof value === "object") {
@@ -395,21 +446,22 @@ const HistoryTab = ({ orderId }) => {
                             const config = getEventConfig(event.event_type);
                             const Icon = config.icon;
                             const isExpanded = expandedEvents[event.id];
-                            const hasMetadata =
-                                event.metadata &&
-                                Object.keys(event.metadata).length > 0;
+                            
+                            // Determine visible metadata
+                            const visibleMetadata = getVisibleMetadata(event);
+                            const hasVisibleMetadata = Object.keys(visibleMetadata).length > 0;
 
                             return (
                                 <div
                                     key={event.id}
                                     className={cn(
                                         "transition-colors",
-                                        hasMetadata
+                                        hasVisibleMetadata
                                             ? "cursor-pointer hover:bg-slate-50"
                                             : ""
                                     )}
                                     onClick={() =>
-                                        hasMetadata && toggleEvent(event.id)
+                                        hasVisibleMetadata && toggleEvent(event.id)
                                     }
                                 >
                                     {/* Fila principal compacta */}
@@ -437,7 +489,7 @@ const HistoryTab = ({ orderId }) => {
                                                     {event.event_type_display ||
                                                         config.label}
                                                 </span>
-                                                {hasMetadata && (
+                                                {hasVisibleMetadata && (
                                                     <span className="text-slate-400">
                                                         {isExpanded ? (
                                                             <ChevronDown className="w-4 h-4" />
@@ -447,11 +499,23 @@ const HistoryTab = ({ orderId }) => {
                                                     </span>
                                                 )}
                                             </div>
-                                            {event.description && (
-                                                <p className="text-xs text-slate-500 truncate">
-                                                    {event.description}
-                                                </p>
-                                            )}
+                                            {/* Smart Description Logic */}
+                                            {(() => {
+                                                // Si es cambio de estado, construimos una frase amigable
+                                                if (event.event_type === 'status_changed' && event.metadata?.previous_status && event.metadata?.new_status) {
+                                                    return (
+                                                        <p className="text-xs text-slate-500 truncate">
+                                                            Cambio de <span className="font-medium text-slate-700">{STATUS_LABELS[event.metadata.previous_status] || event.metadata.previous_status}</span> a <span className="font-medium text-slate-900">{STATUS_LABELS[event.metadata.new_status] || event.metadata.new_status}</span>
+                                                        </p>
+                                                    );
+                                                }
+                                                // Default description fallback
+                                                return event.description && (
+                                                    <p className="text-xs text-slate-500 truncate">
+                                                        {event.description}
+                                                    </p>
+                                                );
+                                            })()}
                                         </div>
 
                                         {/* Usuario */}
@@ -473,23 +537,22 @@ const HistoryTab = ({ orderId }) => {
                                     </div>
 
                                     {/* Metadata expandible */}
-                                    {isExpanded && hasMetadata && (
+                                    {isExpanded && hasVisibleMetadata && (
                                         <div className="px-4 pb-3">
                                             <div className="ml-11 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
-                                                    {Object.entries(
-                                                        event.metadata
-                                                    ).map(([key, value]) => (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                                                    {Object.entries(visibleMetadata)
+                                                        .map(([key, value]) => (
                                                         <div
                                                             key={key}
-                                                            className="flex flex-col min-w-0"
+                                                            className={cn("flex flex-col min-w-0", key === 'changes' ? "col-span-full" : "")}
                                                         >
                                                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                                                 {formatMetadataKey(
                                                                     key
                                                                 )}
                                                             </span>
-                                                            <span className="text-sm font-medium text-slate-900 break-words">
+                                                            <span className={cn("text-sm font-medium text-slate-900 break-words", key === 'changes' ? "whitespace-pre-line font-mono text-xs bg-white p-2 rounded border border-slate-200" : "")}>
                                                                 {formatMetadataValue(
                                                                     key,
                                                                     value

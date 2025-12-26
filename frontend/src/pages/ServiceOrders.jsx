@@ -17,6 +17,11 @@ import {
     Edit2,
     Trash2,
     ArrowUpRight,
+    Building2,
+    Truck,
+    Anchor,
+    Warehouse,
+    Lock,
 } from "lucide-react";
 import {
     DataTable,
@@ -35,6 +40,7 @@ import {
     Skeleton,
     SkeletonTable,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import ServiceOrderDetail from "../components/ServiceOrderDetail";
@@ -49,21 +55,45 @@ import { formatCurrency, formatDate, cn } from "../lib/utils";
 // STATUS CONFIGURATION
 // ============================================
 const STATUS_CONFIG = {
-    abierta: {
-        label: "En Proceso",
-        className: "bg-white border-slate-200 text-slate-700",
+    pendiente: {
+        label: "Pendiente",
+        className: "bg-slate-50 border-slate-200 text-slate-600",
         icon: Clock,
-        iconColor: "text-blue-500",
+        iconColor: "text-slate-500",
+    },
+    en_transito: {
+        label: "En Tránsito",
+        className: "bg-indigo-50 border-indigo-200 text-indigo-700",
+        icon: Truck,
+        iconColor: "text-indigo-600",
+    },
+    en_puerto: {
+        label: "En Puerto",
+        className: "bg-blue-50 border-blue-200 text-blue-700",
+        icon: Anchor,
+        iconColor: "text-blue-600",
+    },
+    en_almacen: {
+        label: "En Almacenadora",
+        className: "bg-amber-50 border-amber-200 text-amber-700",
+        icon: Warehouse,
+        iconColor: "text-amber-600",
+    },
+    finalizada: {
+        label: "Finalizada",
+        className: "bg-emerald-50 border-emerald-200 text-emerald-700",
+        icon: CheckCircle2,
+        iconColor: "text-emerald-600",
     },
     cerrada: {
         label: "Cerrada",
         className: "bg-white border-slate-200 text-slate-900 font-medium",
-        icon: CheckCircle2,
-        iconColor: "text-emerald-600",
+        icon: Lock,
+        iconColor: "text-slate-900",
     },
     cancelada: {
         label: "Cancelada",
-        className: "bg-slate-50 border-transparent text-slate-500",
+        className: "bg-slate-50 border-transparent text-slate-400",
         icon: XCircle,
         iconColor: "text-slate-400",
     },
@@ -131,6 +161,10 @@ const ServiceOrders = () => {
         id: null,
         orderNumber: ""
     });
+    const [confirmCloseDialog, setConfirmCloseDialog] = useState({
+        open: false,
+        id: null
+    });
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -164,7 +198,7 @@ const ServiceOrders = () => {
             const response = await axios.get("/orders/service-orders/");
             setOrders(response.data);
         } catch {
-            toast.error("Error al cargar órdenes de servicio");
+            toast.error("No se pudieron cargar las órdenes de servicio.");
         } finally {
             setLoading(false);
         }
@@ -202,11 +236,11 @@ const ServiceOrders = () => {
             if (selectedOrder) {
                 // Update logic
                 await axios.patch(`/orders/service-orders/${selectedOrder.id}/`, formData);
-                toast.success("Orden de Servicio actualizada exitosamente");
+                toast.success("La orden de servicio ha sido actualizada correctamente.");
             } else {
                 // Create logic
                 await axios.post("/orders/service-orders/", formData);
-                toast.success("Orden de Servicio creada exitosamente");
+                toast.success("La orden de servicio ha sido creada correctamente.");
             }
             fetchOrders();
             setIsCreateModalOpen(false);
@@ -215,7 +249,7 @@ const ServiceOrders = () => {
             const errorMsg =
                 error.response?.data?.duca?.[0] ||
                 error.response?.data?.message ||
-                "Error al procesar la orden";
+                "No se pudo procesar la orden. Verifique los datos.";
             toast.error(errorMsg);
         }
     };
@@ -273,53 +307,71 @@ const ServiceOrders = () => {
     const confirmDelete = async () => {
         try {
             await axios.delete(`/orders/service-orders/${confirmDeleteDialog.id}/`);
-            toast.success("Orden de Servicio eliminada exitosamente");
+            toast.success("La orden de servicio ha sido eliminada.");
             fetchOrders();
         } catch (error) {
-            toast.error(error.response?.data?.error || "Error al eliminar la orden");
+            toast.error(error.response?.data?.error || "No se pudo eliminar la orden.");
         } finally {
             setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" });
         }
     };
 
-    const handleCloseOrder = async (orderId) => {
-        if (!confirm("¿Confirmar cierre operativo de esta orden?")) return;
+    const handleCloseOrder = (orderId) => {
+        setConfirmCloseDialog({ open: true, id: orderId });
+    };
 
+    const confirmClose = async () => {
         try {
-            await axios.patch(`/orders/service-orders/${orderId}/`, {
+            await axios.patch(`/orders/service-orders/${confirmCloseDialog.id}/`, {
                 status: "cerrada",
             });
-            toast.success("Orden cerrada correctamente");
+            toast.success("La orden ha sido cerrada correctamente.");
             fetchOrders();
         } catch (error) {
-            toast.error("Error al cerrar la orden");
+            toast.error("No se pudo cerrar la orden. Intente nuevamente.");
+        } finally {
+            setConfirmCloseDialog({ open: false, id: null });
         }
     };
 
-    const handleExportExcel = async () => {
-        if (orders.length === 0) {
+    const handleExportExcel = async (exportType = "all") => {
+        const dataToExport = exportType === "filtered" ? filteredOrders : orders;
+
+        if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
             return;
         }
 
         try {
             setIsExporting(true);
+
+            const params = exportType === "filtered" ? filters : {};
+
             const response = await axios.get(
                 "/orders/service-orders/export_excel/",
-                { responseType: "blob" }
+                {
+                    responseType: "blob",
+                    params: params,
+                }
             );
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toLocaleDateString("en-CA");
-            link.setAttribute("download", `GPRO_Ordenes_${timestamp}.xlsx`);
+            const filename = exportType === "filtered"
+                ? `GPRO_Ordenes_Filtradas_${timestamp}.xlsx`
+                : `GPRO_Ordenes_${timestamp}.xlsx`;
+            link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            toast.success("Archivo exportado correctamente");
+            const message = exportType === "filtered"
+                ? `${dataToExport.length} orden(es) exportada(s)`
+                : "Todas las órdenes exportadas correctamente";
+            toast.success(message);
         } catch (error) {
             toast.error("Error al exportar");
         } finally {
@@ -355,13 +407,15 @@ const ServiceOrders = () => {
                 return false;
 
             if (filters.dateFrom) {
-                const orderDate = new Date(order.created_at);
+                if (!order.eta) return false; // Excluir órdenes sin ETA
+                const orderDate = new Date(order.eta);
                 const fromDate = new Date(filters.dateFrom);
                 if (orderDate < fromDate) return false;
             }
 
             if (filters.dateTo) {
-                const orderDate = new Date(order.created_at);
+                if (!order.eta) return false; // Excluir órdenes sin ETA
+                const orderDate = new Date(order.eta);
                 const toDate = new Date(filters.dateTo);
                 toDate.setHours(23, 59, 59);
                 if (orderDate > toDate) return false;
@@ -373,14 +427,14 @@ const ServiceOrders = () => {
 
     const kpis = useMemo(() => {
         const total = orders.length;
-        const active = orders.filter((o) => o.status === "abierta").length;
+        const inTransit = orders.filter((o) => o.status === "en_transito").length;
         const closed = orders.filter((o) => o.status === "cerrada").length;
         const invoiced = orders.filter((o) => o.facturado).length;
         const totalAmount = orders.reduce(
             (acc, curr) => acc + (parseFloat(curr.total_amount) || 0),
             0
         );
-        return { total, active, closed, invoiced, totalAmount };
+        return { total, inTransit, closed, invoiced, totalAmount };
     }, [orders]);
 
     const activeFiltersCount = useMemo(() => {
@@ -435,7 +489,7 @@ const ServiceOrders = () => {
             ),
         },
         {
-            header: "Referencia DUCA",
+            header: "DUCA / Referencia",
             accessor: "duca",
             className: "w-[150px]",
             sortable: false,
@@ -470,9 +524,9 @@ const ServiceOrders = () => {
             headerClassName: "text-center",
             sortable: false,
             cell: (row) => {
-                const totalCosts =
-                    (row.total_direct_costs || 0) +
-                    (row.total_admin_costs || 0);
+                // Usar el total de transferencias para incluir TODOS los gastos (Cargos, Costos, Admin, etc.)
+                const totalCosts = row.total_transfers || 0;
+                
                 return (
                     <div className="flex flex-col gap-0.5">
                         <div className="flex justify-between items-center gap-2 text-xs w-full px-2">
@@ -520,7 +574,7 @@ const ServiceOrders = () => {
             sortable: false,
             cell: (row) => (
                 <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
-                    {row.status === "abierta" ? (
+                    {row.status !== "cerrada" && row.status !== "cancelada" ? (
                         <>
                             <div className="flex justify-center">
                                 <button
@@ -593,9 +647,9 @@ const ServiceOrders = () => {
                     icon={FileText}
                 />
                 <KPICard
-                    label="En proceso"
-                    value={kpis.active}
-                    icon={Clock}
+                    label="En Tránsito"
+                    value={kpis.inTransit}
+                    icon={Truck}
                 />
                 <KPICard
                     label="Cerradas"
@@ -654,22 +708,20 @@ const ServiceOrders = () => {
                     {/* Derecha: Botones de Acción Operativa */}
                     <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
                         <div className="h-6 w-px bg-slate-200 hidden lg:block" />
-                        
+
+                        <ExportButton
+                            onExportAll={() => handleExportExcel("all")}
+                            onExportFiltered={() => handleExportExcel("filtered")}
+                            filteredCount={filteredOrders.length}
+                            totalCount={orders.length}
+                            isExporting={isExporting}
+                            allLabel="Todas las Órdenes"
+                            allDescription="Exportar el registro completo de órdenes de servicio"
+                            filteredLabel="Órdenes Filtradas"
+                            filteredDescription="Exportar solo las órdenes visibles actualmente"
+                        />
+
                         <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleExportExcel}
-                            disabled={isExporting || orders.length === 0}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            {isExporting ? (
-                                <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
-                            ) : (
-                                <Download className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            )}
-                            Exportar
-                        </Button>
-                        <Button 
                             size="sm"
                             onClick={() => setIsCreateModalOpen(true)}
                             className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
@@ -692,7 +744,11 @@ const ServiceOrders = () => {
                                         setFilters({ ...filters, status: val })
                                     }
                                     options={[
-                                        { id: "abierta", name: "En Proceso" },
+                                        { id: "pendiente", name: "Pendiente" },
+                                        { id: "en_transito", name: "En Tránsito" },
+                                        { id: "en_puerto", name: "En Puerto" },
+                                        { id: "en_almacen", name: "En Almacenadora" },
+                                        { id: "finalizada", name: "Finalizada" },
                                         { id: "cerrada", name: "Cerrada" },
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
@@ -715,7 +771,7 @@ const ServiceOrders = () => {
                                 />
                             </div>
                             <div>
-                                <Label>Desde</Label>
+                                <Label>ETA Desde</Label>
                                 <Input
                                     type="date"
                                     value={filters.dateFrom}
@@ -725,10 +781,11 @@ const ServiceOrders = () => {
                                             dateFrom: e.target.value,
                                         })
                                     }
+                                    placeholder="Fecha inicial"
                                 />
                             </div>
                             <div>
-                                <Label>Hasta</Label>
+                                <Label>ETA Hasta</Label>
                                 <Input
                                     type="date"
                                     value={filters.dateTo}
@@ -738,6 +795,7 @@ const ServiceOrders = () => {
                                             dateTo: e.target.value,
                                         })
                                     }
+                                    placeholder="Fecha final"
                                 />
                             </div>
                         </div>
@@ -777,7 +835,9 @@ const ServiceOrders = () => {
                     {/* Client Info */}
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            <div className="p-1 bg-blue-50 border border-blue-100 rounded-md">
+                                <Building2 className="w-3 h-3 text-blue-600" />
+                            </div>
                             Información del Cliente
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -800,7 +860,9 @@ const ServiceOrders = () => {
                     {/* Shipment Info */}
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 pt-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            <div className="p-1 bg-indigo-50 border border-indigo-100 rounded-md">
+                                <Truck className="w-3 h-3 text-indigo-600" />
+                            </div>
                             Datos del Embarque
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -831,16 +893,15 @@ const ServiceOrders = () => {
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                    <div className="p-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <Label className="mb-1.5 block">DUCA *</Label>
+                                <Label className="mb-1.5 block">DUCA</Label>
                                 <Input
                                     value={formData.duca}
                                     onChange={(e) => setFormData({ ...formData, duca: e.target.value })}
                                     placeholder="Ej: 4-12345"
-                                    required
-                                    className="font-mono uppercase"
+                                    className="font-mono uppercase bg-white"
                                 />
                             </div>
                             <div>
@@ -849,16 +910,16 @@ const ServiceOrders = () => {
                                     value={formData.bl_reference}
                                     onChange={(e) => setFormData({ ...formData, bl_reference: e.target.value })}
                                     placeholder="Ej: MAEU123456789"
-                                    className="font-mono uppercase"
+                                    className="font-mono uppercase bg-white"
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha ETA *</Label>
+                                <Label className="mb-1.5 block">Fecha ETA</Label>
                                 <Input
                                     type="date"
                                     value={formData.eta}
                                     onChange={(e) => setFormData({ ...formData, eta: e.target.value })}
-                                    required
+                                    className="bg-white"
                                 />
                             </div>
                             <div>
@@ -867,6 +928,7 @@ const ServiceOrders = () => {
                                     value={formData.purchase_order}
                                     onChange={(e) => setFormData({ ...formData, purchase_order: e.target.value })}
                                     placeholder="Ej: PO-998877"
+                                    className="bg-white"
                                 />
                             </div>
                         </div>
@@ -919,6 +981,17 @@ const ServiceOrders = () => {
                 confirmText="Eliminar"
                 cancelText="Cancelar"
                 variant="danger"
+            />
+
+            <ConfirmDialog
+                open={confirmCloseDialog.open}
+                onClose={() => setConfirmCloseDialog({ open: false, id: null })}
+                onConfirm={confirmClose}
+                title="¿Cerrar Orden de Servicio?"
+                description="Al cerrar la orden, se bloqueará la edición de costos y precios. Solo podrá reabrirse por un administrador."
+                confirmText="Cerrar Orden"
+                cancelText="Cancelar"
+                variant="warning"
             />
         </div>
     );

@@ -79,6 +79,33 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         id: null,
     });
 
+    const STATUS_OPTIONS = [
+        { id: 'pendiente', name: 'Pendiente' },
+        { id: 'en_transito', name: 'En Tránsito' },
+        { id: 'en_puerto', name: 'En Puerto' },
+        { id: 'en_almacen', name: 'En Almacenadora' },
+        { id: 'finalizada', name: 'Finalizada' },
+        { id: 'cerrada', name: 'Cerrada' },
+    ];
+
+    const handleStatusChange = async (newStatus) => {
+        try {
+            // Optimistic update
+            const oldStatus = order.status;
+            setOrder({ ...order, status: newStatus });
+
+            await axios.patch(`/orders/service-orders/${orderId}/`, {
+                status: newStatus
+            });
+            
+            toast.success(`Estado actualizado a: ${STATUS_OPTIONS.find(s => s.id === newStatus)?.name}`);
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            toast.error("Error al actualizar el estado");
+            fetchOrderDetail(false); // Revert on error
+        }
+    };
+
     useEffect(() => {
         if (orderId) {
             fetchOrderDetail();
@@ -298,15 +325,17 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         OS: {order.order_number}
                     </h2>
                     <div className="flex items-center space-x-3 mt-2">
-                        <Badge
-                            variant={
-                                order.status === "abierta"
-                                    ? "default"
-                                    : "secondary"
-                            }
-                        >
-                            {order.status === "abierta" ? "Abierta" : "Cerrada"}
-                        </Badge>
+                        <div className="w-48">
+                            <SelectERP
+                                value={order.status}
+                                onChange={handleStatusChange}
+                                options={STATUS_OPTIONS}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                                className="text-sm"
+                                isClearable={false}
+                            />
+                        </div>
                         {order.facturado && (
                             <Badge
                                 variant="success"
@@ -541,21 +570,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? order.total_services || 0
-                                                    : parseFloat(
-                                                          order.total_services ||
-                                                              0
-                                                      ) / 1.13
+                                                    ? (order.fiscal_summary?.services?.total_con_iva ?? order.total_services ?? 0)
+                                                    : (order.fiscal_summary?.services?.subtotal_neto ?? order.total_services ?? 0)
                                             )}
                                         </div>
                                     </div>
                                     <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                            Costos de la Orden
+                                            Costos de la Orden{" "}
+                                            {showWithIva
+                                                ? "(con IVA)"
+                                                : "(Neto)"}
                                         </div>
                                         <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
                                             {formatCurrency(
-                                                order.total_third_party || 0
+                                                showWithIva
+                                                    ? (order.fiscal_summary?.third_party?.total_con_iva ?? order.total_third_party ?? 0)
+                                                    : (order.fiscal_summary?.third_party?.subtotal_neto ?? order.total_third_party ?? 0)
                                             )}
                                         </div>
                                     </div>
@@ -569,15 +600,18 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-2xl font-bold text-white mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? order.total_amount || 0
-                                                    : parseFloat(
-                                                          order.total_amount ||
-                                                              0
-                                                      ) / 1.13
+                                                    ? (order.fiscal_summary?.consolidated?.total_con_iva ?? order.total_amount ?? 0)
+                                                    : (order.fiscal_summary?.consolidated?.subtotal_neto ?? order.total_amount ?? 0)
                                             )}
                                         </div>
                                     </div>
                                 </div>
+                                {/* Desglose de IVA cuando se muestra Con IVA */}
+                                {showWithIva && order.fiscal_summary?.consolidated?.iva_total > 0 && (
+                                    <div className="mt-3 text-right text-sm text-slate-500">
+                                        IVA incluido: {formatCurrency(order.fiscal_summary.consolidated.iva_total)}
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -592,7 +626,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                     <h3 className="text-lg font-semibold text-slate-900">
                                         Calculadora de Servicios
                                     </h3>
-                                    {order.status === "abierta" &&
+                                    {order.status !== "cerrada" &&
                                         !isAddingCharge && (
                                             <Button
                                                 size="sm"
@@ -925,8 +959,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
                                                             Total
                                                         </th>
-                                                        {order.status ===
-                                                            "abierta" && (
+                                                        {order.status !==
+                                                            "cerrada" && (
                                                             <th className="px-3 py-2.5 w-10"></th>
                                                         )}
                                                     </tr>
@@ -1194,8 +1228,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         charge.total
                                                                     )}
                                                                 </td>
-                                                                {order.status ===
-                                                                    "abierta" && (
+                                                                {order.status !==
+                                                                    "cerrada" && (
                                                                     <td className="px-3 py-2.5 text-center">
                                                                         {!isBilled ? (
                                                                             editingChargeId ===
@@ -1333,8 +1367,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             subtotal
                                                                         )}
                                                                     </td>
-                                                                    {order.status ===
-                                                                        "abierta" && (
+                                                                    {order.status !==
+                                                                        "cerrada" && (
                                                                         <td></td>
                                                                     )}
                                                                 </tr>
@@ -1353,8 +1387,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             iva
                                                                         )}
                                                                     </td>
-                                                                    {order.status ===
-                                                                        "abierta" && (
+                                                                    {order.status !==
+                                                                        "cerrada" && (
                                                                         <td></td>
                                                                     )}
                                                                 </tr>
@@ -1373,8 +1407,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             totalBruto
                                                                         )}
                                                                     </td>
-                                                                    {order.status ===
-                                                                        "abierta" && (
+                                                                    {order.status !==
+                                                                        "cerrada" && (
                                                                         <td></td>
                                                                     )}
                                                                 </tr>
@@ -1402,8 +1436,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     retencion
                                                                                 )}
                                                                             </td>
-                                                                            {order.status ===
-                                                                                "abierta" && (
+                                                                            {order.status !==
+                                                                                "cerrada" && (
                                                                                 <td></td>
                                                                             )}
                                                                         </tr>
@@ -1424,8 +1458,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     totalNeto
                                                                                 )}
                                                                             </td>
-                                                                            {order.status ===
-                                                                                "abierta" && (
+                                                                            {order.status !==
+                                                                                "cerrada" && (
                                                                                 <td></td>
                                                                             )}
                                                                         </tr>
@@ -1449,8 +1483,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 totalBruto
                                                                             )}
                                                                         </td>
-                                                                        {order.status ===
-                                                                            "abierta" && (
+                                                                        {order.status !==
+                                                                            "cerrada" && (
                                                                             <td></td>
                                                                         )}
                                                                     </tr>

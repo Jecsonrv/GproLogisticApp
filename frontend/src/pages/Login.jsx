@@ -45,7 +45,7 @@ function Login() {
                             G-PRO LOGISTIC
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
-                            Sistema de Adminitración y Gestión
+                            Sistema de Administración y Gestión
                         </p>
                     </div>
 
@@ -67,7 +67,7 @@ function Login() {
                                     <Input
                                         id="username"
                                         type="text"
-                                        placeholder="Ingresa tu usuario"
+                                        placeholder="Ingrese su usuario"
                                         value={username}
                                         onChange={(e) =>
                                             setUsername(e.target.value)
@@ -96,7 +96,7 @@ function Login() {
                                         type={
                                             showPassword ? "text" : "password"
                                         }
-                                        placeholder="Ingresa tu contraseña"
+                                        placeholder="Ingrese su contraseña"
                                         value={password}
                                         onChange={(e) =>
                                             setPassword(e.target.value)

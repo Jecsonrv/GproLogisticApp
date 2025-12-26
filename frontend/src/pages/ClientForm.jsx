@@ -27,6 +27,7 @@ import {
     Input,
     Label,
     SelectERP,
+    Textarea,
 } from "../components/ui";
 import { LoadingState } from "../components/ui/Spinner";
 import api from "../lib/axios";
@@ -64,8 +65,8 @@ function ClientForm() {
         credit_days: 0,
         credit_limit: 0,
 
-        // Configuración fiscal
-        is_gran_contribuyente: false,
+        // Clasificación fiscal (El Salvador)
+        taxpayer_type: "pequeno",
 
         // Estado
         is_active: true,
@@ -86,7 +87,9 @@ function ClientForm() {
             const response = await api.get(`/clients/${id}/`);
             setFormData(response.data);
         } catch (error) {
-            toast.error("Error al cargar cliente");
+            toast.error(
+                "No se pudo cargar la información del cliente. Intente nuevamente."
+            );
             navigate("/clients");
         } finally {
             setLoading(false);
@@ -106,12 +109,6 @@ function ClientForm() {
 
         if (!formData.name.trim()) {
             newErrors.name = "El nombre es requerido";
-        }
-        if (!formData.nit.trim()) {
-            newErrors.nit = "El NIT es requerido";
-        }
-        if (!formData.address.trim()) {
-            newErrors.address = "La dirección es requerida";
         }
         if (
             formData.email &&
@@ -137,7 +134,7 @@ function ClientForm() {
         e.preventDefault();
 
         if (!validateForm()) {
-            toast.error("Por favor corrija los errores del formulario");
+            toast.error("Por favor, revise los campos marcados en rojo.");
             return;
         }
 
@@ -169,7 +166,7 @@ function ClientForm() {
             const errorMessage =
                 error.response?.data?.nit?.[0] ||
                 error.response?.data?.detail ||
-                "Error al guardar cliente";
+                "No se pudieron guardar los cambios. Verifique los datos.";
             toast.error(errorMessage);
         } finally {
             setSaving(false);
@@ -214,7 +211,7 @@ function ClientForm() {
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="md:col-span-2">
-                                <Label required>Nombre / Razón Social</Label>
+                                <Label required>Nombre Comercial</Label>
                                 <Input
                                     value={formData.name}
                                     onChange={(e) =>
@@ -249,7 +246,7 @@ function ClientForm() {
                             </div>
 
                             <div>
-                                <Label required>NIT / Tax ID</Label>
+                                <Label>NIT / Tax ID</Label>
                                 <Input
                                     value={formData.nit}
                                     onChange={(e) =>
@@ -276,39 +273,79 @@ function ClientForm() {
                                             e.target.value
                                         )
                                     }
-                                    placeholder="Número de registro de IVA"
+                                    placeholder="Ej: 123456-7"
                                     className="font-mono"
                                 />
                             </div>
                         </div>
 
-                        {/* Gran Contribuyente */}
+                        {/* Clasificación de Contribuyente */}
                         <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                            <div className="flex items-start gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="is_gran_contribuyente"
-                                    checked={formData.is_gran_contribuyente}
-                                    onChange={(e) =>
-                                        handleChange(
-                                            "is_gran_contribuyente",
-                                            e.target.checked
-                                        )
-                                    }
-                                    className="mt-1 h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-500"
-                                />
-                                <div>
-                                    <label
-                                        htmlFor="is_gran_contribuyente"
-                                        className="text-sm font-medium text-slate-900 cursor-pointer"
+                            <Label className="mb-3 block">
+                                Clasificación de Contribuyente
+                            </Label>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                {[
+                                    {
+                                        value: "grande",
+                                        label: "Gran Contribuyente",
+                                        description:
+                                            "Retención 1% en facturas DTE > $100",
+                                        badge: "GC",
+                                    },
+                                    {
+                                        value: "mediano",
+                                        label: "Mediano Contribuyente",
+                                        description: "Sin retención automática",
+                                        badge: "MC",
+                                    },
+                                    {
+                                        value: "pequeno",
+                                        label: "Pequeño Contribuyente",
+                                        description: "Sin retención automática",
+                                        badge: "PC",
+                                    },
+                                ].map((option) => (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() =>
+                                            handleChange(
+                                                "taxpayer_type",
+                                                option.value
+                                            )
+                                        }
+                                        className={cn(
+                                            "p-3 rounded-sm border text-left transition-all outline-none",
+                                            formData.taxpayer_type ===
+                                                option.value
+                                                ? "border-slate-900 bg-white shadow-sm ring-1 ring-slate-900"
+                                                : "border-slate-200 bg-white hover:border-slate-300 focus:border-slate-400"
+                                        )}
                                     >
-                                        Gran Contribuyente
-                                    </label>
-                                    <p className="text-xs text-slate-600 mt-0.5">
-                                        Si está marcado, se aplicará retención
-                                        del 1% en facturas CCF (El Salvador).
-                                    </p>
-                                </div>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium text-slate-900">
+                                                    {option.label}
+                                                </p>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {option.description}
+                                                </p>
+                                            </div>
+                                            <Badge
+                                                variant={
+                                                    formData.taxpayer_type ===
+                                                    option.value
+                                                        ? "default"
+                                                        : "secondary"
+                                                }
+                                                className="text-xs shrink-0"
+                                            >
+                                                {option.badge}
+                                            </Badge>
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     </CardContent>
@@ -333,22 +370,15 @@ function ClientForm() {
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="md:col-span-2">
-                                <Label required>Dirección</Label>
-                                <textarea
+                                <Label>Dirección</Label>
+                                <Textarea
                                     value={formData.address}
                                     onChange={(e) =>
                                         handleChange("address", e.target.value)
                                     }
                                     placeholder="Dirección completa incluyendo ciudad y país"
                                     rows={2}
-                                    className={cn(
-                                        "w-full px-3 py-2 text-sm border rounded-md resize-none",
-                                        "bg-white text-slate-900 placeholder:text-slate-400",
-                                        "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
-                                        errors.address
-                                            ? "border-red-500"
-                                            : "border-slate-200"
-                                    )}
+                                    error={errors.address}
                                 />
                                 {errors.address && (
                                     <p className="text-xs text-red-600 mt-1">
@@ -492,16 +522,16 @@ function ClientForm() {
                                         )
                                     }
                                     className={cn(
-                                        "p-4 rounded-lg border-2 text-left transition-all",
+                                        "p-4 rounded-lg border text-left transition-all outline-none",
                                         formData.payment_condition === "credito"
-                                            ? "border-slate-900 bg-slate-50"
-                                            : "border-slate-200 hover:border-slate-300"
+                                            ? "border-slate-900 bg-slate-50 ring-1 ring-slate-900"
+                                            : "border-slate-200 hover:border-slate-300 focus:border-slate-400"
                                     )}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div
                                             className={cn(
-                                                "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                                                "w-4 h-4 rounded-full border flex items-center justify-center",
                                                 formData.payment_condition ===
                                                     "credito"
                                                     ? "border-slate-900"
@@ -662,19 +692,13 @@ function ClientForm() {
                     <CardContent className="space-y-4">
                         <div>
                             <Label>Notas Internas</Label>
-                            <textarea
+                            <Textarea
                                 value={formData.notes}
                                 onChange={(e) =>
                                     handleChange("notes", e.target.value)
                                 }
                                 placeholder="Observaciones, acuerdos especiales, información relevante..."
                                 rows={3}
-                                className={cn(
-                                    "w-full px-3 py-2 text-sm border rounded-md resize-none",
-                                    "bg-white text-slate-900 placeholder:text-slate-400",
-                                    "focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent",
-                                    "border-slate-200"
-                                )}
                             />
                         </div>
 
@@ -690,7 +714,7 @@ function ClientForm() {
                                             e.target.checked
                                         )
                                     }
-                                    className="h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-500"
+                                    className="h-4 w-4 text-slate-900 rounded border-slate-300 focus:ring-slate-900"
                                 />
                                 <label
                                     htmlFor="is_active"

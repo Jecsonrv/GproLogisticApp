@@ -86,11 +86,8 @@ function Profile() {
             // Refrescar datos del usuario en el store
             await checkAuth();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.email ||
-                error.response?.data?.error ||
-                "Error al actualizar perfil";
-            toast.error(errorMsg);
+            // El error es manejado globalmente
+            console.error(error);
         } finally {
             setIsUpdatingProfile(false);
         }
@@ -130,12 +127,8 @@ function Profile() {
                 new_password_confirm: "",
             });
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.old_password ||
-                error.response?.data?.new_password ||
-                error.response?.data?.error ||
-                "Error al cambiar contraseña";
-            toast.error(errorMsg);
+            // El error es manejado globalmente
+            console.error(error);
         } finally {
             setIsUpdatingPassword(false);
         }

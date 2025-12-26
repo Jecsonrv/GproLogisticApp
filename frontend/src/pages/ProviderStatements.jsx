@@ -1636,10 +1636,10 @@ const ProviderStatements = () => {
                                 </tfoot>
                             </table>
                         </div>
-                        <div className="px-4 py-2 bg-blue-50 border-t border-blue-100">
-                            <p className="text-xs text-blue-700 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4" />
-                                El monto se distribuirá automáticamente por orden de fecha (FIFO)
+                        <div className="px-4 py-2 border-t border-dashed border-slate-300 bg-slate-50/50">
+                            <p className="text-xs text-slate-500 flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-slate-400" />
+                                El monto se distribuirá automáticamente por orden de fecha (FIFO).
                             </p>
                         </div>
                     </div>

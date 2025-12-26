@@ -18,15 +18,19 @@ class ServiceOrder(SoftDeleteModel):
     # Información del embarque
     purchase_order = models.CharField(max_length=100, blank=True, verbose_name="PO (Purchase Order)")
     bl_reference = models.CharField(max_length=100, blank=True, verbose_name="BL/Referencia")
-    eta = models.DateField(verbose_name="ETA")
-    duca = models.CharField(max_length=100, verbose_name="DUCA")
+    eta = models.DateField(null=True, blank=True, verbose_name="ETA")
+    duca = models.CharField(max_length=100, blank=True, verbose_name="DUCA")
 
     # Estado y facturación
     STATUS_CHOICES = (
-        ('abierta', 'Abierta'),
+        ('pendiente', 'Pendiente'),
+        ('en_puerto', 'En Puerto'),
+        ('en_transito', 'En Tránsito'),
+        ('en_almacen', 'En Almacenadora'),
+        ('finalizada', 'Finalizada'),
         ('cerrada', 'Cerrada'),
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='abierta', verbose_name="Estado")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pendiente', verbose_name="Estado")
     facturado = models.BooleanField(default=False, verbose_name="Facturado")
     mes = models.CharField(max_length=20, blank=True, verbose_name="Mes")
 
@@ -91,28 +95,23 @@ class ServiceOrder(SoftDeleteModel):
         super().save(*args, **kwargs)
 
     def get_total_services(self):
-        """Calcula el total de servicios cobrados (en moneda base GTQ)"""
+        """Calcula el total de servicios cobrados (USD)"""
         total = Decimal('0.00')
         for charge in self.charges.all():
-            amount = charge.total
-            # Normalizar a moneda base si tiene tipo de cambio
-            if hasattr(charge, 'exchange_rate') and charge.exchange_rate:
-                amount = amount * charge.exchange_rate
-            total += amount
+            total += charge.total
         return total
 
     def get_total_third_party(self):
         """
         Calcula el total de gastos facturables al cliente incluyendo margen e IVA.
-        Usa los valores de customer_markup_percentage y customer_applies_iva del Transfer.
         """
         total = Decimal('0.00')
-        transfers = self.transfers.filter(transfer_type__in=['cargos', 'terceros', 'costos'])
+        transfers = self.transfers.filter(
+            transfer_type__in=['cargos', 'terceros', 'costos'],
+            is_deleted=False
+        )
         for transfer in transfers:
-            amount = transfer.amount
-            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
-                amount = amount * transfer.exchange_rate
-            
+            amount = transfer.amount or Decimal('0.00')
             # Aplicar margen si existe
             markup = transfer.customer_markup_percentage or Decimal('0.00')
             base_price = amount * (1 + markup / Decimal('100.00'))
@@ -125,25 +124,25 @@ class ServiceOrder(SoftDeleteModel):
         return total
     
     def get_total_direct_costs(self):
-        """Calcula el total de costos directos (costos + propios legacy) en GTQ"""
+        """Calcula el total de costos directos (USD)"""
         total = Decimal('0.00')
-        transfers = self.transfers.filter(transfer_type__in=['costos', 'propios'])
+        transfers = self.transfers.filter(
+            transfer_type__in=['costos', 'propios'],
+            is_deleted=False
+        )
         for transfer in transfers:
-            amount = transfer.amount
-            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
-                amount = amount * transfer.exchange_rate
-            total += amount
+            total += (transfer.amount or Decimal('0.00'))
         return total
     
     def get_total_admin_costs(self):
-        """Calcula el total de gastos administrativos/operación en GTQ"""
+        """Calcula el total de gastos administrativos/operación (USD)"""
         total = Decimal('0.00')
-        transfers = self.transfers.filter(transfer_type='admin')
+        transfers = self.transfers.filter(
+            transfer_type='admin',
+            is_deleted=False
+        )
         for transfer in transfers:
-            amount = transfer.amount
-            if hasattr(transfer, 'exchange_rate') and transfer.exchange_rate:
-                amount = amount * transfer.exchange_rate
-            total += amount
+            total += (transfer.amount or Decimal('0.00'))
         return total
 
     def get_total_amount(self):
@@ -297,12 +296,12 @@ class OrderCharge(SoftDeleteModel):
         verbose_name="Estado de Facturación"
     )
 
-    # Moneda
+    # Moneda - SIEMPRE DOLARES
     CURRENCY_CHOICES = (
-        ('GTQ', 'Quetzales (GTQ)'),
         ('USD', 'Dólares (USD)'),
+        ('GTQ', 'Quetzales (GTQ)'),
     )
-    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='GTQ', verbose_name="Moneda")
+    currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD', verbose_name="Moneda")
     exchange_rate = models.DecimalField(
         max_digits=10,
         decimal_places=4,
@@ -552,15 +551,11 @@ class Invoice(models.Model):
         # Calcular retención del 1% para Grandes Contribuyentes con DTE
         # IMPORTANTE: La retención se aplica SOLO sobre SERVICIOS, NO sobre gastos reembolsables a terceros
         # Aplica solo si el subtotal de servicios (sin IVA) supera $100.00 (Art. 162 Código Tributario El Salvador)
-        RETENCION_THRESHOLD = Decimal('100.00')
-        RETENCION_RATE = Decimal('0.01')
-
         client = self.service_order.client
-        if (client.is_gran_contribuyente and
-            self.invoice_type == 'DTE' and
-            self.subtotal_services > RETENCION_THRESHOLD):
-            # Retención del 1% sobre SOLO el subtotal de servicios (sin IVA, sin gastos terceros)
-            self.retencion = self.subtotal_services * RETENCION_RATE
+
+        # Usar los métodos del modelo Client para cálculo de retención
+        if self.invoice_type == 'DTE' and client.applies_retention(self.subtotal_services):
+            self.retencion = client.calculate_retention(self.subtotal_services)
         else:
             self.retencion = Decimal('0.00')
 
