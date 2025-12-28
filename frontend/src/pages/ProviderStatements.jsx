@@ -1972,13 +1972,13 @@ const ProviderStatements = () => {
 
             {/* Confirm Delete Payment Dialog */}
             <ConfirmDialog
-                isOpen={!!paymentToDelete}
+                open={!!paymentToDelete}
                 onClose={() => setPaymentToDelete(null)}
                 onConfirm={handleDeletePayment}
                 title="Eliminar Pago"
                 description={`¿Está seguro que desea eliminar este pago de ${paymentToDelete ? formatCurrency(paymentToDelete.amount) : ''}? Esta acción no se puede deshacer.`}
                 confirmText="Eliminar"
-                confirmVariant="danger"
+                variant="danger"
             />
         </div>
     );
