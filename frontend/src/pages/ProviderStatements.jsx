@@ -34,10 +34,34 @@ import {
     ModalFooter,
     FileUpload,
     Skeleton,
+    SkeletonTable,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+
+// ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
 
 // ============================================
 // STATUS CONFIGURATION
@@ -158,6 +182,19 @@ const ProviderCard = ({ provider, isSelected, onClick }) => {
     );
 };
 
+// ============================================
+// CONSTANTS
+// ============================================
+const NC_REASON_OPTIONS = [
+    { id: "devolucion", name: "Devolución de Mercancía" },
+    { id: "descuento", name: "Descuento Comercial" },
+    { id: "error_factura", name: "Error en Factura Original" },
+    { id: "bonificacion", name: "Bonificación" },
+    { id: "ajuste_precio", name: "Ajuste de Precio" },
+    { id: "garantia", name: "Reclamo por Garantía" },
+    { id: "otro", name: "Otro" },
+];
+
 const ProviderStatements = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -176,11 +213,11 @@ const ProviderStatements = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] = useState(false); // New
+    const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] = useState(false);
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [selectedTransferIds, setSelectedTransferIds] = useState([]); // New
+    const [selectedTransferIds, setSelectedTransferIds] = useState([]);
 
     // Forms
     const [paymentForm, setPaymentForm] = useState({
@@ -193,7 +230,7 @@ const ProviderStatements = () => {
         proof_file: null,
     });
 
-    const [batchPaymentForm, setBatchPaymentForm] = useState({ // New
+    const [batchPaymentForm, setBatchPaymentForm] = useState({
         total_amount: "",
         payment_date: getTodayDate(),
         payment_method: "transferencia",
@@ -206,8 +243,10 @@ const ProviderStatements = () => {
     const [creditNoteForm, setCreditNoteForm] = useState({
         amount: "",
         note_number: "",
-        reason: "",
+        reason: "otro",
+        reason_detail: "",
         issue_date: getTodayDate(),
+        received_date: getTodayDate(),
         pdf_file: null,
     });
 
@@ -375,13 +414,13 @@ const ProviderStatements = () => {
                 }
             });
 
-            // Need to ensure provider_id is sent if strictly required by endpoint logic not inferred?
-            // The endpoint implementation infers provider from transfers, so we are good.
-
             await axios.post(
                 `/transfers/batch-payments/create_batch_payment/`,
                 formData,
-                { headers: { "Content-Type": "multipart/form-data" } }
+                { 
+                    headers: { "Content-Type": "multipart/form-data" },
+                    _skipErrorToast: true,
+                }
             );
 
             toast.success("Pago agrupado registrado exitosamente");
@@ -423,7 +462,10 @@ const ProviderStatements = () => {
             await axios.post(
                 `/transfers/transfers/${selectedTransfer.id}/register_payment/`,
                 formData,
-                { headers: { "Content-Type": "multipart/form-data" } }
+                { 
+                    headers: { "Content-Type": "multipart/form-data" },
+                    _skipErrorToast: true,
+                }
             );
 
             toast.success("Pago registrado exitosamente");
@@ -451,24 +493,49 @@ const ProviderStatements = () => {
 
     const handleRegisterCreditNote = async (e) => {
         e.preventDefault();
-        if (!selectedTransfer) return;
+        if (!selectedTransfer || !selectedProvider) return;
 
         try {
             setIsSubmitting(true);
+
+            // 1. Crear la Nota de Crédito
             const formData = new FormData();
-            Object.keys(creditNoteForm).forEach((key) => {
-                if (creditNoteForm[key] !== null) {
-                    formData.append(key, creditNoteForm[key]);
-                }
+            formData.append("provider", selectedProvider.id);
+            formData.append("original_transfer", selectedTransfer.id);
+            formData.append("note_number", creditNoteForm.note_number);
+            formData.append("amount", creditNoteForm.amount);
+            formData.append("issue_date", creditNoteForm.issue_date);
+            formData.append("received_date", creditNoteForm.received_date);
+            formData.append("reason", creditNoteForm.reason);
+            if (creditNoteForm.reason_detail) formData.append("reason_detail", creditNoteForm.reason_detail);
+            if (creditNoteForm.pdf_file) formData.append("pdf_file", creditNoteForm.pdf_file);
+
+            const createResponse = await axios.post("/transfers/provider-credit-notes/", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+                _skipErrorToast: true,
             });
 
-            await axios.post(
-                `/transfers/transfers/${selectedTransfer.id}/register_credit_note/`,
-                formData,
-                { headers: { "Content-Type": "multipart/form-data" } }
-            );
+            const creditNoteId = createResponse.data.id;
 
-            toast.success("Nota de crédito registrada exitosamente");
+            // 2. Aplicar la Nota de Crédito a la factura seleccionada
+            // Calcular monto a aplicar: menor entre monto NC y saldo factura
+            const ncAmount = parseFloat(creditNoteForm.amount);
+            const transferBalance = parseFloat(selectedTransfer.balance);
+            const amountToApply = Math.min(ncAmount, transferBalance);
+
+            if (amountToApply > 0) {
+                await axios.post(`/transfers/provider-credit-notes/${creditNoteId}/apply/`, {
+                    applications: [{
+                        transfer_id: selectedTransfer.id,
+                        amount: amountToApply,
+                        notes: `Aplicación inmediata desde estado de cuenta`
+                    }]
+                }, {
+                    _skipErrorToast: true
+                });
+            }
+
+            toast.success("Nota de crédito registrada y aplicada exitosamente");
             setIsCreditNoteModalOpen(false);
             fetchStatement(selectedProvider.id);
 
@@ -476,15 +543,17 @@ const ProviderStatements = () => {
             setCreditNoteForm({
                 amount: "",
                 note_number: "",
-                reason: "",
+                reason: "otro",
+                reason_detail: "",
                 issue_date: getTodayDate(),
+                received_date: getTodayDate(),
                 pdf_file: null,
             });
         } catch (error) {
-            toast.error(
-                error.response?.data?.error ||
-                    "Error al registrar nota de crédito"
-            );
+            const errorMsg = error.response?.data?.error ||
+                error.response?.data?.note_number?.[0] ||
+                "Error al registrar nota de crédito";
+            toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
         }
@@ -501,8 +570,20 @@ const ProviderStatements = () => {
 
     const openCreditNoteModal = (transfer) => {
         setSelectedTransfer(transfer);
+        setCreditNoteForm(prev => ({
+            ...prev,
+            amount: transfer.balance, // Sugerir el saldo pendiente
+            note_number: "",
+            issue_date: getTodayDate(),
+            received_date: getTodayDate(),
+            reason: "otro",
+            reason_detail: "",
+            pdf_file: null
+        }));
         setIsCreditNoteModalOpen(true);
     };
+
+    // ... (rest of the file)
 
     const openDetailModal = async (transfer) => {
         await fetchTransferDetails(transfer.id);
@@ -555,8 +636,7 @@ const ProviderStatements = () => {
         {
             header: "Fecha",
             accessor: "transaction_date",
-            cell: (row) =>
-                formatDate(row.transaction_date, { format: "short" }),
+            cell: (row) => formatDateSafe(row.transaction_date),
         },
         {
             header: "Factura Prov.",
@@ -643,7 +723,7 @@ const ProviderStatements = () => {
                             e.stopPropagation();
                             window.open(row.invoice_file, "_blank");
                         }}
-                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                        className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                         title="Ver factura PDF"
                     >
                         <FileText className="w-4 h-4" />
@@ -702,8 +782,44 @@ const ProviderStatements = () => {
         },
     ];
 
-    if (loading)
-        return <div className="p-8 text-center">Cargando proveedores...</div>;
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-end gap-2">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-28" />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Sidebar Skeleton */}
+                    <div className="lg:col-span-3 space-y-4">
+                        <Skeleton className="h-10 w-full" />
+                        <div className="space-y-2">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Main Content Skeleton */}
+                    <div className="lg:col-span-9 space-y-6">
+                        {/* Header Provider */}
+                        <Skeleton className="h-32 w-full rounded-xl" />
+
+                        {/* Aging */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <Skeleton key={i} className="h-20 rounded-lg" />
+                            ))}
+                        </div>
+
+                        {/* Table */}
+                        <SkeletonTable rows={5} columns={6} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -1104,53 +1220,22 @@ const ProviderStatements = () => {
                 title="Registrar Nota de Crédito"
                 size="lg"
             >
-                <form onSubmit={handleRegisterCreditNote} className="space-y-4">
-                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-100 mb-4">
-                        <p className="text-sm text-purple-800">
-                            Registra una nota de crédito emitida por el
-                            proveedor para reducir el saldo de esta factura.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Monto de la Nota *</Label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    className="pl-9"
-                                    value={creditNoteForm.amount}
-                                    onChange={(e) =>
-                                        setCreditNoteForm({
-                                            ...creditNoteForm,
-                                            amount: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                            </div>
+                <form onSubmit={handleRegisterCreditNote} className="space-y-6">
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                            <FileMinus className="w-4 h-4 text-slate-600" />
                         </div>
                         <div>
-                            <Label>Fecha de Emisión *</Label>
-                            <Input
-                                type="date"
-                                value={creditNoteForm.issue_date}
-                                onChange={(e) =>
-                                    setCreditNoteForm({
-                                        ...creditNoteForm,
-                                        issue_date: e.target.value,
-                                    })
-                                }
-                                required
-                            />
+                            <h4 className="text-sm font-semibold text-slate-900">Aplicación Inmediata</h4>
+                            <p className="text-sm text-slate-600 mt-1">
+                                La nota de crédito se registrará y aplicará automáticamente a la factura <span className="font-mono font-medium text-slate-900">{selectedTransfer?.invoice_number}</span>.
+                            </p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                            <Label>Número de Nota *</Label>
+                            <Label className="mb-1.5 block">N° Nota de Crédito *</Label>
                             <Input
                                 value={creditNoteForm.note_number}
                                 onChange={(e) =>
@@ -1164,22 +1249,83 @@ const ProviderStatements = () => {
                             />
                         </div>
                         <div>
-                            <Label>Motivo / Razón</Label>
+                            <Label className="mb-1.5 block">Monto Total *</Label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    className="pl-7 font-bold text-slate-900"
+                                    value={creditNoteForm.amount}
+                                    onChange={(e) =>
+                                        setCreditNoteForm({
+                                            ...creditNoteForm,
+                                            amount: e.target.value,
+                                        })
+                                    }
+                                    required
+                                />
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                Saldo factura: {selectedTransfer ? formatCurrency(selectedTransfer.balance) : '$0.00'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div>
+                            <Label className="mb-1.5 block">Fecha de Emisión *</Label>
                             <Input
-                                value={creditNoteForm.reason}
+                                type="date"
+                                value={creditNoteForm.issue_date}
                                 onChange={(e) =>
                                     setCreditNoteForm({
                                         ...creditNoteForm,
-                                        reason: e.target.value,
+                                        issue_date: e.target.value,
                                     })
                                 }
-                                placeholder="Ej: Devolución, Descuento..."
+                                required
+                            />
+                        </div>
+                        <div>
+                            <Label className="mb-1.5 block">Fecha de Recepción</Label>
+                            <Input
+                                type="date"
+                                value={creditNoteForm.received_date}
+                                onChange={(e) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        received_date: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div className="sm:col-span-2">
+                            <Label className="mb-1.5 block">Motivo *</Label>
+                            <SelectERP
+                                value={creditNoteForm.reason}
+                                onChange={(val) => setCreditNoteForm({ ...creditNoteForm, reason: val })}
+                                options={NC_REASON_OPTIONS}
+                                getOptionLabel={(opt) => opt.name}
+                                getOptionValue={(opt) => opt.id}
+                            />
+                        </div>
+                        <div className="sm:col-span-2">
+                            <Label className="mb-1.5 block">Detalle del Motivo</Label>
+                            <Input
+                                value={creditNoteForm.reason_detail}
+                                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, reason_detail: e.target.value })}
+                                placeholder="Ej: Mercancía dañada en el envío..."
                             />
                         </div>
                     </div>
 
                     <div>
-                        <Label>Documento PDF (Opcional)</Label>
+                        <Label className="mb-1.5 block">Documento PDF (Opcional)</Label>
                         <FileUpload
                             accept=".pdf"
                             onChange={(file) =>
@@ -1189,6 +1335,7 @@ const ProviderStatements = () => {
                                 })
                             }
                             value={creditNoteForm.pdf_file}
+                            helperText="Adjuntar copia digital de la nota de crédito"
                         />
                     </div>
 
@@ -1203,11 +1350,11 @@ const ProviderStatements = () => {
                         <Button
                             type="submit"
                             disabled={isSubmitting}
-                            className="bg-purple-600 hover:bg-purple-700"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[140px]"
                         >
                             {isSubmitting
-                                ? "Registrando..."
-                                : "Registrar Nota de Crédito"}
+                                ? "Procesando..."
+                                : "Registrar y Aplicar"}
                         </Button>
                     </ModalFooter>
                 </form>
@@ -1268,9 +1415,9 @@ const ProviderStatements = () => {
                                         Fecha de Transacción
                                     </div>
                                     <div className="text-sm">
-                                        {formatDate(
+                                        {formatDateSafe(
                                             selectedTransfer.transaction_date,
-                                            { format: "long" }
+                                            "long"
                                         )}
                                     </div>
                                 </div>
@@ -1412,7 +1559,7 @@ const ProviderStatements = () => {
                                                         className="hover:bg-slate-50"
                                                     >
                                                         <td className="px-4 py-2 text-slate-700">
-                                                            {formatDate(
+                                                            {formatDateSafe(
                                                                 payment.payment_date
                                                             )}
                                                         </td>
@@ -1444,7 +1591,7 @@ const ProviderStatements = () => {
                                                                             "_blank"
                                                                         );
                                                                     }}
-                                                                    className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                                    className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                                                                     title="Ver comprobante de pago"
                                                                 >
                                                                     <FileText className="w-4 h-4" />
@@ -1471,14 +1618,14 @@ const ProviderStatements = () => {
                         {/* Notas de Crédito */}
                         {selectedTransfer.credit_notes &&
                             selectedTransfer.credit_notes.length > 0 && (
-                                <div className="bg-white border border-purple-200 rounded-lg p-4 shadow-sm">
-                                    <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                                    <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
                                         <FileMinus className="w-4 h-4" /> Notas
                                         de Crédito
                                     </h4>
-                                    <div className="border border-purple-100 rounded-lg overflow-hidden">
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
                                         <table className="w-full text-sm text-left">
-                                            <thead className="bg-purple-50 text-purple-700">
+                                            <thead className="bg-slate-50 text-slate-700">
                                                 <tr>
                                                     <th className="px-4 py-2 font-medium">
                                                         Fecha
@@ -1497,15 +1644,15 @@ const ProviderStatements = () => {
                                                     </th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-purple-100">
+                                            <tbody className="divide-y divide-slate-100">
                                                 {selectedTransfer.credit_notes.map(
                                                     (nc) => (
                                                         <tr
                                                             key={nc.id}
-                                                            className="hover:bg-purple-50/50"
+                                                            className="hover:bg-slate-50/50"
                                                         >
                                                             <td className="px-4 py-2 text-slate-700">
-                                                                {formatDate(
+                                                                {formatDateSafe(
                                                                     nc.payment_date
                                                                 )}
                                                             </td>
@@ -1518,7 +1665,7 @@ const ProviderStatements = () => {
                                                                 {nc.notes ||
                                                                     "—"}
                                                             </td>
-                                                            <td className="px-4 py-2 text-right font-semibold text-purple-600 tabular-nums">
+                                                            <td className="px-4 py-2 text-right font-semibold text-slate-700 tabular-nums">
                                                                 -
                                                                 {formatCurrency(
                                                                     nc.amount
@@ -1538,7 +1685,7 @@ const ProviderStatements = () => {
                                                                                 "_blank"
                                                                             );
                                                                         }}
-                                                                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                                        className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                                                                         title="Ver nota de crédito"
                                                                     >
                                                                         <FileText className="w-4 h-4" />

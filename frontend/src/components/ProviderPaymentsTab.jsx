@@ -653,13 +653,18 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                 <Input
                                     type="number"
                                     step="0.01"
+                                    min="0.01"
                                     value={paymentForm.amount}
-                                    onChange={(e) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            amount: e.target.value,
-                                        })
-                                    }
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        // Solo permitir valores positivos
+                                        if (value === '' || parseFloat(value) >= 0) {
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                amount: value,
+                                            });
+                                        }
+                                    }}
                                     required
                                     className="input-corporate"
                                     placeholder="0.00"

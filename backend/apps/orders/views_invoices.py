@@ -271,6 +271,40 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Actualización parcial de factura con control de campos según estado DTE.
+
+        Campos SIEMPRE editables (incluso con DTE emitido):
+        - invoice_number: Número de factura (corrección de errores)
+        - due_date: Fecha de vencimiento
+        - notes: Notas internas
+        - pdf_file: Archivo PDF
+
+        Campos SOLO editables si NO tiene DTE emitido:
+        - invoice_type: Tipo de documento
+        - issue_date: Fecha de emisión
+        """
+        invoice = self.get_object()
+
+        # Campos siempre permitidos
+        ALWAYS_EDITABLE = {'invoice_number', 'due_date', 'notes', 'pdf_file'}
+
+        # Campos solo editables sin DTE
+        DTE_RESTRICTED = {'invoice_type', 'issue_date'}
+
+        # Si tiene DTE emitido, filtrar los campos restringidos
+        if invoice.is_dte_issued:
+            restricted_fields = set(request.data.keys()) & DTE_RESTRICTED
+            if restricted_fields:
+                # Remover campos restringidos silenciosamente
+                for field in restricted_fields:
+                    if field in request.data:
+                        del request.data[field]
+
+        # Proceder con la actualización normal
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         """Delete invoice and unmark service order as invoiced"""
         invoice = self.get_object()
@@ -1098,6 +1132,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 payment_method=request.data.get('payment_method', 'transferencia'),
                 reference_number=request.data.get('reference', ''),
                 notes=request.data.get('notes', ''),
+                receipt_file=request.FILES.get('receipt_file'),
                 created_by=request.user
             )
 
@@ -1215,31 +1250,49 @@ class InvoicePaymentViewSet(viewsets.ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a payment and update invoice balance"""
+        """Delete a payment and update invoice balance with atomic transaction"""
         payment = self.get_object()
-        invoice = payment.invoice
 
-        if invoice.status == 'cancelada':
+        # CORREGIDO: Usar 'cancelled' que es el estado valido, no 'cancelada'
+        if payment.invoice.status == 'cancelled':
             return Response(
                 {'error': 'No se pueden eliminar pagos de una factura cancelada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            # Update invoice
-            invoice.paid_amount -= payment.amount
-            invoice.balance = invoice.total_amount - invoice.paid_amount
-            invoice.status = 'pendiente' if invoice.balance > 0 else 'pagada'
-            invoice.save()
+            # CORREGIDO: Usar transaccion atomica con select_for_update para prevenir race conditions
+            with transaction.atomic():
+                # Re-fetch invoice with lock
+                invoice = Invoice.objects.select_for_update().get(pk=payment.invoice_id)
 
-            # Delete payment
-            payment.delete()
+                # Recalcular paid_amount desde los pagos activos (excluyendo el que se elimina)
+                from django.db.models import Sum
+                remaining_payments = invoice.payments.filter(is_deleted=False).exclude(pk=payment.pk)
+                new_paid_amount = remaining_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+                invoice.paid_amount = new_paid_amount
+                # El balance se calcula considerando retencion y NC
+                invoice.balance = (invoice.total_amount - invoice.retencion) - invoice.paid_amount - invoice.credited_amount
+
+                # Actualizar estado
+                if invoice.balance <= 0:
+                    invoice.status = 'paid'
+                elif invoice.paid_amount > 0:
+                    invoice.status = 'partial'
+                else:
+                    invoice.status = 'pending'
+
+                invoice.save()
+
+                # Delete payment (soft delete)
+                payment.delete()
 
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         except Exception as e:
             return Response(
-                {'error': str(e)},
+                {'error': f'Error al eliminar el pago: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

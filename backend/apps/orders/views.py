@@ -229,9 +229,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         """Add a charge to a specific order"""
         order = self.get_object()
 
-        if order.status != 'abierta':
+        if order.status in ['cerrada', 'finalizada']:
             return Response(
-                {'error': 'No se pueden agregar cargos a una orden cerrada'},
+                {'error': 'No se pueden agregar cargos a una orden cerrada o finalizada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -308,9 +308,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         """
         order = self.get_object()
 
-        if order.status != 'abierta':
+        if order.status in ['cerrada', 'finalizada']:
             return Response(
-                {'error': 'Solo se pueden actualizar cargos en órdenes abiertas'},
+                {'error': 'Solo se pueden actualizar cargos en órdenes activas'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -597,7 +597,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                                 archive_name = f"{order.order_number}/{os.path.basename(file_path)}"
                                 zip_file.write(file_path, archive_name)
                         except Exception as e:
-                            print(f"Error adding file {doc.file} to zip: {e}")
+                            pass  # Silently skip files that can't be added
 
         response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
         response['Content-Disposition'] = 'attachment; filename=documentos_ordenes.zip'
@@ -610,12 +610,13 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         - Documentos directos (OrderDocument)
         - Facturas emitidas (Invoice.pdf_file, Invoice.dte_file)
         - Comprobantes de pago de clientes (InvoicePayment.receipt_file)
-        - Notas de crédito (CreditNote.pdf_file)
+        - Notas de crédito a clientes (CreditNote.pdf_file)
         - Facturas de proveedores (Transfer.invoice_file)
         - Comprobantes de pago a proveedores (TransferPayment.proof_file)
+        - Notas de crédito de proveedores (ProviderCreditNote.pdf_file)
         """
         from .models import Invoice, InvoicePayment, CreditNote
-        from apps.transfers.models import Transfer, TransferPayment
+        from apps.transfers.models import Transfer, TransferPayment, ProviderCreditNote
         
         order = self.get_object()
         documents = []
@@ -767,7 +768,33 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                         'source_model': 'TransferPayment',
                         'source_id': tp.id,
                     })
-        
+
+            # 7. Notas de crédito de proveedores vinculadas a este Transfer
+            # Se buscan NC que tengan este transfer como original_transfer
+            provider_credit_notes = ProviderCreditNote.objects.filter(
+                original_transfer=tr,
+                is_deleted=False
+            )
+            for pcn in provider_credit_notes:
+                if pcn.pdf_file:
+                    documents.append({
+                        'id': f'pcn_{pcn.id}',
+                        'category': 'nc_proveedor',
+                        'category_label': 'NC de Proveedores',
+                        'subcategory': 'Nota de Crédito Proveedor',
+                        'file_url': pcn.pdf_file.url,
+                        'file_name': pcn.pdf_file.name.split('/')[-1] if pcn.pdf_file else None,
+                        'description': f'NC {pcn.note_number} - {pcn.get_reason_display()}',
+                        'reference': pcn.note_number,
+                        'reference_label': f'NC #{pcn.note_number} → Fact. {tr.invoice_number or tr.id}',
+                        'uploaded_by': pcn.created_by.get_full_name() if pcn.created_by else None,
+                        'uploaded_at': pcn.created_at.isoformat() if pcn.created_at else None,
+                        'amount': float(pcn.amount),
+                        'deletable': False,
+                        'source_model': 'ProviderCreditNote',
+                        'source_id': pcn.id,
+                    })
+
         # Ordenar por fecha (más reciente primero)
         documents.sort(key=lambda x: x['uploaded_at'] or '', reverse=True)
         
@@ -813,12 +840,21 @@ class OrderChargeViewSet(viewsets.ModelViewSet):
         return self.queryset.select_related('service_order', 'service')
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a charge only if the order is still open"""
+        """Delete a charge only if the order is still open (not closed/cerrada)"""
         charge = self.get_object()
 
-        if charge.service_order.status != 'abierta':
+        # CORREGIDO: Usar estado valido 'cerrada' en lugar de 'abierta' que no existe
+        # Estados validos: pendiente, en_puerto, en_transito, en_almacen, finalizada, cerrada
+        if charge.service_order.status == 'cerrada':
             return Response(
                 {'error': 'No se pueden eliminar cargos de una orden cerrada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar tambien si la orden esta facturada
+        if charge.service_order.facturado:
+            return Response(
+                {'error': 'No se pueden eliminar cargos de una orden facturada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

@@ -3,10 +3,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q, Sum
+from django.db import transaction
 from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
-from .models import Transfer, TransferPayment, BatchPayment
-from .serializers import TransferSerializer, TransferListSerializer, BatchPaymentSerializer, BatchPaymentDetailSerializer
+from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication
+from .serializers import (
+    TransferSerializer, TransferListSerializer, BatchPaymentSerializer, BatchPaymentDetailSerializer,
+    ProviderCreditNoteListSerializer, ProviderCreditNoteDetailSerializer,
+    ProviderCreditNoteCreateSerializer, ApplyCreditNoteSerializer, CreditNoteApplicationSerializer
+)
 from apps.users.permissions import IsAnyOperativo, IsOperativo2OrAdmin, TransferApprovalPermission, IsOperativo
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -49,38 +54,86 @@ class TransferViewSet(viewsets.ModelViewSet):
             return TransferListSerializer
         return TransferSerializer
     
+    def _validate_transfer_edit(self, transfer, request):
+        """
+        Validar si un gasto puede ser editado.
+
+        RESTRICCIONES:
+        1. Si está facturado con DTE emitido, solo campos limitados
+        2. Si está pagado, no se puede editar el monto
+        3. Solo admin/operativo2 puede aprobar
+        """
+        errors = []
+        new_status = request.data.get('status')
+        new_amount = request.data.get('amount')
+
+        # 1. Validar factura con DTE emitido
+        if transfer.invoice and transfer.invoice.is_dte_issued:
+            # Solo permitir editar campos no financieros
+            financial_fields = {'amount', 'customer_markup_percentage', 'iva_type', 'customer_iva_type'}
+            requested_fields = set(request.data.keys())
+            blocked_fields = requested_fields & financial_fields
+
+            if blocked_fields:
+                return {
+                    'error': 'Este gasto está vinculado a una factura con DTE emitido.',
+                    'detail': f'No se pueden modificar los campos financieros: {", ".join(blocked_fields)}',
+                    'code': 'DTE_ISSUED'
+                }
+
+        # 2. Validar cambio de monto si tiene pagos
+        if new_amount is not None:
+            from decimal import Decimal
+            new_amount_decimal = Decimal(str(new_amount))
+            if transfer.paid_amount > 0 and new_amount_decimal < transfer.paid_amount:
+                return {
+                    'error': 'No se puede reducir el monto por debajo de lo ya pagado.',
+                    'detail': f'Monto pagado: ${transfer.paid_amount}',
+                    'code': 'AMOUNT_BELOW_PAID'
+                }
+
+        # 3. Validar permiso de aprobación
+        if new_status == 'aprobado':
+            if request.user.role not in ['admin', 'operativo2']:
+                return {
+                    'error': 'No tiene permisos para aprobar gastos.',
+                    'detail': 'Contacte a un supervisor.',
+                    'code': 'APPROVAL_FORBIDDEN'
+                }
+
+        # 4. Validar cambio de estado desde pagado
+        if transfer.status == 'pagado' and new_status and new_status != 'pagado':
+            if request.user.role != 'admin':
+                return {
+                    'error': 'No se puede cambiar el estado de un gasto pagado.',
+                    'detail': 'Solo un administrador puede realizar esta acción.',
+                    'code': 'PAID_STATUS_LOCKED'
+                }
+
+        return None  # Sin errores
+
     def update(self, request, *args, **kwargs):
         """
-        Override update para validar permisos de aprobación.
-        Operativo básico NO puede cambiar estado a 'aprobado'.
+        Override update con validaciones de integridad.
         """
-        new_status = request.data.get('status')
-        
-        # Validar permiso de aprobación
-        if new_status == 'aprobado':
-            if request.user.role not in ['admin', 'operativo2']:
-                return Response(
-                    {'error': 'No tiene permisos para aprobar pagos. Contacte a un supervisor.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        
+        transfer = self.get_object()
+
+        validation_error = self._validate_transfer_edit(transfer, request)
+        if validation_error:
+            return Response(validation_error, status=status.HTTP_400_BAD_REQUEST)
+
         return super().update(request, *args, **kwargs)
-    
+
     def partial_update(self, request, *args, **kwargs):
         """
-        Override partial_update para validar permisos de aprobación.
-        Operativo básico NO puede cambiar estado a 'aprobado'.
+        Override partial_update con validaciones de integridad.
         """
-        new_status = request.data.get('status')
-        
-        # Validar permiso de aprobación
-        if new_status == 'aprobado':
-            if request.user.role not in ['admin', 'operativo2']:
-                return Response(
-                    {'error': 'No tiene permisos para aprobar pagos. Contacte a un supervisor.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        
+        transfer = self.get_object()
+
+        validation_error = self._validate_transfer_edit(transfer, request)
+        if validation_error:
+            return Response(validation_error, status=status.HTTP_400_BAD_REQUEST)
+
         return super().partial_update(request, *args, **kwargs)
     
     def perform_create(self, serializer):
@@ -97,11 +150,74 @@ class TransferViewSet(viewsets.ModelViewSet):
         transfer._current_user = self.request.user
         return transfer
     
-    def perform_destroy(self, instance):
-        """Set current user before deletion for signal"""
-        instance._current_user = self.request.user
-        instance.delete()
-    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar un gasto con validaciones de integridad.
+
+        RESTRICCIONES:
+        1. No se puede eliminar si está facturado al cliente (tiene invoice asociada)
+        2. No se puede eliminar si tiene pagos registrados
+        3. No se puede eliminar si el estado es 'pagado'
+        4. Solo admin puede eliminar gastos aprobados
+        """
+        transfer = self.get_object()
+
+        # 1. Validar si está facturado al cliente
+        if transfer.invoice:
+            invoice_number = transfer.invoice.invoice_number or f"#{transfer.invoice.id}"
+            return Response(
+                {
+                    'error': f'No se puede eliminar este gasto porque ya fue facturado al cliente.',
+                    'detail': f'Factura asociada: {invoice_number}',
+                    'code': 'INVOICED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Validar si tiene pagos registrados
+        payments_count = transfer.payments.filter(is_deleted=False).count()
+        if payments_count > 0:
+            return Response(
+                {
+                    'error': f'No se puede eliminar este gasto porque tiene {payments_count} pago(s) registrado(s).',
+                    'detail': 'Primero debe eliminar o reversar los pagos asociados.',
+                    'code': 'HAS_PAYMENTS'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Validar si está pagado
+        if transfer.status == 'pagado':
+            return Response(
+                {
+                    'error': 'No se puede eliminar un gasto que ya está marcado como pagado.',
+                    'detail': 'Cambie el estado antes de eliminar o contacte a un administrador.',
+                    'code': 'ALREADY_PAID'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. Solo admin puede eliminar gastos aprobados
+        if transfer.status == 'aprobado':
+            if request.user.role != 'admin':
+                return Response(
+                    {
+                        'error': 'Solo un administrador puede eliminar gastos aprobados.',
+                        'detail': 'Contacte a un administrador para realizar esta acción.',
+                        'code': 'APPROVED_REQUIRES_ADMIN'
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # Proceder con la eliminación
+        transfer._current_user = request.user
+        transfer.delete()
+
+        return Response(
+            {'message': 'Gasto eliminado correctamente.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
     @action(detail=False, methods=['get'], permission_classes=[IsAnyOperativo])
     def export_excel(self, request):
         """Exportar transfers a Excel con formato profesional"""
@@ -499,6 +615,23 @@ class TransferViewSet(viewsets.ModelViewSet):
         
         # Identificar notas de crédito (pagos con método nota_credito)
         credit_notes = [p for p in payments_data if p['payment_method'] == 'nota_credito']
+        
+        # Enriquecer notas de crédito con el archivo PDF original si no lo tienen en el pago
+        for cn in credit_notes:
+            if not cn['proof_file']:
+                try:
+                    # Buscar la NC original usando el número de referencia (que es el número de nota)
+                    provider_nc = ProviderCreditNote.objects.filter(
+                        provider=transfer.provider,
+                        note_number=cn['reference_number'],
+                        is_deleted=False
+                    ).first()
+                    
+                    if provider_nc and provider_nc.pdf_file:
+                        cn['proof_file'] = provider_nc.pdf_file.url
+                except:
+                    pass
+
         regular_payments = [p for p in payments_data if p['payment_method'] != 'nota_credito']
         
         transfer_data['payments'] = regular_payments
@@ -564,10 +697,6 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
         payment_method = request.data.get('payment_method')
         payment_date = request.data.get('payment_date')
 
-        # Debug logging
-        print(f"DEBUG: Received transfer_ids: {transfer_ids}")
-        print(f"DEBUG: Received data keys: {request.data.keys()}")
-        print(f"DEBUG: Total amount: {total_amount_str}, Method: {payment_method}, Date: {payment_date}")
 
         if not transfer_ids or len(transfer_ids) == 0:
             return Response(
@@ -609,27 +738,21 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
         # Validar que todas sean del mismo proveedor
         providers_set = set(transfers.values_list('provider', flat=True))
 
-        # Debug logging
-        print(f"DEBUG: Providers set: {providers_set}")
-        print(f"DEBUG: Transfers count: {transfers.count()}")
-        print(f"DEBUG: Transfer details: {[(t.id, t.provider_id) for t in transfers]}")
-
-        # Filtrar None si existe y convertir a lista
-        providers_not_none = [p for p in providers_set if p is not None]
-
-        if len(providers_not_none) == 0:
+        # Validar consistencia estricta: No permitir mezcla de proveedores ni nulls
+        if len(providers_set) > 1:
             return Response(
-                {'error': 'Las facturas seleccionadas no tienen proveedor asignado'},
+                {'error': 'No se pueden mezclar facturas de diferentes proveedores (o sin proveedor) en un mismo pago'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Obtener el único proveedor
+        provider_id = list(providers_set)[0]
 
-        if len(providers_not_none) > 1:
+        if provider_id is None:
             return Response(
-                {'error': f'Todas las facturas deben ser del mismo proveedor. Proveedores encontrados: {providers_not_none}'},
+                {'error': 'No se pueden realizar pagos agrupados a facturas sin proveedor asignado'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        provider_id = providers_not_none[0]
 
         # Validar que las facturas no estén ya pagadas
         already_paid = transfers.filter(status='pagado')
@@ -760,3 +883,455 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
                 {'error': f'Error al eliminar el pago agrupado: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ProviderCreditNoteFilter(filters.FilterSet):
+    """Filtros para notas de crédito de proveedores"""
+    issue_date_from = filters.DateFilter(field_name='issue_date', lookup_expr='gte')
+    issue_date_to = filters.DateFilter(field_name='issue_date', lookup_expr='lte')
+    min_amount = filters.NumberFilter(field_name='amount', lookup_expr='gte')
+    max_amount = filters.NumberFilter(field_name='amount', lookup_expr='lte')
+    has_available = filters.BooleanFilter(method='filter_has_available')
+
+    class Meta:
+        model = ProviderCreditNote
+        fields = ['provider', 'status', 'reason']
+
+    def filter_has_available(self, queryset, name, value):
+        if value:
+            return queryset.filter(available_amount__gt=0)
+        return queryset
+
+
+class ProviderCreditNoteViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar Notas de Crédito de Proveedores.
+
+    Sistema ERP profesional para manejar notas de crédito que anulan
+    parcial o totalmente facturas de proveedores.
+
+    ENDPOINTS:
+    - GET    /provider-credit-notes/              - Listar NC
+    - POST   /provider-credit-notes/              - Crear NC
+    - GET    /provider-credit-notes/{id}/         - Detalle de NC
+    - PUT    /provider-credit-notes/{id}/         - Actualizar NC
+    - DELETE /provider-credit-notes/{id}/         - Eliminar NC (solo si no tiene aplicaciones)
+    - POST   /provider-credit-notes/{id}/apply/   - Aplicar NC a facturas
+    - POST   /provider-credit-notes/{id}/void/    - Anular NC
+    - GET    /provider-credit-notes/summary/      - Resumen estadístico
+    - GET    /provider-credit-notes/by-provider/  - NC agrupadas por proveedor
+    """
+    queryset = ProviderCreditNote.objects.select_related(
+        'provider', 'created_by', 'voided_by'
+    ).all()
+    permission_classes = [IsOperativo]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    filterset_class = ProviderCreditNoteFilter
+    search_fields = ['note_number', 'provider__name', 'reason_detail']
+    ordering_fields = ['issue_date', 'amount', 'available_amount', 'created_at']
+    ordering = ['-issue_date']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ProviderCreditNoteListSerializer
+        elif self.action == 'create':
+            return ProviderCreditNoteCreateSerializer
+        elif self.action == 'apply':
+            return ApplyCreditNoteSerializer
+        return ProviderCreditNoteDetailSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar una NC solo si no tiene aplicaciones.
+        """
+        credit_note = self.get_object()
+
+        # Validar que no tenga aplicaciones
+        if credit_note.applications.filter(is_deleted=False).exists():
+            return Response(
+                {
+                    'error': 'No se puede eliminar esta nota de crédito porque ya tiene aplicaciones.',
+                    'detail': 'Primero debe anular la NC para revertir las aplicaciones.',
+                    'code': 'HAS_APPLICATIONS'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar que no esté anulada
+        if credit_note.status == 'anulada':
+            return Response(
+                {
+                    'error': 'No se puede eliminar una nota de crédito anulada.',
+                    'detail': 'Las NC anuladas se mantienen para auditoría.',
+                    'code': 'ALREADY_VOIDED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        credit_note.delete()
+        return Response(
+            {'message': 'Nota de crédito eliminada correctamente.'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    def apply(self, request, pk=None):
+        """
+        Aplicar una Nota de Crédito a una o más facturas del proveedor.
+
+        Body esperado:
+        {
+            "applications": [
+                {"transfer_id": 1, "amount": 500.00, "notes": "Aplicación parcial"},
+                {"transfer_id": 2, "amount": 300.00, "notes": ""}
+            ]
+        }
+
+        VALIDACIONES:
+        - La NC debe tener saldo disponible
+        - Los Transfers deben ser del mismo proveedor
+        - El monto total no puede exceder el saldo disponible de la NC
+        - Cada monto no puede exceder el saldo del Transfer
+        """
+        from decimal import Decimal
+
+        credit_note = self.get_object()
+
+        # Validar estado de la NC
+        if not credit_note.can_apply():
+            return Response(
+                {
+                    'error': 'Esta nota de crédito no puede aplicarse.',
+                    'detail': f'Estado: {credit_note.get_status_display()}. Saldo disponible: ${credit_note.available_amount}',
+                    'code': 'CANNOT_APPLY'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar datos de entrada
+        serializer = ApplyCreditNoteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        applications_data = serializer.validated_data['applications']
+
+        # Calcular monto total a aplicar
+        total_to_apply = Decimal('0.00')
+        for app_data in applications_data:
+            total_to_apply += Decimal(str(app_data['amount']))
+
+        if total_to_apply > credit_note.available_amount:
+            return Response(
+                {
+                    'error': 'El monto total excede el saldo disponible de la NC.',
+                    'detail': f'Intentando aplicar ${total_to_apply}, pero solo hay ${credit_note.available_amount} disponibles.',
+                    'code': 'EXCEEDS_AVAILABLE'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar cada Transfer y recopilar errores
+        transfers_to_apply = []
+        errors = []
+
+        for i, app_data in enumerate(applications_data):
+            transfer_id = app_data['transfer_id']
+            amount = Decimal(str(app_data['amount']))
+
+            try:
+                transfer = Transfer.objects.get(id=transfer_id, is_deleted=False)
+            except Transfer.DoesNotExist:
+                errors.append(f"Factura #{transfer_id} no encontrada")
+                continue
+
+            # Validar mismo proveedor
+            if transfer.provider_id != credit_note.provider_id:
+                errors.append(f"Factura #{transfer_id} no pertenece al proveedor {credit_note.provider.name}")
+                continue
+
+            # Validar saldo disponible en el Transfer
+            if amount > transfer.balance:
+                errors.append(f"Factura #{transfer_id}: monto ${amount} excede saldo pendiente ${transfer.balance}")
+                continue
+
+            transfers_to_apply.append({
+                'transfer': transfer,
+                'amount': amount,
+                'notes': app_data.get('notes', '')
+            })
+
+        if errors:
+            return Response(
+                {
+                    'error': 'Errores en las aplicaciones.',
+                    'detail': errors,
+                    'code': 'VALIDATION_ERRORS'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Aplicar todas las NC en una transacción
+        try:
+            with transaction.atomic():
+                applications_created = []
+
+                for app_data in transfers_to_apply:
+                    application = CreditNoteApplication(
+                        credit_note=credit_note,
+                        transfer=app_data['transfer'],
+                        amount=app_data['amount'],
+                        applied_by=request.user,
+                        notes=app_data['notes']
+                    )
+                    application.save()
+                    applications_created.append({
+                        'id': application.id,
+                        'transfer_id': app_data['transfer'].id,
+                        'transfer_invoice': app_data['transfer'].invoice_number,
+                        'amount': str(app_data['amount'])
+                    })
+
+                # Refrescar la NC para obtener valores actualizados
+                credit_note.refresh_from_db()
+
+                return Response({
+                    'message': f'Nota de crédito aplicada exitosamente a {len(applications_created)} factura(s).',
+                    'credit_note': {
+                        'id': credit_note.id,
+                        'note_number': credit_note.note_number,
+                        'status': credit_note.status,
+                        'status_display': credit_note.get_status_display(),
+                        'applied_amount': str(credit_note.applied_amount),
+                        'available_amount': str(credit_note.available_amount)
+                    },
+                    'applications': applications_created
+                }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {
+                    'error': 'Error al aplicar la nota de crédito.',
+                    'detail': str(e),
+                    'code': 'APPLICATION_ERROR'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo2OrAdmin])
+    def void(self, request, pk=None):
+        """
+        Anular una Nota de Crédito y revertir todas sus aplicaciones.
+
+        Body esperado:
+        {
+            "reason": "Motivo de la anulación"
+        }
+
+        EFECTOS:
+        - Revierte todos los TransferPayments creados por la NC
+        - Restaura los saldos de los Transfers afectados
+        - Marca la NC como anulada con registro de auditoría
+
+        RESTRICCIONES:
+        - Solo usuarios con rol operativo2 o admin pueden anular
+        - No se puede anular una NC ya anulada
+        """
+        credit_note = self.get_object()
+
+        # Validar que no esté ya anulada
+        if credit_note.status == 'anulada':
+            return Response(
+                {
+                    'error': 'Esta nota de crédito ya está anulada.',
+                    'detail': f'Anulada el {credit_note.voided_at} por {credit_note.voided_by.username if credit_note.voided_by else "N/A"}',
+                    'code': 'ALREADY_VOIDED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Obtener motivo
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response(
+                {
+                    'error': 'Debe proporcionar un motivo de anulación.',
+                    'code': 'REASON_REQUIRED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                # Obtener Transfers afectados antes de anular
+                affected_transfers = list(credit_note.get_affected_transfers().values_list('id', flat=True))
+
+                # Anular la NC
+                credit_note.void(user=request.user, reason=reason)
+
+                return Response({
+                    'message': 'Nota de crédito anulada correctamente. Las aplicaciones han sido revertidas.',
+                    'credit_note': {
+                        'id': credit_note.id,
+                        'note_number': credit_note.note_number,
+                        'status': credit_note.status,
+                        'status_display': credit_note.get_status_display(),
+                        'voided_at': credit_note.voided_at,
+                        'void_reason': credit_note.void_reason
+                    },
+                    'affected_transfers': affected_transfers
+                }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {
+                    'error': 'Error al anular la nota de crédito.',
+                    'detail': str(e),
+                    'code': 'VOID_ERROR'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def summary(self, request):
+        """
+        Resumen estadístico de notas de crédito.
+
+        Retorna:
+        - Total de NC registradas
+        - Monto total en NC
+        - Monto total aplicado
+        - Saldo disponible total
+        - Desglose por estado
+        - Desglose por proveedor (top 10)
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Totales generales
+        totals = queryset.aggregate(
+            total_amount=Sum('amount'),
+            total_applied=Sum('applied_amount'),
+            total_available=Sum('available_amount')
+        )
+
+        # Por estado
+        by_status = {}
+        for status_choice in ProviderCreditNote.STATUS_CHOICES:
+            status_code = status_choice[0]
+            status_data = queryset.filter(status=status_code)
+            by_status[status_code] = {
+                'label': status_choice[1],
+                'count': status_data.count(),
+                'amount': status_data.aggregate(total=Sum('amount'))['total'] or 0
+            }
+
+        # Por proveedor (top 10)
+        from django.db.models import Count
+        by_provider = queryset.values(
+            'provider', 'provider__name'
+        ).annotate(
+            count=Count('id'),
+            total_amount=Sum('amount'),
+            total_available=Sum('available_amount')
+        ).order_by('-total_amount')[:10]
+
+        return Response({
+            'total_count': queryset.count(),
+            'total_amount': totals['total_amount'] or 0,
+            'total_applied': totals['total_applied'] or 0,
+            'total_available': totals['total_available'] or 0,
+            'by_status': by_status,
+            'by_provider': list(by_provider)
+        })
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def by_provider(self, request):
+        """
+        Lista NC agrupadas por proveedor.
+
+        Query params opcionales:
+        - provider_id: Filtrar por proveedor específico
+        - only_available: Solo NC con saldo disponible
+        """
+        provider_id = request.query_params.get('provider_id')
+        only_available = request.query_params.get('only_available', 'false').lower() == 'true'
+
+        queryset = self.filter_queryset(self.get_queryset())
+
+        if provider_id:
+            queryset = queryset.filter(provider_id=provider_id)
+
+        if only_available:
+            queryset = queryset.filter(available_amount__gt=0, status__in=['pendiente', 'parcial'])
+
+        # Agrupar por proveedor
+        from django.db.models import Count
+        providers_data = queryset.values(
+            'provider', 'provider__name'
+        ).annotate(
+            count=Count('id'),
+            total_amount=Sum('amount'),
+            total_available=Sum('available_amount')
+        ).order_by('provider__name')
+
+        # Obtener NC detalladas por proveedor
+        result = []
+        for provider_data in providers_data:
+            provider_notes = queryset.filter(provider_id=provider_data['provider'])
+            notes_list = ProviderCreditNoteListSerializer(provider_notes, many=True).data
+
+            result.append({
+                'provider_id': provider_data['provider'],
+                'provider_name': provider_data['provider__name'],
+                'count': provider_data['count'],
+                'total_amount': provider_data['total_amount'],
+                'total_available': provider_data['total_available'],
+                'credit_notes': notes_list
+            })
+
+        return Response(result)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def pending_for_provider(self, request):
+        """
+        Obtener facturas pendientes de un proveedor para aplicar NC.
+
+        Query params requeridos:
+        - provider_id: ID del proveedor
+
+        Retorna facturas (Transfers) del proveedor con saldo pendiente.
+        """
+        provider_id = request.query_params.get('provider_id')
+
+        if not provider_id:
+            return Response(
+                {'error': 'Se requiere el parámetro provider_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        transfers = Transfer.objects.filter(
+            provider_id=provider_id,
+            balance__gt=0,
+            is_deleted=False
+        ).exclude(
+            status='pagado'
+        ).select_related('service_order').order_by('-transaction_date')
+
+        data = [{
+            'id': t.id,
+            'description': t.description,
+            'invoice_number': t.invoice_number,
+            'amount': str(t.amount),
+            'balance': str(t.balance),
+            'paid_amount': str(t.paid_amount),
+            'service_order_number': t.service_order.order_number if t.service_order else None,
+            'transaction_date': t.transaction_date,
+            'status': t.status,
+            'status_display': t.get_status_display()
+        } for t in transfers]
+
+        return Response({
+            'provider_id': provider_id,
+            'pending_transfers': data,
+            'total_count': len(data),
+            'total_balance': sum(t.balance for t in transfers)
+        })

@@ -48,9 +48,10 @@ def log_service_order_events(sender, instance, created, **kwargs):
             if instance.status == 'cerrada':
                 event_type = 'closed'
                 description = f'Orden de servicio {instance.order_number} cerrada'
-            elif instance._previous_status == 'cerrada' and instance.status == 'abierta':
+            elif instance._previous_status == 'cerrada' and instance.status != 'cerrada':
+                # CORREGIDO: Detectar reapertura cuando pasa de cerrada a cualquier otro estado
                 event_type = 'reopened'
-                description = f'Orden de servicio {instance.order_number} reabierta'
+                description = f'Orden de servicio {instance.order_number} reabierta (nuevo estado: {instance.status})'
             else:
                 event_type = 'status_changed'
                 description = f'Estado cambiado de {instance._previous_status} a {instance.status}'

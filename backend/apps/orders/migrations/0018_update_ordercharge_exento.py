@@ -9,9 +9,7 @@ def update_exento_to_gravado(apps, schema_editor):
     ya que la opción 'exento' se ha eliminado del sistema.
     """
     OrderCharge = apps.get_model('orders', 'OrderCharge')
-    updated_count = OrderCharge.objects.filter(iva_type='exento').update(iva_type='gravado')
-    if updated_count > 0:
-        print(f"OK - Se actualizaron {updated_count} cargos de 'exento' a 'gravado'")
+    OrderCharge.objects.filter(iva_type='exento').update(iva_type='gravado')
 
 
 def reverse_update(apps, schema_editor):

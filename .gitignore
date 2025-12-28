@@ -68,3 +68,31 @@ frontend/build/
 .claude/
 .gemini/
 tmp/
+
+# --- DEBUG & TEST FILES ---
+repro_*.py
+test_*.py
+*_test.py
+debug_*.py
+nul
+
+# --- SECRETS & CREDENTIALS ---
+*.pem
+*.key
+*.crt
+credentials*.json
+secrets*.json
+*.env.local
+*.env.production
+*.env.staging
+
+# --- BACKUP FILES ---
+*.backup
+*.bak
+*.orig
+
+# --- LOGS ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*

@@ -319,12 +319,28 @@ class Transfer(SoftDeleteModel):
         return True
         
     def delete(self, *args, **kwargs):
-        self.payments.all().delete()
-        super().delete(*args, **kwargs)
+        """
+        Soft delete del Transfer y todos sus pagos asociados.
+
+        IMPORTANTE: Usamos soft delete consistente para mantener
+        integridad del historial de pagos.
+        """
+        from django.db import transaction
+
+        with transaction.atomic():
+            # Soft delete de todos los pagos asociados (no hard delete)
+            for payment in self.payments.filter(is_deleted=False):
+                payment.delete()
+            super().delete(*args, **kwargs)
 
 
 class TransferPayment(SoftDeleteModel):
-    """Pagos parciales realizados a una transferencia (gasto)"""
+    """
+    Pagos parciales realizados a una transferencia (gasto).
+
+    IMPORTANTE: Los calculos de paid_amount se realizan de forma atomica
+    para prevenir race conditions en escenarios de alta concurrencia.
+    """
     transfer = models.ForeignKey(Transfer, on_delete=models.CASCADE, related_name='payments', verbose_name="Transferencia/Gasto")
     batch_payment = models.ForeignKey('BatchPayment', on_delete=models.CASCADE, null=True, blank=True, related_name='transfer_payments', verbose_name="Pago Agrupado")
     amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto Pagado")
@@ -332,7 +348,7 @@ class TransferPayment(SoftDeleteModel):
     payment_method = models.CharField(max_length=20, choices=Transfer.PAYMENT_METHOD_CHOICES, verbose_name="Método de Pago")
     reference_number = models.CharField(max_length=100, blank=True, verbose_name="Referencia")
     notes = models.TextField(blank=True, verbose_name="Notas")
-    
+
     proof_file = models.FileField(
         upload_to='transfers/payments/',
         null=True,
@@ -340,29 +356,56 @@ class TransferPayment(SoftDeleteModel):
         verbose_name="Comprobante de Pago",
         validators=[validate_document_file]
     )
-    
+
     created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         verbose_name = "Pago a Proveedor"
         verbose_name_plural = "Pagos a Proveedores"
         ordering = ['-payment_date']
-        
+
+    def clean(self):
+        """Validacion de integridad del pago"""
+        super().clean()
+
+        # Validar que el monto no exceda el balance pendiente (solo en creacion)
+        if not self.pk and self.transfer:
+            if self.amount > self.transfer.balance:
+                raise ValidationError({
+                    'amount': f'El monto del pago (${self.amount}) no puede exceder el saldo pendiente (${self.transfer.balance})'
+                })
+
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        # Actualizar total pagado en la transferencia
-        transfer = self.transfer
-        payments = transfer.payments.filter(is_deleted=False)
-        transfer.paid_amount = sum(p.amount for p in payments)
-        transfer.save()
-        
+        from django.db import transaction
+        from django.db.models import Sum
+
+        # Ejecutar validaciones
+        self.full_clean()
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # Actualizar total pagado en la transferencia con lock para prevenir race conditions
+            transfer = Transfer.objects.select_for_update().get(pk=self.transfer_id)
+            total_paid = transfer.payments.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+            transfer.paid_amount = total_paid
+            transfer.save()
+
     def delete(self, *args, **kwargs):
-        super().delete(*args, **kwargs)
-        transfer = self.transfer
-        payments = transfer.payments.filter(is_deleted=False)
-        transfer.paid_amount = sum(p.amount for p in payments)
-        transfer.save()
+        from django.db import transaction
+        from django.db.models import Sum
+
+        with transaction.atomic():
+            super().delete(*args, **kwargs)
+            # Actualizar total pagado en la transferencia con lock
+            transfer = Transfer.objects.select_for_update().get(pk=self.transfer_id)
+            total_paid = transfer.payments.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+            transfer.paid_amount = total_paid
+            transfer.save()
 
 
 class BatchPayment(SoftDeleteModel):
@@ -495,3 +538,333 @@ class BatchPayment(SoftDeleteModel):
             transfers__payments__batch_payment=self,
             transfers__payments__is_deleted=False
         ).distinct()
+
+
+class ProviderCreditNote(SoftDeleteModel):
+    """
+    Notas de Crédito de Proveedores - Sistema ERP Profesional
+
+    Representa una nota de crédito emitida por un proveedor que reduce
+    parcial o totalmente el saldo de una o más facturas (Transfers).
+
+    CASOS DE USO:
+    1. Devolución de mercancía
+    2. Descuento post-venta
+    3. Corrección de errores en factura original
+    4. Bonificaciones comerciales
+
+    FLUJO:
+    1. Se registra la NC con número, monto y motivo
+    2. Se aplica a uno o más Transfers del mismo proveedor
+    3. El sistema actualiza automáticamente los saldos
+    4. Si la NC excede el saldo de un Transfer, el excedente queda como saldo a favor
+
+    VALIDACIONES:
+    - Solo puede aplicarse a Transfers del mismo proveedor
+    - No puede aplicarse a Transfers ya pagados completamente (a menos que genere saldo a favor)
+    - El monto aplicado no puede exceder el monto de la NC
+    - Una NC anulada no puede modificarse
+    """
+
+    STATUS_CHOICES = (
+        ('pendiente', 'Pendiente de Aplicar'),
+        ('parcial', 'Aplicada Parcialmente'),
+        ('aplicada', 'Aplicada Totalmente'),
+        ('anulada', 'Anulada'),
+    )
+
+    REASON_CHOICES = (
+        ('devolucion', 'Devolución de Mercancía'),
+        ('descuento', 'Descuento Comercial'),
+        ('error_factura', 'Error en Factura Original'),
+        ('bonificacion', 'Bonificación'),
+        ('ajuste_precio', 'Ajuste de Precio'),
+        ('garantia', 'Reclamo por Garantía'),
+        ('otro', 'Otro'),
+    )
+
+    # Identificación
+    note_number = models.CharField(
+        max_length=100,
+        verbose_name="Número de Nota de Crédito",
+        help_text="Número fiscal de la NC emitida por el proveedor"
+    )
+
+    # Proveedor emisor
+    provider = models.ForeignKey(
+        Provider,
+        on_delete=models.PROTECT,
+        related_name='credit_notes',
+        verbose_name="Proveedor"
+    )
+
+    # Factura original a la que aplica
+    original_transfer = models.ForeignKey(
+        'Transfer',
+        on_delete=models.PROTECT,
+        related_name='credit_notes',
+        verbose_name="Factura Original",
+        help_text="Factura del proveedor a la que aplica esta NC",
+        null=True,
+        blank=True
+    )
+
+    # Montos
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Total NC"
+    )
+    applied_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Monto Aplicado",
+        help_text="Suma de montos aplicados a facturas"
+    )
+    available_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Saldo Disponible",
+        help_text="Monto pendiente de aplicar"
+    )
+
+    # Fechas
+    issue_date = models.DateField(
+        verbose_name="Fecha de Emisión",
+        help_text="Fecha en que el proveedor emitió la NC"
+    )
+    received_date = models.DateField(
+        default=timezone.now,
+        verbose_name="Fecha de Recepción",
+        help_text="Fecha en que se recibió la NC"
+    )
+
+    # Clasificación
+    reason = models.CharField(
+        max_length=20,
+        choices=REASON_CHOICES,
+        default='otro',
+        verbose_name="Motivo"
+    )
+    reason_detail = models.TextField(
+        blank=True,
+        verbose_name="Detalle del Motivo"
+    )
+
+    # Estado
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pendiente',
+        verbose_name="Estado"
+    )
+
+    # Documento adjunto
+    pdf_file = models.FileField(
+        upload_to='transfers/credit_notes/',
+        null=True,
+        blank=True,
+        verbose_name="Documento PDF",
+        validators=[validate_document_file]
+    )
+
+    # Auditoría
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='provider_credit_notes_created',
+        verbose_name="Registrado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Campos para anulación
+    voided_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Anulación")
+    voided_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='provider_credit_notes_voided',
+        verbose_name="Anulado por"
+    )
+    void_reason = models.TextField(blank=True, verbose_name="Motivo de Anulación")
+
+    class Meta:
+        verbose_name = "Nota de Crédito de Proveedor"
+        verbose_name_plural = "Notas de Crédito de Proveedores"
+        ordering = ['-issue_date', '-created_at']
+        unique_together = [['provider', 'note_number']]  # No duplicar NC del mismo proveedor
+
+    def __str__(self):
+        return f"NC-{self.note_number} - {self.provider.name} - ${self.amount}"
+
+    def save(self, *args, **kwargs):
+        # Calcular saldo disponible
+        self.available_amount = self.amount - self.applied_amount
+
+        # Actualizar estado automáticamente
+        if self.status != 'anulada':
+            if self.applied_amount == 0:
+                self.status = 'pendiente'
+            elif self.applied_amount < self.amount:
+                self.status = 'parcial'
+            else:
+                self.status = 'aplicada'
+
+        super().save(*args, **kwargs)
+
+    def can_apply(self):
+        """Verifica si la NC puede aplicarse a facturas"""
+        return self.status in ['pendiente', 'parcial'] and self.available_amount > 0
+
+    def void(self, user, reason):
+        """
+        Anula la nota de crédito y revierte todas las aplicaciones.
+
+        Args:
+            user: Usuario que anula
+            reason: Motivo de anulación
+        """
+        if self.status == 'anulada':
+            raise ValidationError("Esta nota de crédito ya está anulada")
+
+        # Revertir todas las aplicaciones
+        for application in self.applications.filter(is_deleted=False):
+            application.revert()
+
+        # Marcar como anulada
+        self.status = 'anulada'
+        self.voided_at = timezone.now()
+        self.voided_by = user
+        self.void_reason = reason
+        self.applied_amount = Decimal('0.00')
+        self.save()
+
+    def get_affected_transfers(self):
+        """Retorna los Transfers afectados por esta NC"""
+        return Transfer.objects.filter(
+            credit_note_applications__credit_note=self,
+            credit_note_applications__is_deleted=False
+        ).distinct()
+
+
+class CreditNoteApplication(SoftDeleteModel):
+    """
+    Aplicación de Nota de Crédito a un Transfer específico.
+
+    Permite aplicar una NC a múltiples facturas del proveedor,
+    distribuyendo el monto según necesidad.
+    """
+
+    credit_note = models.ForeignKey(
+        ProviderCreditNote,
+        on_delete=models.CASCADE,
+        related_name='applications',
+        verbose_name="Nota de Crédito"
+    )
+
+    transfer = models.ForeignKey(
+        Transfer,
+        on_delete=models.PROTECT,
+        related_name='credit_note_applications',
+        verbose_name="Factura/Gasto"
+    )
+
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Aplicado"
+    )
+
+    applied_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Aplicación")
+    applied_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name="Aplicado por"
+    )
+
+    notes = models.TextField(blank=True, verbose_name="Notas")
+
+    class Meta:
+        verbose_name = "Aplicación de NC"
+        verbose_name_plural = "Aplicaciones de NC"
+        ordering = ['-applied_at']
+
+    def __str__(self):
+        return f"{self.credit_note.note_number} -> {self.transfer.invoice_number or self.transfer.id} (${self.amount})"
+
+    def clean(self):
+        """Validaciones de integridad"""
+        # Validar que el proveedor coincida
+        if self.credit_note.provider != self.transfer.provider:
+            raise ValidationError(
+                "La nota de crédito solo puede aplicarse a facturas del mismo proveedor"
+            )
+
+        # Validar que la NC tenga saldo disponible
+        if self.pk is None:  # Solo en creación
+            if self.amount > self.credit_note.available_amount:
+                raise ValidationError(
+                    f"El monto excede el saldo disponible de la NC (${self.credit_note.available_amount})"
+                )
+
+        # Validar que no exceda el saldo del Transfer
+        if self.amount > self.transfer.balance:
+            raise ValidationError(
+                f"El monto excede el saldo pendiente de la factura (${self.transfer.balance})"
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+
+        if is_new:
+            # Actualizar monto aplicado en la NC
+            self.credit_note.applied_amount += self.amount
+            self.credit_note.save()
+
+            # Crear un TransferPayment para reflejar la reducción de saldo
+            TransferPayment.objects.create(
+                transfer=self.transfer,
+                amount=self.amount,
+                payment_date=self.credit_note.issue_date,
+                payment_method='nota_credito',
+                reference_number=self.credit_note.note_number,
+                notes=f"Aplicación de NC: {self.credit_note.note_number}",
+                created_by=self.applied_by
+            )
+
+    def revert(self):
+        """Revierte esta aplicación"""
+        # Buscar y eliminar el TransferPayment asociado
+        TransferPayment.objects.filter(
+            transfer=self.transfer,
+            payment_method='nota_credito',
+            reference_number=self.credit_note.note_number,
+            amount=self.amount,
+            is_deleted=False
+        ).update(is_deleted=True, deleted_at=timezone.now())
+
+        # Actualizar el Transfer
+        self.transfer.refresh_from_db()
+        payments = self.transfer.payments.filter(is_deleted=False)
+        self.transfer.paid_amount = sum(p.amount for p in payments)
+        self.transfer.save()
+
+        # Actualizar la NC
+        self.credit_note.applied_amount -= self.amount
+        self.credit_note.save()
+
+        # Marcar como eliminada
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        super(SoftDeleteModel, self).save(update_fields=['is_deleted', 'deleted_at'])

@@ -370,9 +370,27 @@ function Users() {
 
     if (loading) {
         return (
-            <div className="space-y-6">
-                <Skeleton className="h-10 w-64" />
-                <SkeletonTable rows={5} columns={5} />
+            <div className="space-y-6 animate-pulse mt-2">
+                {/* KPIs Skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-24 rounded-xl" />
+                    ))}
+                </div>
+
+                {/* Table Skeleton */}
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-slate-100 flex gap-4 justify-between">
+                        <Skeleton className="h-9 flex-1 max-w-lg rounded-lg" />
+                        <div className="flex gap-2">
+                            <Skeleton className="h-9 w-24 rounded-lg" />
+                            <Skeleton className="h-9 w-32 rounded-lg" />
+                        </div>
+                    </div>
+                    <div className="p-0">
+                        <SkeletonTable rows={5} columns={6} />
+                    </div>
+                </div>
             </div>
         );
     }

@@ -46,6 +46,29 @@ import toast from "react-hot-toast";
 import ServiceOrderDetail from "../components/ServiceOrderDetail";
 import { formatCurrency, formatDate, cn } from "../lib/utils";
 
+// ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
+
 /**
  * ServiceOrders - Rediseño Corporativo SaaS
  * Bloque Estratégico (Arriba) | Bloque Operativo (Abajo)
@@ -125,17 +148,17 @@ const KPICard = ({
     trend,
 }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 mb-1 truncate" title={label}>
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -465,7 +488,7 @@ const ServiceOrders = () => {
                         <ArrowUpRight className="w-3 h-3 opacity-50" />
                     </button>
                     <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                        {formatDate(row.created_at, { format: "short" })}
+                        {formatDateSafe(row.created_at)}
                     </span>
                 </div>
             ),
@@ -513,7 +536,7 @@ const ServiceOrders = () => {
             sortable: false,
             cell: (row) => (
                 <div className="text-xs font-medium text-slate-600">
-                    {formatDate(row.eta + "T00:00:00", { format: "short" })}
+                    {formatDateSafe(row.eta)}
                 </div>
             ),
         },
@@ -637,10 +660,10 @@ const ServiceOrders = () => {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            
-            {/* Bloque Superior (Estratégico): KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+
+            {/* Bloque Superior (Estratégico): KPIs - Responsive */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total órdenes"
                     value={kpis.total}
@@ -669,13 +692,13 @@ const ServiceOrders = () => {
             </div>
 
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                
-                {/* Barra de Herramientas Unificada */}
-                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                    
-                    {/* Izquierda: Buscador y Filtros */}
-                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-2xl">
+            <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
+
+                {/* Barra de Herramientas - Responsive: columna en móvil, fila en desktop */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-slate-50/30">
+
+                    {/* Izquierda: Búsqueda y Filtros */}
+                    <div className="flex items-center gap-2 sm:gap-3 flex-1 lg:max-w-xl">
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                             <input
@@ -683,7 +706,7 @@ const ServiceOrders = () => {
                                 placeholder="Buscar por OS, cliente, DUCA..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
                         <Button
@@ -691,24 +714,22 @@ const ServiceOrders = () => {
                             size="sm"
                             onClick={() => setIsFiltersOpen(!isFiltersOpen)}
                             className={cn(
-                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all whitespace-nowrap",
+                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
                                 isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
                             )}
                         >
-                            <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            Filtros
+                            <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
+                            <span className="hidden sm:inline">Filtros</span>
                             {activeFiltersCount > 0 && (
-                                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
+                                <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
                                     {activeFiltersCount}
                                 </span>
                             )}
                         </Button>
                     </div>
-                    
-                    {/* Derecha: Botones de Acción Operativa */}
-                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
 
+                    {/* Derecha: Botones de Acción */}
+                    <div className="flex items-center gap-2 sm:gap-3 justify-end lg:justify-end">
                         <ExportButton
                             onExportAll={() => handleExportExcel("all")}
                             onExportFiltered={() => handleExportExcel("filtered")}
@@ -716,17 +737,17 @@ const ServiceOrders = () => {
                             totalCount={orders.length}
                             isExporting={isExporting}
                             allLabel="Todas las Órdenes"
-                            allDescription="Exportar el registro completo de órdenes de servicio"
-                            filteredLabel="Órdenes Filtradas"
-                            filteredDescription="Exportar solo las órdenes visibles actualmente"
+                            allDescription="Exportar registro completo"
+                            filteredLabel="Filtradas"
+                            filteredDescription="Solo visibles"
                         />
 
                         <Button
                             size="sm"
                             onClick={() => setIsCreateModalOpen(true)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
                         >
-                            <Plus className="w-3.5 h-3.5 mr-2" />
+                            <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
                             Nueva Orden
                         </Button>
                     </div>

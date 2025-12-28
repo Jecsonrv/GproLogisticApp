@@ -140,15 +140,22 @@ const SelectERP = ({
                                     value !== undefined &&
                                     value !== "" &&
                                     !disabled && (
-                                        <button
-                                            type="button"
+                                        <span
+                                            role="button"
+                                            tabIndex={0}
                                             onClick={handleClear}
-                                            className="pointer-events-auto rounded p-0.5 hover:bg-slate-100 transition-colors"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    handleClear(e);
+                                                }
+                                            }}
+                                            className="pointer-events-auto rounded p-0.5 hover:bg-slate-100 transition-colors cursor-pointer"
                                         >
                                             <XMarkIcon
                                                 className={`${currentSize.icon} text-slate-400 hover:text-slate-600`}
                                             />
-                                        </button>
+                                        </span>
                                     )}
                                 {/* Icono chevron */}
                                 <ChevronUpDownIcon

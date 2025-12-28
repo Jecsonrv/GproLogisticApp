@@ -56,6 +56,31 @@ import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
 
 // ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        // Asegurar que solo tomamos la parte de la fecha YYYY-MM-DD
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            // Meses en JS son 0-11
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
+
+// ============================================
 // STATUS CONFIGURATION
 // ============================================
 const INVOICE_STATUS = {
@@ -680,7 +705,9 @@ function AccountStatements() {
 
     // Aging Analysis (Antigüedad de Cuentas por Cobrar)
     const agingData = useMemo(() => {
-        const today = new Date();
+        // Usar fecha local sin hora para evitar problemas de zona horaria
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const aging = {
             current: { count: 0, amount: 0, invoices: [] }, // 0-30 días
             days30: { count: 0, amount: 0, invoices: [] }, // 31-60 días
@@ -696,7 +723,9 @@ function AccountStatements() {
                     parseFloat(inv.balance) > 0
             )
             .forEach((inv) => {
-                const dueDate = new Date(inv.due_date);
+                // Parsear fecha sin problemas de zona horaria
+                const [year, month, day] = inv.due_date.split('-').map(Number);
+                const dueDate = new Date(year, month - 1, day);
                 const diffTime = today - dueDate;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 const balance = parseFloat(inv.balance);
@@ -799,7 +828,7 @@ function AccountStatements() {
                         </span>
                     )}
                     <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                        {formatDate(row.issue_date, { format: "short" })}
+                        {formatDateSafe(row.issue_date)}
                     </span>
                 </div>
             ),
@@ -809,25 +838,46 @@ function AccountStatements() {
             accessor: "due_date",
             sortable: false,
             cell: (row) => {
-                const isOverdue =
-                    row.due_date &&
-                    new Date(row.due_date) < new Date() &&
-                    row.status !== "paid";
+                let isOverdue = false;
+                let formattedDueDate = "-";
+                
+                if (row.due_date) {
+                    // Parseo seguro sin timezone shift
+                    const [year, month, day] = row.due_date.split('-').map(Number);
+                    const dueDateObj = new Date(year, month - 1, day);
+                    
+                    // Formateo para display
+                    formattedDueDate = formatDateSafe(row.due_date);
+
+                    // Lógica de vencimiento (comparar con hoy sin horas)
+                    if (row.status !== "paid") {
+                        const now = new Date();
+                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        isOverdue = dueDateObj < today;
+                    }
+                }
+
                 return (
-                    <div className="flex flex-col">
-                        <span
-                            className={cn(
-                                "text-xs font-medium tabular-nums",
-                                isOverdue ? "text-red-600" : "text-slate-600"
-                            )}
-                        >
-                            {row.due_date
-                                ? formatDate(row.due_date, { format: "short" })
-                                : "—"}
-                        </span>
-                        {isOverdue && (
-                            <span className="text-[9px] text-red-500 font-bold uppercase">
-                                Vencida
+                    <div className="py-1">
+                        {row.due_date ? (
+                            <>
+                                <div
+                                    className={cn(
+                                        "text-[11px] font-semibold tabular-nums",
+                                        isOverdue ? "text-red-600" : "text-slate-500"
+                                    )}
+                                >
+                                    {formattedDueDate}
+                                </div>
+                                {isOverdue && (
+                                    <div className="text-[9px] text-red-600 font-bold uppercase tracking-tight">
+                                        {row.days_overdue === 1 ? 'Venció ayer' : `${row.days_overdue}d vencida`}
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <span className="text-[10px] text-slate-400 font-medium italic">
+                                Sin fecha
                             </span>
                         )}
                     </div>
@@ -904,7 +954,7 @@ function AccountStatements() {
                                     e.stopPropagation();
                                     window.open(row.pdf_file, "_blank");
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                                 title="Ver PDF"
                             >
                                 <FileText className="w-4 h-4" />
@@ -986,13 +1036,13 @@ function AccountStatements() {
         {
             header: "Fecha",
             accessor: "date",
-            cell: (row) => formatDate(row.date, { format: "short" }),
+            cell: (row) => formatDateSafe(row.date),
         },
         {
             header: "ETA",
             accessor: "eta",
             cell: (row) =>
-                row.eta ? formatDate(row.eta, { format: "short" }) : "—",
+                row.eta ? formatDateSafe(row.eta) : "—",
         },
         {
             header: "DUCA",
@@ -1018,15 +1068,48 @@ function AccountStatements() {
     if (loading) {
         return (
             <div className="space-y-6">
-                <Skeleton className="h-10 w-64" />
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="space-y-4">
-                        {[1, 2, 3, 4].map((i) => (
-                            <Skeleton key={i} className="h-24" />
-                        ))}
+                {/* Header Skeleton */}
+                <div className="flex justify-end gap-2">
+                    <Skeleton className="h-9 w-24" />
+                    <Skeleton className="h-9 w-28" />
+                    <Skeleton className="h-9 w-40" />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Sidebar Skeleton */}
+                    <div className="lg:col-span-3 space-y-4">
+                        <Skeleton className="h-10 w-full" />
+                        <div className="space-y-2">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                            ))}
+                        </div>
                     </div>
-                    <div className="lg:col-span-3">
-                        <SkeletonTable rows={6} columns={5} />
+
+                    {/* Main Content Skeleton */}
+                    <div className="lg:col-span-9 space-y-6">
+                        {/* Client Header Card */}
+                        <Skeleton className="h-32 w-full rounded-xl" />
+
+                        {/* KPIs */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            {[1, 2, 3, 4].map((i) => (
+                                <Skeleton key={i} className="h-24 rounded-xl" />
+                            ))}
+                        </div>
+
+                        {/* Aging Analysis */}
+                        <div className="space-y-4">
+                            <Skeleton className="h-6 w-40" />
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                    <Skeleton key={i} className="h-20 rounded-lg" />
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Invoices Table */}
+                        <SkeletonTable rows={6} columns={7} />
                     </div>
                 </div>
             </div>
@@ -1946,7 +2029,7 @@ function AccountStatements() {
 
                         <div>
                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                                <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
                                 Detalle del Ajuste
                             </h4>
 
@@ -2131,10 +2214,7 @@ function AccountStatements() {
                                         Fecha de Emisión
                                     </div>
                                     <div className="text-sm">
-                                        {formatDate(
-                                            selectedInvoice.issue_date,
-                                            { format: "long" }
-                                        )}
+                                        {formatDateSafe(selectedInvoice.issue_date, "long")}
                                     </div>
                                 </div>
                                 <div>
@@ -2143,10 +2223,7 @@ function AccountStatements() {
                                     </div>
                                     <div className="text-sm">
                                         {selectedInvoice.due_date
-                                            ? formatDate(
-                                                  selectedInvoice.due_date,
-                                                  { format: "long" }
-                                              )
+                                            ? formatDateSafe(selectedInvoice.due_date, "long")
                                             : "—"}
                                     </div>
                                 </div>
@@ -2282,12 +2359,7 @@ function AccountStatements() {
                                                             {nc.note_number}
                                                         </td>
                                                         <td className="px-4 py-2.5 text-slate-600">
-                                                            {formatDate(
-                                                                nc.issue_date,
-                                                                {
-                                                                    format: "short",
-                                                                }
-                                                            )}
+                                                            {formatDateSafe(nc.issue_date)}
                                                         </td>
                                                         <td
                                                             className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate"
@@ -2362,10 +2434,7 @@ function AccountStatements() {
                                                         </div>
                                                     </div>
                                                     <div className="text-sm text-slate-500">
-                                                        {formatDate(
-                                                            payment.payment_date,
-                                                            { format: "short" }
-                                                        )}
+                                                        {formatDateSafe(payment.payment_date)}
                                                     </div>
                                                 </div>
                                             )

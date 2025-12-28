@@ -319,90 +319,91 @@ function Dashboard() {
         return (
             <div className="space-y-6">
                 {/* Header Skeleton */}
-                <div className="flex flex-col gap-1">
-                    <Skeleton className="h-7 w-48" />
-                    <Skeleton className="h-4 w-72" />
+                <div className="flex justify-between items-center">
+                    <div className="space-y-2">
+                        <Skeleton className="h-8 w-48" />
+                        <Skeleton className="h-4 w-64" />
+                    </div>
+                    <div className="flex gap-2">
+                        <Skeleton className="h-9 w-24" />
+                        <Skeleton className="h-9 w-24" />
+                        <Skeleton className="h-9 w-28" />
+                    </div>
                 </div>
 
                 {/* KPI Grid Skeleton */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     {[1, 2, 3, 4, 5].map((i) => (
-                        <SkeletonCard key={i} />
+                        <Skeleton key={i} className="h-24 rounded-xl" />
                     ))}
                 </div>
 
                 {/* Charts Skeleton */}
                 <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
-                    <Card className="lg:col-span-4">
-                        <CardHeader>
-                            <Skeleton className="h-5 w-40" />
-                            <Skeleton className="h-4 w-56" />
-                        </CardHeader>
-                        <CardContent>
-                            <Skeleton className="h-[320px] w-full" />
-                        </CardContent>
-                    </Card>
-                    <Card className="lg:col-span-3">
-                        <CardHeader>
-                            <Skeleton className="h-5 w-40" />
-                            <Skeleton className="h-4 w-32" />
-                        </CardHeader>
-                        <CardContent>
-                            <Skeleton className="h-[320px] w-full" />
-                        </CardContent>
-                    </Card>
+                    <Skeleton className="h-[400px] lg:col-span-4 rounded-xl" />
+                    <Skeleton className="h-[400px] lg:col-span-3 rounded-xl" />
+                </div>
+
+                {/* Bottom Tables Skeleton */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Skeleton className="h-[300px] rounded-xl" />
+                    <Skeleton className="h-[300px] rounded-xl" />
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="space-y-4 sm:space-y-6">
+            {/* Header - Responsive */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                 <div>
-                    <h2 className="text-xl font-bold text-slate-900">Panel de Control</h2>
-                    <p className="text-sm text-slate-500">Resumen operativo y financiero</p>
+                    <h2 className="text-lg sm:text-xl font-bold text-slate-900">Panel de Control</h2>
+                    <p className="text-xs sm:text-sm text-slate-500">Resumen operativo y financiero</p>
                 </div>
+                {/* Filtros - Stack en móvil, inline en desktop */}
                 <div className="flex flex-wrap items-center gap-2">
-                    <SelectERP
-                        value={selectedMonth}
-                        onChange={(val) => setSelectedMonth(val)}
-                        options={[
-                            { id: 0, name: "Todo el Año" },
-                            { id: 1, name: "Enero" }, { id: 2, name: "Febrero" },
-                            { id: 3, name: "Marzo" }, { id: 4, name: "Abril" },
-                            { id: 5, name: "Mayo" }, { id: 6, name: "Junio" },
-                            { id: 7, name: "Julio" }, { id: 8, name: "Agosto" },
-                            { id: 9, name: "Septiembre" }, { id: 10, name: "Octubre" },
-                            { id: 11, name: "Noviembre" }, { id: 12, name: "Diciembre" },
-                        ]}
-                        getOptionLabel={(opt) => opt.name}
-                        getOptionValue={(opt) => opt.id}
-                        className="w-32"
-                        size="sm"
-                        isClearable={false}
-                    />
-                    <SelectERP
-                        value={selectedYear}
-                        onChange={(val) => setSelectedYear(val)}
-                        options={Array.from({ length: 5 }, (_, i) => ({
-                            id: new Date().getFullYear() - 2 + i,
-                            name: String(new Date().getFullYear() - 2 + i)
-                        }))}
-                        getOptionLabel={(opt) => opt.name}
-                        getOptionValue={(opt) => opt.id}
-                        className="w-24"
-                        size="sm"
-                        isClearable={false}
-                    />
+                    <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                        <SelectERP
+                            value={selectedMonth}
+                            onChange={(val) => setSelectedMonth(val)}
+                            options={[
+                                { id: 0, name: "Año" },
+                                { id: 1, name: "Ene" }, { id: 2, name: "Feb" },
+                                { id: 3, name: "Mar" }, { id: 4, name: "Abr" },
+                                { id: 5, name: "May" }, { id: 6, name: "Jun" },
+                                { id: 7, name: "Jul" }, { id: 8, name: "Ago" },
+                                { id: 9, name: "Sep" }, { id: 10, name: "Oct" },
+                                { id: 11, name: "Nov" }, { id: 12, name: "Dic" },
+                            ]}
+                            getOptionLabel={(opt) => opt.name}
+                            getOptionValue={(opt) => opt.id}
+                            className="w-20 sm:w-28"
+                            size="sm"
+                            isClearable={false}
+                        />
+                        <SelectERP
+                            value={selectedYear}
+                            onChange={(val) => setSelectedYear(val)}
+                            options={Array.from({ length: 5 }, (_, i) => ({
+                                id: new Date().getFullYear() - 2 + i,
+                                name: String(new Date().getFullYear() - 2 + i)
+                            }))}
+                            getOptionLabel={(opt) => opt.name}
+                            getOptionValue={(opt) => opt.id}
+                            className="w-20 sm:w-24"
+                            size="sm"
+                            isClearable={false}
+                        />
+                    </div>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={fetchDashboardData}
-                        className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 h-9"
+                        className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 h-9 px-2.5 sm:px-3"
                     >
-                        <RefreshCw className="h-3.5 w-3.5" />
+                        <RefreshCw className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <span className="hidden sm:inline">Actualizar</span>
                     </Button>
                 </div>
             </div>
@@ -428,8 +429,8 @@ function Dashboard() {
                 </div>
             )}
 
-            {/* KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* KPI Grid - Responsive: 2 cols en móvil, 3 en tablet, 5 en desktop */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 {kpiCards.map((kpi, index) => (
                     <StatCard
                         key={index}
@@ -439,12 +440,13 @@ function Dashboard() {
                         trend={kpi.trend}
                         trendValue={kpi.trendValue}
                         description={kpi.trend ? "vs mes anterior" : undefined}
+                        compact={true}
                     />
                 ))}
             </div>
 
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+            {/* Charts Row - Stack en móvil */}
+            <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 lg:gap-6">
                 {/* Main Chart - Revenue vs Expenses */}
                 <Card className="lg:col-span-4">
                     <CardHeader>
@@ -452,7 +454,8 @@ function Dashboard() {
                         <CardDescription>Comparativa mensual</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[320px] w-full">
+                        {/* Altura responsive para gráficos */}
+                        <div className="h-[200px] sm:h-[260px] lg:h-[320px] w-full">
                             {chartData.revenueVsExpenses.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <BarChart3 className="h-12 w-12 mb-3 text-slate-300" />
@@ -551,7 +554,8 @@ function Dashboard() {
                         <CardDescription>Comparativa mensual</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[320px] w-full">
+                        {/* Altura responsive para gráficos */}
+                        <div className="h-[200px] sm:h-[260px] lg:h-[320px] w-full">
                             {chartData.monthlyOrders.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <FileText className="h-12 w-12 mb-3 text-slate-300" />

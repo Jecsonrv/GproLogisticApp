@@ -22,7 +22,8 @@ class ClientSerializer(serializers.ModelSerializer):
         if obj.payment_condition != 'credito':
             return 0
         
-        pending_orders = ServiceOrder.objects.filter(client=obj, status='abierta')
+        # CORREGIDO: 'abierta' no es un estado valido. Filtrar ordenes que no estan cerradas
+        pending_orders = ServiceOrder.objects.filter(client=obj).exclude(status='cerrada')
         credit_used = Transfer.objects.filter(
             service_order__in=pending_orders,
             transfer_type='terceros',

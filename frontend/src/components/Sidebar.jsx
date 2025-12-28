@@ -45,7 +45,7 @@ const menuSections = [
                 module: "service_orders", // Todos los operativos
             },
             {
-                name: "Pagos a Proveedores",
+                name: "Gestión de Pagos",
                 path: "/provider-payments",
                 icon: Banknote,
                 module: "provider_payments", // Todos los operativos

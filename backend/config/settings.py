@@ -21,7 +21,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
 
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# Fail loudly if secret key is default in production
+if not DEBUG and SECRET_KEY == 'django-insecure-default-key':
+    raise ValueError("FATAL: You must set a unique SECRET_KEY in production environment!")
+
+# ============================================
+# AWS S3 STORAGE CONFIGURATION (Production)
+# ============================================
+if not DEBUG and os.getenv('AWS_ACCESS_KEY_ID'):
+    AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = 'us-east-1'
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_DEFAULT_ACL = None  # Files are private by default
+    
+    # Static files (CSS, JS) in S3 (Optional, usually Whitenoise handles this well enough for small apps)
+    # STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    
+    # Media files (Uploads) in S3
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -88,39 +109,40 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # ============================================
 # DATABASE CONFIGURATION
 # ============================================
-# Detectar automáticamente qué base de datos usar
-DATABASE_ENGINE = os.getenv('DATABASE_ENGINE', 'sqlite')  # sqlite o postgresql
+import dj_database_url
 
-if DATABASE_ENGINE == 'postgresql' or ENVIRONMENT in ['staging', 'production']:
-    # PostgreSQL - Producción/Staging
+# Detectar automáticamente qué base de datos usar
+# Railway provee DATABASE_URL por defecto
+if 'DATABASE_URL' in os.environ:
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', 'gpro_logistic'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', 'gpro_secure_2024'),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
-            'CONN_MAX_AGE': 60,  # Conexiones persistentes (60 segundos)
-            'CONN_HEALTH_CHECKS': True,  # Django 4.1+
-            'OPTIONS': {
-                'connect_timeout': 10,
-                'client_encoding': 'UTF8',  # Fix para Windows con caracteres especiales
-                # Pool de conexiones y configuración de rendimiento
-                'options': '-c statement_timeout=30000 -c client_encoding=UTF8',
-            },
-            # Configuración para transacciones ACID en operaciones financieras
-            'ATOMIC_REQUESTS': False,  # Manejamos transacciones manualmente donde sea crítico
-        }
+        'default': dj_database_url.config(
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=True
+        )
     }
 else:
-    # SQLite - Desarrollo local
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+    # Fallback para desarrollo local (SQLite o Postgres manual)
+    DATABASE_ENGINE = os.getenv('DATABASE_ENGINE', 'sqlite')
+
+    if DATABASE_ENGINE == 'postgresql':
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': os.getenv('DB_NAME', 'gpro_logistic'),
+                'USER': os.getenv('DB_USER', 'postgres'),
+                'PASSWORD': os.getenv('DB_PASSWORD', 'gpro_secure_2024'),
+                'HOST': os.getenv('DB_HOST', 'localhost'),
+                'PORT': os.getenv('DB_PORT', '5432'),
+            }
         }
-    }
+    else:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
 
 # ============================================
 # REDIS CONFIGURATION (Cache, Sessions, Locks)
@@ -290,3 +312,87 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000'
 ).split(',') if not DEBUG else []
+
+# ============================================
+# SECURITY SETTINGS FOR PRODUCTION
+# ============================================
+if not DEBUG:
+    # HTTPS Settings
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # HSTS (HTTP Strict Transport Security)
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Content Security
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+
+    # Cookie Settings
+    SESSION_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_HTTPONLY = True
+
+# ============================================
+# LOGGING CONFIGURATION
+# ============================================
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file': {
+            'level': 'WARNING',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'django.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'file'] if not DEBUG else ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'apps': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# Create logs directory if it doesn't exist
+import os as os_module
+logs_dir = BASE_DIR / 'logs'
+if not os_module.path.exists(logs_dir):
+    os_module.makedirs(logs_dir, exist_ok=True)
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

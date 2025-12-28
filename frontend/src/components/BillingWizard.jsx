@@ -126,6 +126,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
     const selectedTotals = useMemo(() => {
         let subtotalServicios = 0;
         let subtotalTerceros = 0;
+        let baseGravadaServicios = 0; // Solo servicios con iva_type === 'gravado'
         let iva = 0;
         let total = 0;
 
@@ -139,6 +140,10 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                     // Separar servicios de gastos de terceros
                     if (charge.type === 'service') {
                         subtotalServicios += amount;
+                        // Acumular base gravada solo si el servicio es gravado
+                        if (charge.iva_type === 'gravado') {
+                            baseGravadaServicios += amount;
+                        }
                     } else if (charge.type === 'expense') {
                         subtotalTerceros += amount;
                     }
@@ -152,7 +157,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         const subtotal = subtotalServicios + subtotalTerceros;
 
         // Calcular retención del 1% para Gran Contribuyente
-        // SOLO sobre servicios (NO sobre gastos de terceros)
+        // SOLO sobre la BASE GRAVADA de servicios (NO sobre montos no sujetos/exentos ni gastos de terceros)
         const RETENCION_THRESHOLD = 100.00;
         const RETENCION_RATE = 0.01;
 
@@ -160,8 +165,8 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         const isDTE = formData.invoice_type === 'DTE';
 
         let retencion = 0;
-        if (isGranContribuyente && isDTE && subtotalServicios > RETENCION_THRESHOLD) {
-            retencion = subtotalServicios * RETENCION_RATE;
+        if (isGranContribuyente && isDTE && baseGravadaServicios > RETENCION_THRESHOLD) {
+            retencion = baseGravadaServicios * RETENCION_RATE;
         }
 
         const totalAPagar = total - retencion;
@@ -169,6 +174,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         return {
             subtotalServicios,
             subtotalTerceros,
+            baseGravadaServicios,
             subtotal,
             iva,
             retencion,
@@ -433,77 +439,70 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                     {step === 2 && (
                         <div className="space-y-6">
                             {/* Desglose Fiscal Completo */}
-                            <div className="bg-slate-50 p-5 rounded border border-slate-300">
-                                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-300">
-                                    <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                        Desglose Fiscal
+                            <div className="bg-slate-50 rounded-lg p-5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                                        Resumen de Facturación
                                     </h3>
-                                    <span className="text-xs text-slate-500 font-medium">
-                                        {selectedChargeIds.length} items
+                                    <span className="text-[10px] text-slate-500 font-medium">
+                                        {selectedChargeIds.length} {selectedChargeIds.length === 1 ? 'item' : 'items'}
                                     </span>
                                 </div>
 
                                 <div className="space-y-2">
-                                    {/* Subtotales */}
+                                    {/* Subtotales detallados */}
                                     {selectedTotals.subtotalServicios > 0 && (
-                                        <div className="flex justify-between text-sm py-1">
-                                            <span className="text-slate-600 font-medium">Subtotal Servicios:</span>
-                                            <span className="font-medium text-slate-900 tabular-nums">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Servicios</span>
+                                            <span className="text-slate-700 tabular-nums">
                                                 {formatCurrency(selectedTotals.subtotalServicios)}
                                             </span>
                                         </div>
                                     )}
                                     {selectedTotals.subtotalTerceros > 0 && (
-                                        <div className="flex justify-between text-sm py-1">
-                                            <span className="text-slate-600 font-medium">Gastos Reembolsables:</span>
-                                            <span className="font-medium text-slate-900 tabular-nums">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Gastos Reembolsables</span>
+                                            <span className="text-slate-700 tabular-nums">
                                                 {formatCurrency(selectedTotals.subtotalTerceros)}
                                             </span>
                                         </div>
                                     )}
 
-                                    <div className="flex justify-between text-sm py-1.5 border-t border-slate-300 mt-2">
-                                        <span className="text-slate-700 font-semibold">Subtotal:</span>
-                                        <span className="font-semibold text-slate-900 tabular-nums">
+                                    <div className="flex justify-between text-sm pt-1">
+                                        <span className="text-slate-600 font-medium">Subtotal</span>
+                                        <span className="text-slate-800 tabular-nums font-medium">
                                             {formatCurrency(selectedTotals.subtotal)}
                                         </span>
                                     </div>
 
-                                    <div className="flex justify-between text-sm py-1">
-                                        <span className="text-slate-600 font-medium">IVA (13%):</span>
-                                        <span className="font-medium text-slate-900 tabular-nums">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-500">IVA 13%</span>
+                                        <span className="text-slate-700 tabular-nums">
                                             {formatCurrency(selectedTotals.iva)}
                                         </span>
                                     </div>
 
-                                    <div className="flex justify-between text-sm py-1.5 border-t border-slate-300 mt-2">
-                                        <span className="text-slate-800 font-semibold">Total Bruto:</span>
-                                        <span className="text-slate-900 font-semibold tabular-nums">
-                                            {formatCurrency(selectedTotals.total)}
+                                    {/* Retención si aplica */}
+                                    {selectedTotals.retencion > 0 && (
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Retención 1%</span>
+                                            <span className="text-slate-600 tabular-nums">
+                                                − {formatCurrency(selectedTotals.retencion)}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Total Final */}
+                                <div className="mt-4 pt-3 border-t border-slate-200">
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                            {selectedTotals.retencion > 0 ? 'Total a Cobrar' : 'Total Factura'}
+                                        </span>
+                                        <span className="text-xl font-bold text-slate-900 tabular-nums">
+                                            {formatCurrency(selectedTotals.retencion > 0 ? selectedTotals.totalAPagar : selectedTotals.total)}
                                         </span>
                                     </div>
-
-                                    {/* Retención 1% */}
-                                    {selectedTotals.retencion > 0 && (
-                                        <>
-                                            <div className="flex justify-between text-sm py-1 border-t border-slate-300 mt-2">
-                                                <span className="font-medium flex items-center gap-1 text-slate-600">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    Retención 1%:
-                                                </span>
-                                                <span className="font-medium tabular-nums text-slate-700">
-                                                    - {formatCurrency(selectedTotals.retencion)}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex justify-between text-base py-2.5 border-t-2 border-slate-400 mt-3 bg-slate-100 -mx-5 px-5">
-                                                <span className="font-bold text-slate-800 uppercase text-sm">Total a Pagar:</span>
-                                                <span className="tabular-nums font-bold text-slate-900">
-                                                    {formatCurrency(selectedTotals.totalAPagar)}
-                                                </span>
-                                            </div>
-                                        </>
-                                    )}
                                 </div>
                             </div>
 
@@ -529,12 +528,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <Label className="flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-slate-400" />
-                                        Tipo de Factura
-                                    </Label>
+                                    <Label className="mb-1.5 block">Tipo de Factura</Label>
                                     <SelectERP
                                         options={[
                                             { id: "DTE", name: "DTE (Documento Tributario Electrónico)" },
@@ -559,7 +555,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     )}
                                 </div>
                                 <div>
-                                    <Label>No. DTE / Factura (Opcional)</Label>
+                                    <Label className="mb-1.5 block">No. DTE / Factura (Opcional)</Label>
                                     <Input
                                         value={formData.invoice_number}
                                         onChange={(e) =>
@@ -569,20 +565,17 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             })
                                         }
                                         placeholder="Ej: DTE-12345678"
+                                        className="font-mono"
                                     />
                                     <p className="text-xs text-slate-500 mt-1">
                                         Dejar vacío para generar{" "}
                                         <strong>
                                             PRE-00XXX-{new Date().getFullYear()}
                                         </strong>
-                                        .
                                     </p>
                                 </div>
                                 <div>
-                                    <Label className="flex items-center gap-2">
-                                        <CreditCard className="h-4 w-4 text-slate-400" />
-                                        Condición de Pago
-                                    </Label>
+                                    <Label className="mb-1.5 block">Condición de Pago</Label>
                                     <SelectERP
                                         options={[
                                             { id: "contado", name: "Contado" },
@@ -600,10 +593,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="flex items-center gap-2">
-                                        <Calendar className="h-4 w-4 text-slate-400" />
-                                        Fecha de Emisión
-                                    </Label>
+                                    <Label className="mb-1.5 block">Fecha de Emisión</Label>
                                     <Input
                                         type="date"
                                         value={formData.issue_date}
@@ -616,16 +606,13 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="flex items-center gap-2">
-                                        <Calendar className="h-4 w-4 text-slate-400" />
+                                    <Label className="mb-1.5 block">
                                         Fecha de Vencimiento
-                                        {formData.payment_condition ===
-                                            "credito" &&
-                                            clientCreditDays > 0 && (
-                                                <span className="text-xs font-normal text-slate-400">
-                                                    (+{clientCreditDays} días)
-                                                </span>
-                                            )}
+                                        {formData.payment_condition === "credito" && clientCreditDays > 0 && (
+                                            <span className="text-xs font-normal text-slate-400 ml-1">
+                                                (+{clientCreditDays} días)
+                                            </span>
+                                        )}
                                     </Label>
                                     <Input
                                         type="date"
@@ -637,15 +624,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             })
                                         }
                                     />
-                                    {formData.payment_condition ===
-                                        "contado" && (
+                                    {formData.payment_condition === "contado" && (
                                         <p className="text-xs text-slate-500 mt-1">
                                             Vence el mismo día de emisión
                                         </p>
                                     )}
                                 </div>
-                                <div className="col-span-2">
-                                    <Label>Notas / Observaciones</Label>
+                                <div className="md:col-span-2">
+                                    <Label className="mb-1.5 block">Notas / Observaciones</Label>
                                     <Input
                                         value={formData.notes}
                                         onChange={(e) =>

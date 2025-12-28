@@ -107,30 +107,36 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     };
 
     useEffect(() => {
+        const controller = new AbortController();
         if (orderId) {
-            fetchOrderDetail();
-            fetchServices();
-            fetchProviders();
+            fetchOrderDetail(true, controller.signal);
+            fetchServices(controller.signal);
+            fetchProviders(controller.signal);
         }
+        return () => controller.abort();
     }, [orderId]);
 
     // Fetch client prices when order is loaded (and we know the client)
     useEffect(() => {
+        const controller = new AbortController();
         if (order?.client) {
-            fetchClientPrices(order.client);
+            fetchClientPrices(order.client, controller.signal);
         }
+        return () => controller.abort();
     }, [order?.client]);
 
-    const fetchOrderDetail = async (showLoader = true) => {
+    const fetchOrderDetail = async (showLoader = true, signal) => {
         try {
             if (showLoader) setLoading(true);
             const response = await axios.get(
-                `/orders/service-orders/${orderId}/`
+                `/orders/service-orders/${orderId}/`,
+                { signal }
             );
             setOrder(response.data);
             setCharges(response.data.charges || []);
             setExpenses(response.data.third_party_expenses || []);
         } catch (error) {
+            if (axios.isCancel(error)) return;
             const errorMsg =
                 error.response?.data?.detail ||
                 error.response?.data?.error ||
@@ -141,32 +147,39 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         }
     };
 
-    const fetchServices = async () => {
+    const fetchServices = async (signal) => {
         try {
-            const response = await axios.get("/catalogs/services/activos/");
+            const response = await axios.get("/catalogs/services/activos/", { signal });
             setServices(response.data);
-        } catch {
-            // Silencioso para catálogos secundarios
+        } catch (error) {
+            if (!axios.isCancel(error)) {
+                 // Silencioso para catálogos secundarios
+            }
         }
     };
 
-    const fetchProviders = async () => {
+    const fetchProviders = async (signal) => {
         try {
-            const response = await axios.get("/catalogs/providers/");
+            const response = await axios.get("/catalogs/providers/", { signal });
             setProviders(response.data);
-        } catch {
-            // Silencioso para catálogos secundarios
+        } catch (error) {
+             if (!axios.isCancel(error)) {
+                // Silencioso para catálogos secundarios
+             }
         }
     };
 
-    const fetchClientPrices = async (clientId) => {
+    const fetchClientPrices = async (clientId, signal) => {
         try {
             const response = await axios.get(
-                `/catalogs/client-service-prices/by-client/${clientId}/`
+                `/catalogs/client-service-prices/by-client/${clientId}/`,
+                { signal }
             );
             setClientPrices(response.data);
-        } catch {
-            // Silencioso - precios personalizados son opcionales
+        } catch (error) {
+            if (!axios.isCancel(error)) {
+                // Silencioso - precios personalizados son opcionales
+            }
         }
     };
 
@@ -354,7 +367,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                             {formatCurrency(order.total_amount || 0)}
                         </div>
                     </div>
-                    {onEdit && order.status === "abierta" && (
+                    {onEdit && ['pendiente', 'en_transito', 'en_puerto', 'en_almacen', 'finalizada'].includes(order.status) && (
                         <div className="flex gap-2 mt-1">
                             <Button
                                 size="sm"
@@ -518,7 +531,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         </div>
                                         <div>
                                             <dt className="text-sm font-medium text-slate-500">
-                                                Purchase Order
+                                                Orden de Compra (PO)
                                             </dt>
                                             <dd className="mt-1 text-base text-slate-700">
                                                 {order.purchase_order || "—"}
@@ -777,16 +790,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     min="1"
                                                     step="1"
                                                     value={chargeForm.quantity}
-                                                    onChange={(e) =>
-                                                        setChargeForm({
-                                                            ...chargeForm,
-                                                            quantity:
-                                                                parseFloat(
-                                                                    e.target
-                                                                        .value
-                                                                ) || 1,
-                                                        })
-                                                    }
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        // Solo permitir enteros positivos
+                                                        if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
+                                                            setChargeForm({
+                                                                ...chargeForm,
+                                                                quantity: val,
+                                                            });
+                                                        }
+                                                    }}
                                                     required
                                                 />
                                             </div>
@@ -805,17 +818,19 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         className="pl-7"
                                                         type="number"
                                                         step="0.01"
+                                                        min="0.01"
                                                         value={
                                                             chargeForm.unit_price
                                                         }
-                                                        onChange={(e) =>
-                                                            setChargeForm({
-                                                                ...chargeForm,
-                                                                unit_price:
-                                                                    e.target
-                                                                        .value,
-                                                            })
-                                                        }
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === '' || parseFloat(val) >= 0) {
+                                                                setChargeForm({
+                                                                    ...chargeForm,
+                                                                    unit_price: val,
+                                                                })
+                                                            }
+                                                        }}
                                                         required
                                                     />
                                                 </div>
@@ -825,17 +840,17 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     Descuento (%)
                                                 </Label>
                                                 <Input
-                                                    type="text"
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.01"
                                                     placeholder="0.00"
                                                     value={chargeForm.discount}
                                                     onChange={(e) => {
-                                                        const val =
-                                                            e.target.value;
+                                                        const val = e.target.value;
                                                         if (
                                                             val === "" ||
-                                                            /^\d*\.?\d*$/.test(
-                                                                val
-                                                            )
+                                                            (parseFloat(val) >= 0 && parseFloat(val) <= 100)
                                                         ) {
                                                             setChargeForm({
                                                                 ...chargeForm,
@@ -1026,22 +1041,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         <Input
                                                                             type="number"
                                                                             min="1"
+                                                                            step="1"
                                                                             value={
                                                                                 editChargeForm.quantity
                                                                             }
                                                                             onChange={(
                                                                                 e
-                                                                            ) =>
-                                                                                setEditChargeForm(
-                                                                                    {
-                                                                                        ...editChargeForm,
-                                                                                        quantity:
-                                                                                            e
-                                                                                                .target
-                                                                                                .value,
-                                                                                    }
-                                                                                )
-                                                                            }
+                                                                            ) => {
+                                                                                const val = e.target.value;
+                                                                                if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
+                                                                                    setEditChargeForm(
+                                                                                        {
+                                                                                            ...editChargeForm,
+                                                                                            quantity: val,
+                                                                                        }
+                                                                                    )
+                                                                                }
+                                                                            }}
                                                                             className="w-16 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
@@ -1065,23 +1081,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         <Input
                                                                             type="number"
                                                                             step="0.01"
-                                                                            min="0"
+                                                                            min="0.01"
                                                                             value={
                                                                                 editChargeForm.unit_price
                                                                             }
                                                                             onChange={(
                                                                                 e
-                                                                            ) =>
-                                                                                setEditChargeForm(
-                                                                                    {
-                                                                                        ...editChargeForm,
-                                                                                        unit_price:
-                                                                                            e
-                                                                                                .target
-                                                                                                .value,
-                                                                                    }
-                                                                                )
-                                                                            }
+                                                                            ) => {
+                                                                                const val = e.target.value;
+                                                                                if (val === '' || parseFloat(val) >= 0) {
+                                                                                    setEditChargeForm(
+                                                                                        {
+                                                                                            ...editChargeForm,
+                                                                                            unit_price: val,
+                                                                                        }
+                                                                                    )
+                                                                                }
+                                                                            }}
                                                                             className="w-24 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
@@ -1112,17 +1128,20 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             }
                                                                             onChange={(
                                                                                 e
-                                                                            ) =>
-                                                                                setEditChargeForm(
-                                                                                    {
-                                                                                        ...editChargeForm,
-                                                                                        discount:
-                                                                                            e
-                                                                                                .target
-                                                                                                .value,
-                                                                                    }
-                                                                                )
-                                                                            }
+                                                                            ) => {
+                                                                                const val = e.target.value;
+                                                                                if (
+                                                                                    val === "" ||
+                                                                                    (parseFloat(val) >= 0 && parseFloat(val) <= 100)
+                                                                                ) {
+                                                                                    setEditChargeForm(
+                                                                                        {
+                                                                                            ...editChargeForm,
+                                                                                            discount: val,
+                                                                                        }
+                                                                                    )
+                                                                                }
+                                                                            }}
                                                                             className="w-16 h-7 text-sm text-right"
                                                                         />
                                                                     ) : (
@@ -1328,20 +1347,38 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 0
                                                             );
 
+                                                        // Base gravada: solo items con iva_type === 'gravado'
+                                                        const baseGravada =
+                                                            charges
+                                                                .filter(
+                                                                    (charge) =>
+                                                                        charge.iva_type === "gravado"
+                                                                )
+                                                                .reduce(
+                                                                    (sum, charge) =>
+                                                                        sum +
+                                                                        parseFloat(
+                                                                            charge.amount ||
+                                                                                0
+                                                                        ),
+                                                                    0
+                                                                );
+
                                                         const RETENCION_THRESHOLD = 100.0;
                                                         const RETENCION_RATE = 0.01;
                                                         const isGranContribuyente =
                                                             order.client_is_gran_contribuyente ||
                                                             false;
 
+                                                        // Retención se aplica SOLO sobre la base gravada, no sobre montos no sujetos/exentos
                                                         let retencion = 0;
                                                         if (
                                                             isGranContribuyente &&
-                                                            subtotal >
+                                                            baseGravada >
                                                                 RETENCION_THRESHOLD
                                                         ) {
                                                             retencion =
-                                                                subtotal *
+                                                                baseGravada *
                                                                 RETENCION_RATE;
                                                         }
 

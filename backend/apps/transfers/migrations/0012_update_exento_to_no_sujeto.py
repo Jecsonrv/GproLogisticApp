@@ -9,9 +9,7 @@ def update_exento_to_no_sujeto(apps, schema_editor):
     ya que la opción 'exento' se ha eliminado del sistema.
     """
     Transfer = apps.get_model('transfers', 'Transfer')
-    updated_count = Transfer.objects.filter(customer_iva_type='exento').update(customer_iva_type='no_sujeto')
-    if updated_count > 0:
-        print(f"OK - Se actualizaron {updated_count} registros de 'exento' a 'no_sujeto'")
+    Transfer.objects.filter(customer_iva_type='exento').update(customer_iva_type='no_sujeto')
 
 
 def reverse_update(apps, schema_editor):

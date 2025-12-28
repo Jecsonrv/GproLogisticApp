@@ -9,11 +9,37 @@ import {
     History,
     Plus,
     Package,
+    Banknote,
+    FileText,
+    ExternalLink,
 } from "lucide-react";
 import { Button, Input, Badge, ConfirmDialog, Modal, ModalFooter, PromptDialog } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency } from "../lib/utils";
+import { formatCurrency, formatDate } from "../lib/utils";
+
+// ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
 
 /**
  * InvoiceItemsEditor - Permite editar las líneas de una pre-factura
@@ -500,18 +526,21 @@ const InvoiceItemsEditor = ({
                                                     <div className="flex justify-end">
                                                         <Input
                                                             type="number"
+                                                            min="1"
+                                                            step="1"
                                                             className={`${editInputClass} w-16`}
                                                             value={
                                                                 editForm.quantity
                                                             }
-                                                            onChange={(e) =>
-                                                                setEditForm({
-                                                                    ...editForm,
-                                                                    quantity:
-                                                                        e.target
-                                                                            .value,
-                                                                })
-                                                            }
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
+                                                                    setEditForm({
+                                                                        ...editForm,
+                                                                        quantity: val,
+                                                                    })
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
                                                 </td>
@@ -520,18 +549,20 @@ const InvoiceItemsEditor = ({
                                                         <Input
                                                             type="number"
                                                             step="0.01"
+                                                            min="0.01"
                                                             className={`${editInputClass} w-24`}
                                                             value={
                                                                 editForm.unit_price
                                                             }
-                                                            onChange={(e) =>
-                                                                setEditForm({
-                                                                    ...editForm,
-                                                                    unit_price:
-                                                                        e.target
-                                                                            .value,
-                                                                })
-                                                            }
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (val === '' || parseFloat(val) >= 0) {
+                                                                    setEditForm({
+                                                                        ...editForm,
+                                                                        unit_price: val,
+                                                                    })
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
                                                 </td>
@@ -540,18 +571,25 @@ const InvoiceItemsEditor = ({
                                                         <div className="relative">
                                                             <Input
                                                                 type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                step="0.01"
                                                                 className={`${editInputClass} w-20 pr-5`}
                                                                 value={
                                                                     editForm.discount
                                                                 }
-                                                                onChange={(e) =>
-                                                                    setEditForm({
-                                                                        ...editForm,
-                                                                        discount:
-                                                                            e.target
-                                                                                .value,
-                                                                    })
-                                                                }
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (
+                                                                        val === "" ||
+                                                                        (parseFloat(val) >= 0 && parseFloat(val) <= 100)
+                                                                    ) {
+                                                                        setEditForm({
+                                                                            ...editForm,
+                                                                            discount: val,
+                                                                        });
+                                                                    }
+                                                                }}
                                                             />
                                                             <span className="absolute right-1.5 top-2.5 text-[10px] text-slate-400">%</span>
                                                         </div>
@@ -748,18 +786,21 @@ const InvoiceItemsEditor = ({
                                                         <div className="relative">
                                                             <Input
                                                                 type="number"
+                                                                min="0"
+                                                                step="0.01"
                                                                 className={`${editInputClass} w-28 pr-6`}
                                                                 value={
                                                                     editForm.markup_percentage
                                                                 }
-                                                                onChange={(e) =>
-                                                                    setEditForm({
-                                                                        ...editForm,
-                                                                        markup_percentage:
-                                                                            e.target
-                                                                                .value,
-                                                                    })
-                                                                }
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val === '' || parseFloat(val) >= 0) {
+                                                                        setEditForm({
+                                                                            ...editForm,
+                                                                            markup_percentage: val,
+                                                                        });
+                                                                    }
+                                                                }}
                                                             />
                                                             <span className="absolute right-2 top-2.5 text-xs text-slate-400">
                                                                 %
@@ -881,6 +922,76 @@ const InvoiceItemsEditor = ({
                                                 )}
                                             </>
                                         )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Pagos Recibidos */}
+            {invoice.payments && invoice.payments.length > 0 && (
+                <div>
+                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <Banknote className="h-3.5 w-3.5" />
+                        Pagos Recibidos ({invoice.payments.length})
+                    </h5>
+                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
+                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead className="bg-slate-50/80">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Fecha
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Método
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Referencia
+                                    </th>
+                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
+                                        Monto
+                                    </th>
+                                    <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-24">
+                                        Comprobante
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {invoice.payments.map((payment) => (
+                                    <tr key={payment.id} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 text-slate-700 text-sm">
+                                            {formatDateSafe(payment.payment_date)}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-700 text-sm capitalize">
+                                            {payment.payment_method?.replace("_", " ") || "—"}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-600 text-sm font-mono">
+                                            {payment.reference_number || "—"}
+                                            {payment.notes && (
+                                                <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
+                                                    {payment.notes}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 text-sm">
+                                            {formatCurrency(payment.amount)}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            {payment.receipt_file ? (
+                                                <button
+                                                    onClick={() => window.open(payment.receipt_file, "_blank")}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
+                                                    title="Ver comprobante"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </button>
+                                            ) : (
+                                                <span className="text-slate-300 text-xs">—</span>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

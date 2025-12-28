@@ -44,7 +44,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
     const calculateValues = (expense, adjustment) => {
         const cost = parseFloat(expense.amount);
         const markupPercent = parseFloat(adjustment?.markup_percentage || 0);
-        const ivaType = adjustment?.iva_type || "exento";
+        const ivaType = adjustment?.iva_type || "no_sujeto";
 
         // Precio Base (Venta sin IVA)
         const basePrice = cost * (1 + markupPercent / 100);
@@ -149,7 +149,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
         expenses.forEach((exp) => {
             resetAdjustments[exp.id] = {
                 markup_percentage: 0,
-                iva_type: "exento",
+                iva_type: "no_sujeto",
                 amount_locked: exp.amount_locked || false,
                 is_billed: !!exp.invoice_id,
             };
@@ -169,7 +169,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                     return {
                         expense_id: expense.id,
                         markup_percentage: adj?.markup_percentage || 0,
-                        iva_type: adj?.iva_type || "exento",
+                        iva_type: adj?.iva_type || "no_sujeto",
                         // Compatibilidad legacy
                         applies_iva: adj?.iva_type === "gravado",
                     };
@@ -374,19 +374,22 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                     <Input
                                                         type="number"
                                                         min="0"
-                                                        step="1"
+                                                        step="0.01"
                                                         className="h-8 w-16 text-right px-1 py-1"
                                                         value={
                                                             adjustment.markup_percentage ||
                                                             ""
                                                         }
-                                                        onChange={(e) =>
-                                                            updateAdjustment(
-                                                                expense.id,
-                                                                "markup_percentage",
-                                                                e.target.value
-                                                            )
-                                                        }
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === '' || parseFloat(val) >= 0) {
+                                                                updateAdjustment(
+                                                                    expense.id,
+                                                                    "markup_percentage",
+                                                                    val
+                                                                );
+                                                            }
+                                                        }}
                                                         disabled={
                                                             !isEditable ||
                                                             isBilled
@@ -412,7 +415,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                 <select
                                                     value={
                                                         adjustment.iva_type ||
-                                                        "exento"
+                                                        "no_sujeto"
                                                     }
                                                     onChange={(e) =>
                                                         updateAdjustment(

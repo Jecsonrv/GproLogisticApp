@@ -75,7 +75,7 @@ const CardFooter = React.forwardRef(({ className, ...props }, ref) => (
 CardFooter.displayName = "CardFooter";
 
 /**
- * StatCard - Tarjeta de estadística/KPI
+ * StatCard - Tarjeta de estadística/KPI con soporte responsive
  */
 const StatCard = React.forwardRef(
     (
@@ -88,6 +88,7 @@ const StatCard = React.forwardRef(
             trend,
             trendValue,
             variant = "default",
+            compact = false, // Modo compacto para móviles
             ...props
         },
         ref
@@ -105,21 +106,21 @@ const StatCard = React.forwardRef(
         };
 
         return (
-            <Card ref={ref} className={cn("p-4", className)} {...props}>
-                <div className="flex items-start justify-between">
+            <Card ref={ref} className={cn("p-3 sm:p-4", className)} {...props}>
+                <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                        <p className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide truncate">
                             {title}
                         </p>
-                        <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums tracking-tight">
+                        <p className="text-lg sm:text-2xl font-bold text-slate-900 mt-0.5 sm:mt-1 tabular-nums tracking-tight truncate">
                             {value}
                         </p>
                         {(description || trend) && (
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-1 sm:gap-2 mt-0.5 sm:mt-1">
                                 {trend && trendValue && (
                                     <span
                                         className={cn(
-                                            "text-xs font-medium",
+                                            "text-[10px] sm:text-xs font-medium whitespace-nowrap",
                                             trendColors[trend]
                                         )}
                                     >
@@ -127,7 +128,7 @@ const StatCard = React.forwardRef(
                                     </span>
                                 )}
                                 {description && (
-                                    <span className="text-xs text-slate-500 truncate">
+                                    <span className="text-[10px] sm:text-xs text-slate-500 truncate hidden xs:inline">
                                         {description}
                                     </span>
                                 )}
@@ -135,8 +136,8 @@ const StatCard = React.forwardRef(
                         )}
                     </div>
                     {Icon && (
-                        <div className="flex-shrink-0 p-2 bg-slate-100 rounded">
-                            <Icon className="w-4 h-4 text-slate-500" />
+                        <div className="flex-shrink-0 p-1.5 sm:p-2 bg-slate-100 rounded">
+                            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
                         </div>
                     )}
                 </div>

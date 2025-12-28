@@ -10,9 +10,7 @@ def update_ccf_to_dte(apps, schema_editor):
     CCF ya no existe, ahora el tipo estándar es DTE
     """
     Invoice = apps.get_model('orders', 'Invoice')
-    updated_count = Invoice.objects.filter(invoice_type='CCF').update(invoice_type='DTE')
-    if updated_count > 0:
-        print(f"OK - Se actualizaron {updated_count} facturas de 'CCF' a 'DTE'")
+    Invoice.objects.filter(invoice_type='CCF').update(invoice_type='DTE')
 
 
 def reverse_update(apps, schema_editor):

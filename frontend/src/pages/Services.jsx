@@ -38,6 +38,8 @@ import {
     TabsTrigger,
     TabsContent,
     SelectERP,
+    Skeleton,
+    SkeletonTable,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -826,7 +828,7 @@ const Services = () => {
                                         })
                                     }
                                     rows={2}
-                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-slate-400 focus:ring-0 min-h-[60px]"
+                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition-all focus:border-slate-300 focus:ring-2 focus:ring-slate-100 min-h-[60px] placeholder:text-slate-400"
                                     placeholder="Breve descripción del servicio..."
                                 />
                             </div>
@@ -960,7 +962,7 @@ const Services = () => {
                 <form onSubmit={handleCustomSubmit} className="space-y-6">
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
                             Configuración de Tarifa
                         </h4>
                         <div className="grid grid-cols-12 gap-5">

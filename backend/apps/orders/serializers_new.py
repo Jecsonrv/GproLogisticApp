@@ -510,7 +510,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'invoice_number', 'balance',
+            'id', 'balance',
             'service_order_number', 'service_order_data', 'client_name',
             'status_display', 'invoice_type_display', 'payment_condition_display',
             'created_by_username', 'days_overdue', 'payments',

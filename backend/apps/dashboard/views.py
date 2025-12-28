@@ -132,7 +132,10 @@ class DashboardView(APIView):
                     })
             
             # Status counts (Annual)
-            os_abiertas_month = ServiceOrder.objects.filter(created_at__year=current_year, status='abierta').count()
+            # CORREGIDO: 'abierta' no es un estado valido. Contar todas las ordenes NO cerradas
+            os_abiertas_month = ServiceOrder.objects.filter(
+                created_at__year=current_year
+            ).exclude(status='cerrada').count()
             os_cerradas_month = ServiceOrder.objects.filter(created_at__year=current_year, status='cerrada').count()
             
             # Top Clients (Annual)
@@ -186,12 +189,12 @@ class DashboardView(APIView):
                 transaction_date__month=current_month
             ).aggregate(Sum('amount'))['amount__sum'] or 0
 
+            # CORREGIDO: 'abierta' no es un estado valido. Contar todas las ordenes NO cerradas
             os_abiertas_month = ServiceOrder.objects.filter(
                 created_at__year=current_year,
-                created_at__month=current_month,
-                status='abierta'
-            ).count()
-            
+                created_at__month=current_month
+            ).exclude(status='cerrada').count()
+
             os_cerradas_month = ServiceOrder.objects.filter(
                 created_at__year=current_year,
                 created_at__month=current_month,
@@ -275,11 +278,15 @@ class DashboardView(APIView):
         # Alertas de facturas vencidas
         for invoice in overdue_invoices[:5]:  # Máximo 5 alertas
             days_overdue = (real_today.date() - invoice.due_date).days
+            if days_overdue == 1:
+                message = f'Factura {invoice.invoice_number} venció ayer'
+            else:
+                message = f'Factura {invoice.invoice_number} vencida hace {days_overdue} días'
             alerts.append({
                 'id': f'invoice_overdue_{invoice.id}',
                 'type': 'invoice_overdue',
                 'severity': 'high' if days_overdue > 15 else 'medium',
-                'message': f'Factura {invoice.invoice_number} vencida hace {days_overdue} días',
+                'message': message,
                 'client': invoice.service_order.client.name if invoice.service_order and invoice.service_order.client else 'N/A',
                 'invoice_id': invoice.id,
                 'invoice_number': invoice.invoice_number,
@@ -290,11 +297,17 @@ class DashboardView(APIView):
         # Alertas de facturas próximas a vencer
         for invoice in upcoming_due[:3]:  # Máximo 3 alertas
             days_until_due = (invoice.due_date - real_today.date()).days
+            if days_until_due == 0:
+                message = f'Factura {invoice.invoice_number} vence hoy'
+            elif days_until_due == 1:
+                message = f'Factura {invoice.invoice_number} vence mañana'
+            else:
+                message = f'Factura {invoice.invoice_number} vence en {days_until_due} días'
             alerts.append({
                 'id': f'invoice_due_soon_{invoice.id}',
                 'type': 'invoice_due_soon',
-                'severity': 'medium',
-                'message': f'Factura {invoice.invoice_number} vence en {days_until_due} días',
+                'severity': 'high' if days_until_due == 0 else 'medium',
+                'message': message,
                 'client': invoice.service_order.client.name if invoice.service_order and invoice.service_order.client else 'N/A',
                 'invoice_id': invoice.id,
                 'invoice_number': invoice.invoice_number,

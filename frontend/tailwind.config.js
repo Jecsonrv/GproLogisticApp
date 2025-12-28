@@ -5,6 +5,16 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    // Breakpoints optimizados para ERP responsive
+    screens: {
+      'xs': '375px',    // iPhone SE y móviles pequeños
+      'sm': '640px',    // Móviles grandes / tablets pequeñas
+      'md': '768px',    // Tablets (iPad mini)
+      'lg': '1024px',   // Tablets grandes / laptops pequeñas
+      'xl': '1280px',   // Laptops / desktops
+      '2xl': '1536px',  // Desktops grandes
+      '3xl': '1920px',  // Monitores ultrawide
+    },
     extend: {
       // ============================================
       // DESIGN SYSTEM - GPRO LOGISTIC ERP/CRM

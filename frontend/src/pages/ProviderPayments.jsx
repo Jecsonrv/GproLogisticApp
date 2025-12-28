@@ -25,6 +25,9 @@ import {
     Calendar,
     ArrowUpRight,
     Lock as LockIcon,
+    FileX,
+    RotateCcw,
+    Info,
 } from "lucide-react";
 import {
     Button,
@@ -42,11 +45,37 @@ import {
     ModalFooter,
     FileUpload,
     ConfirmDialog,
+    PromptDialog,
 } from "../components/ui";
 import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+
+// ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        // Asegurar que solo tomamos la parte de la fecha YYYY-MM-DD
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            // Meses en JS son 0-11
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
 
 /**
  * Gestión de Pagos - Rediseño Corporativo SaaS
@@ -140,6 +169,54 @@ const EDIT_STATUS_OPTIONS = [
     { id: "aprobado", name: "Aprobado" },
 ];
 
+// Configuración de estados de Notas de Crédito - Paleta Profesional
+const NC_STATUS_CONFIG = {
+    pendiente: {
+        label: "Pendiente",
+        className: "bg-white border-slate-200 text-slate-600",
+        icon: Clock,
+    },
+    parcial: {
+        label: "Parcial",
+        className: "bg-white border-slate-200 text-slate-700",
+        icon: CreditCard,
+    },
+    aplicada: {
+        label: "Aplicada",
+        className: "bg-white border-slate-200 text-slate-900 font-medium",
+        icon: CheckCircle2,
+    },
+    anulada: {
+        label: "Anulada",
+        className: "bg-slate-50 border-transparent text-slate-400",
+        icon: XCircle,
+    },
+};
+
+const NC_REASON_OPTIONS = [
+    { id: "devolucion", name: "Devolución de Mercancía" },
+    { id: "descuento", name: "Descuento Comercial" },
+    { id: "error_factura", name: "Error en Factura Original" },
+    { id: "bonificacion", name: "Bonificación" },
+    { id: "ajuste_precio", name: "Ajuste de Precio" },
+    { id: "garantia", name: "Reclamo por Garantía" },
+    { id: "otro", name: "Otro" },
+];
+
+const NCStatusBadge = ({ status }) => {
+    const config = NC_STATUS_CONFIG[status] || NC_STATUS_CONFIG.pendiente;
+    const Icon = config.icon;
+    return (
+        <span className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm",
+            config.className
+        )}>
+            {Icon && <Icon className="w-3.5 h-3.5" />}
+            {config.label}
+        </span>
+    );
+};
+
 // ============================================
 // STATUS & TYPE BADGES
 // ============================================
@@ -182,17 +259,17 @@ const KPICard = ({
     icon: Icon,
 }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 mb-1 truncate" title={label}>
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -206,6 +283,7 @@ function ProviderPayments() {
     
     // Data state
     const [payments, setPayments] = useState([]);
+    const [creditNotes, setCreditNotes] = useState([]);
     const [serviceOrders, setServiceOrders] = useState([]);
     const [providers, setProviders] = useState([]);
     const [banks, setBanks] = useState([]);
@@ -213,6 +291,7 @@ function ProviderPayments() {
 
     // UI state
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState("gastos");
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -222,8 +301,30 @@ function ProviderPayments() {
     const [deleteConfirm, setDeleteConfirm] = useState({
         open: false,
         id: null,
+        type: null, // 'payment' | 'credit-note'
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Credit Note states
+    const [isNCModalOpen, setIsNCModalOpen] = useState(false);
+    const [isNCDetailModalOpen, setIsNCDetailModalOpen] = useState(false);
+    const [isApplyNCModalOpen, setIsApplyNCModalOpen] = useState(false);
+    const [isVoidNCDialogOpen, setIsVoidNCDialogOpen] = useState(false);
+    const [selectedNC, setSelectedNC] = useState(null);
+    const [ncForm, setNCForm] = useState({
+        provider: "",
+        transfer: "", // Factura a la que aplica la NC
+        note_number: "",
+        amount: "",
+        issue_date: getTodayDate(),
+        received_date: getTodayDate(),
+        reason: "otro",
+        reason_detail: "",
+        pdf_file: null,
+    });
+    const [pendingTransfers, setPendingTransfers] = useState([]);
+    const [providerTransfers, setProviderTransfers] = useState([]); // Facturas del proveedor seleccionado
+    const [applyFormData, setApplyFormData] = useState([]);
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -290,6 +391,7 @@ function ProviderPayments() {
 
     useEffect(() => {
         fetchPayments();
+        fetchCreditNotes();
         fetchCatalogs();
     }, []);
 
@@ -303,6 +405,15 @@ function ProviderPayments() {
             setPayments([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchCreditNotes = async () => {
+        try {
+            const response = await axios.get("/transfers/provider-credit-notes/");
+            setCreditNotes(response.data || []);
+        } catch {
+            console.error("Error al cargar notas de crédito");
         }
     };
 
@@ -348,6 +459,7 @@ function ProviderPayments() {
 
             await axios.post("/transfers/transfers/", formDataToSend, {
                 headers: { "Content-Type": undefined },
+                _skipErrorToast: true,
             });
 
             toast.success("Pago registrado exitosamente");
@@ -392,20 +504,30 @@ function ProviderPayments() {
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
+                    _skipErrorToast: true,
                 }
             );
 
-            toast.success("Pago actualizado exitosamente");
+            toast.success("Gasto actualizado exitosamente");
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.error ||
-                error.response?.data?.message ||
-                Object.values(error.response?.data || {})[0]?.[0] ||
-                "Error al actualizar pago";
-            toast.error(errorMsg);
+            const errorData = error.response?.data;
+            const errorMsg = errorData?.error || errorData?.message || "Error al actualizar gasto";
+            const errorDetail = errorData?.detail;
+
+            if (errorDetail) {
+                toast.error(
+                    <div>
+                        <p className="font-semibold">{errorMsg}</p>
+                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
+                    </div>,
+                    { duration: 5000 }
+                );
+            } else {
+                toast.error(errorMsg);
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -415,17 +537,218 @@ function ProviderPayments() {
         if (!deleteConfirm.id) return;
 
         try {
-            await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`);
-            toast.success("Pago eliminado correctamente");
-            setDeleteConfirm({ open: false, id: null });
+            if (deleteConfirm.type === 'credit-note') {
+                await axios.delete(`/transfers/provider-credit-notes/${deleteConfirm.id}/`, {
+                    _skipErrorToast: true
+                });
+                toast.success("Nota de crédito eliminada correctamente");
+                fetchCreditNotes();
+            } else {
+                await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`, {
+                    _skipErrorToast: true
+                });
+                toast.success("Gasto eliminado correctamente");
+                fetchPayments();
+            }
+            setDeleteConfirm({ open: false, id: null, type: null });
+        } catch (error) {
+            const errorData = error.response?.data;
+            const errorMsg = errorData?.error || "Error al eliminar";
+            const errorDetail = errorData?.detail;
+
+            if (errorDetail) {
+                toast.error(
+                    <div>
+                        <p className="font-semibold">{errorMsg}</p>
+                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
+                    </div>,
+                    { duration: 5000 }
+                );
+            } else {
+                toast.error(errorMsg);
+            }
+            setDeleteConfirm({ open: false, id: null, type: null });
+        }
+    };
+
+    // =========================================
+    // CREDIT NOTE HANDLERS
+    // =========================================
+    const resetNCForm = () => {
+        setNCForm({
+            provider: "",
+            transfer: "",
+            note_number: "",
+            amount: "",
+            issue_date: getTodayDate(),
+            received_date: getTodayDate(),
+            reason: "otro",
+            reason_detail: "",
+            pdf_file: null,
+        });
+        setProviderTransfers([]);
+        setSelectedNC(null);
+    };
+
+    // Cargar facturas del proveedor seleccionado para NC
+    const fetchProviderTransfersForNC = async (providerId) => {
+        if (!providerId) {
+            setProviderTransfers([]);
+            return;
+        }
+        try {
+            const response = await axios.get("/transfers/transfers/", {
+                params: { provider: providerId }
+            });
+            // Filtrar solo las que tienen saldo o están pendientes/aprobadas
+            const transfers = (response.data || []).filter(t =>
+                t.provider === parseInt(providerId) || t.provider?.id === parseInt(providerId)
+            );
+            setProviderTransfers(transfers);
+        } catch {
+            setProviderTransfers([]);
+        }
+    };
+
+    const handleCreateNC = async (e) => {
+        e.preventDefault();
+        if (isSubmitting) return;
+
+        try {
+            setIsSubmitting(true);
+            const formData = new FormData();
+            formData.append("provider", ncForm.provider);
+            formData.append("note_number", ncForm.note_number);
+            formData.append("amount", ncForm.amount);
+            formData.append("issue_date", ncForm.issue_date);
+            formData.append("received_date", ncForm.received_date);
+            formData.append("reason", ncForm.reason);
+            if (ncForm.transfer) formData.append("original_transfer", ncForm.transfer);
+            if (ncForm.reason_detail) formData.append("reason_detail", ncForm.reason_detail);
+            if (ncForm.pdf_file) formData.append("pdf_file", ncForm.pdf_file);
+
+            await axios.post("/transfers/provider-credit-notes/", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+                _skipErrorToast: true,
+            });
+
+            toast.success("Nota de crédito registrada correctamente");
+            setIsNCModalOpen(false);
+            resetNCForm();
+            fetchCreditNotes();
+            fetchPayments(); // Refrescar pagos también
+        } catch (error) {
+            const errorMsg = error.response?.data?.error ||
+                error.response?.data?.note_number?.[0] ||
+                "Error al registrar nota de crédito";
+            toast.error(errorMsg);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleViewNCDetail = async (nc) => {
+        try {
+            const response = await axios.get(`/transfers/provider-credit-notes/${nc.id}/`);
+            setSelectedNC(response.data);
+            setIsNCDetailModalOpen(true);
+        } catch {
+            toast.error("Error al cargar detalles de la nota de crédito");
+        }
+    };
+
+    const fetchPendingTransfers = async (providerId) => {
+        try {
+            const response = await axios.get(`/transfers/provider-credit-notes/pending_for_provider/`, {
+                params: { provider_id: providerId }
+            });
+            setPendingTransfers(response.data.pending_transfers || []);
+        } catch {
+            setPendingTransfers([]);
+        }
+    };
+
+    const openApplyNCModal = async (nc) => {
+        setSelectedNC(nc);
+        await fetchPendingTransfers(nc.provider);
+        setApplyFormData([]);
+        setIsApplyNCModalOpen(true);
+    };
+
+    const handleApplyNC = async () => {
+        if (!selectedNC || !selectedNC.id || applyFormData.length === 0) return;
+
+        const applications = applyFormData
+            .filter(app => app.amount && parseFloat(app.amount) > 0)
+            .map(app => ({
+                transfer_id: app.transfer_id,
+                amount: parseFloat(app.amount),
+                notes: app.notes || ""
+            }));
+
+        if (applications.length === 0) {
+            toast.error("Debe ingresar al menos un monto a aplicar");
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            await axios.post(`/transfers/provider-credit-notes/${selectedNC.id}/apply/`, {
+                applications
+            }, {
+                _skipErrorToast: true
+            });
+
+            toast.success("Nota de crédito aplicada correctamente");
+            setIsApplyNCModalOpen(false);
+            setSelectedNC(null);
+            setApplyFormData([]);
+            fetchCreditNotes();
             fetchPayments();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.error ||
-                error.response?.data?.message ||
-                Object.values(error.response?.data || {})[0]?.[0] ||
-                "Error al eliminar pago";
+            const errorData = error.response?.data;
+            const errorMsg = errorData?.error || "Error al aplicar nota de crédito";
+            const errorDetail = Array.isArray(errorData?.detail)
+                ? errorData.detail.join(", ")
+                : errorData?.detail;
+
+            if (errorDetail) {
+                toast.error(
+                    <div>
+                        <p className="font-semibold">{errorMsg}</p>
+                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
+                    </div>,
+                    { duration: 5000 }
+                );
+            } else {
+                toast.error(errorMsg);
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleVoidNC = async (reason) => {
+        if (!selectedNC || !selectedNC.id) return;
+
+        try {
+            setIsSubmitting(true);
+            await axios.post(`/transfers/provider-credit-notes/${selectedNC.id}/void/`, {
+                reason
+            }, {
+                _skipErrorToast: true
+            });
+
+            toast.success("Nota de crédito anulada correctamente");
+            setIsNCDetailModalOpen(false);
+            setSelectedNC(null);
+            fetchCreditNotes();
+            fetchPayments();
+        } catch (error) {
+            const errorMsg = error.response?.data?.error || "Error al anular nota de crédito";
             toast.error(errorMsg);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -467,6 +790,7 @@ function ProviderPayments() {
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
+                    _skipErrorToast: true,
                 }
             );
             
@@ -522,6 +846,35 @@ function ProviderPayments() {
     const openDetailModal = (payment) => {
         setSelectedPayment(payment);
         setIsDetailModalOpen(true);
+    };
+
+    const handleApprove = async (payment) => {
+        try {
+            await axios.patch(`/transfers/transfers/${payment.id}/`,
+                { status: 'aprobado' },
+                { _skipErrorToast: true }
+            );
+            toast.success("Gasto aprobado correctamente");
+            fetchPayments();
+            setIsDetailModalOpen(false);
+            setSelectedPayment(null);
+        } catch (error) {
+            const errorData = error.response?.data;
+            const errorMsg = errorData?.error || "Error al aprobar el gasto";
+            const errorDetail = errorData?.detail;
+
+            if (errorDetail) {
+                toast.error(
+                    <div>
+                        <p className="font-semibold">{errorMsg}</p>
+                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
+                    </div>,
+                    { duration: 5000 }
+                );
+            } else {
+                toast.error(errorMsg);
+            }
+        }
     };
 
     const resetForm = () => {
@@ -685,7 +1038,7 @@ function ProviderPayments() {
                         <span className="font-mono text-xs text-slate-400 italic">Administrativo</span>
                     )}
                     <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                        {formatDate(row.transaction_date, { format: "short" })}
+                        {formatDateSafe(row.transaction_date)}
                     </span>
                 </div>
             ),
@@ -819,7 +1172,7 @@ function ProviderPayments() {
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setDeleteConfirm({ open: true, id: row.id });
+                                setDeleteConfirm({ open: true, id: row.id, type: 'payment' });
                             }}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                             title="Eliminar"
@@ -832,12 +1185,174 @@ function ProviderPayments() {
         },
     ];
 
+    // Columnas para tabla de Notas de Crédito
+    const ncColumns = [
+        {
+            header: "N° Nota de Crédito",
+            accessor: "note_number",
+            sortable: false,
+            cell: (row) => (
+                <div className="flex flex-col py-1">
+                    <span className="font-mono font-semibold text-slate-700 text-sm">
+                        {row.note_number}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium mt-0.5">
+                        {formatDateSafe(row.issue_date)}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            header: "Proveedor / Factura",
+            accessor: "provider_name",
+            sortable: false,
+            cell: (row) => (
+                <div className="py-1">
+                    <div className="font-medium text-slate-700 text-sm truncate max-w-[200px]" title={row.provider_name}>
+                        {row.provider_name}
+                    </div>
+                    {row.original_transfer_info ? (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                            Factura: {row.original_transfer_info.invoice_number || `#${row.original_transfer_info.id}`}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] text-slate-400">
+                            Sin factura asociada
+                        </span>
+                    )}
+                </div>
+            ),
+        },
+        {
+            header: "Monto Total",
+            accessor: "amount",
+            className: "w-[130px]",
+            headerClassName: "text-right",
+            sortable: false,
+            cell: (row) => (
+                <div className="text-right py-1">
+                    <span className="font-bold text-slate-700 tabular-nums text-sm">
+                        {formatCurrency(row.amount)}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            header: "Aplicado",
+            accessor: "applied_amount",
+            className: "w-[130px]",
+            headerClassName: "text-right",
+            sortable: false,
+            cell: (row) => (
+                <div className="text-right py-1">
+                    <span className={cn(
+                        "font-semibold tabular-nums text-sm",
+                        parseFloat(row.applied_amount) > 0 ? "text-slate-700" : "text-slate-300"
+                    )}>
+                        {parseFloat(row.applied_amount) > 0 ? formatCurrency(row.applied_amount) : "—"}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            header: "Disponible",
+            accessor: "available_amount",
+            className: "w-[130px]",
+            headerClassName: "text-right",
+            sortable: false,
+            cell: (row) => (
+                <div className="text-right py-1">
+                    <span className={cn(
+                        "font-bold tabular-nums text-sm",
+                        parseFloat(row.available_amount) > 0 ? "text-slate-900" : "text-slate-400"
+                    )}>
+                        {formatCurrency(row.available_amount)}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            header: "Estado",
+            accessor: "status",
+            className: "w-[130px]",
+            sortable: false,
+            cell: (row) => <NCStatusBadge status={row.status} />,
+        },
+        {
+            header: "Acciones",
+            accessor: "actions",
+            className: "w-[140px] text-center",
+            headerClassName: "text-center",
+            sortable: false,
+            cell: (row) => (
+                <div className="grid grid-cols-4 gap-1 w-full max-w-[130px] mx-auto">
+                    <div className="flex justify-center">
+                        {row.status !== 'aplicada' && row.status !== 'anulada' && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openApplyNCModal(row);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                                title="Aplicar NC"
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewNCDetail(row);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Ver Detalle"
+                        >
+                            <Eye className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="flex justify-center">
+                        {row.pdf_file ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(row.pdf_file, "_blank");
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                title="Ver PDF"
+                            >
+                                <FileText className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
+                    <div className="flex justify-center">
+                        {row.status === 'pendiente' && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteConfirm({ open: true, id: row.id, type: 'credit-note' });
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                title="Eliminar"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ),
+        },
+    ];
+
     if (loading && payments.length === 0) {
         return (
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     {[1, 2, 3, 4, 5].map((i) => (
-                        <Skeleton key={i} className="h-20 rounded-xl" />
+                        <Skeleton key={i} className="h-24 rounded-xl" />
                     ))}
                 </div>
                 <SkeletonTable rows={10} columns={7} />
@@ -846,10 +1361,10 @@ function ProviderPayments() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            
-            {/* Bloque Superior (Estratégico): KPIs Compactos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+
+            {/* Bloque Superior (Estratégico): KPIs - Responsive */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Pendientes de pago"
                     value={formatCurrency(kpis.pendiente)}
@@ -877,72 +1392,107 @@ function ProviderPayments() {
                 />
             </div>
 
-            {/* Bloque Inferior (Operativo): Tabla + Acciones */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                
-                {/* Barra de Herramientas Unificada (Buscador + Filtros + Botones de Acción) */}
-                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                    
-                    {/* Izquierda: Buscador y Filtros */}
-                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-2xl">
-                        <div className="relative flex-1 group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por proveedor, OS o factura..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
-                            />
+            {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
+            <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
+
+                {/* Barra de Herramientas Unificada */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/30">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+
+                        {/* Izquierda: Tabs + Búsqueda + Filtros */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
+                            {/* Tabs */}
+                            <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50 w-full sm:w-auto shrink-0">
+                                <button
+                                    onClick={() => setActiveTab("gastos")}
+                                    className={cn(
+                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                        activeTab === "gastos"
+                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                    )}
+                                >
+                                    Gastos
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("nc")}
+                                    className={cn(
+                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                        activeTab === "nc"
+                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                    )}
+                                >
+                                    N. Crédito
+                                </button>
+                            </div>
+
+                            <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0" />
+
+                            {/* Búsqueda + Filtros */}
+                            <div className="flex items-center gap-2 flex-1">
+                                <div className="relative flex-1 group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                                    <input
+                                        type="text"
+                                        placeholder={activeTab === "gastos" ? "Buscar gasto, proveedor, OS..." : "Buscar nota crédito..."}
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                    />
+                                </div>
+                                {activeTab === "gastos" && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                        className={cn(
+                                            "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
+                                            isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                        )}
+                                    >
+                                        <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
+                                        <span className="hidden sm:inline">Filtros</span>
+                                        {activeFiltersCount > 0 && (
+                                            <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
+                                                {activeFiltersCount}
+                                            </span>
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                            className={cn(
-                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all whitespace-nowrap",
-                                isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
-                            )}
-                        >
-                            <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                            Filtros
-                            {activeFiltersCount > 0 && (
-                                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
-                                    {activeFiltersCount}
-                                </span>
-                            )}
-                        </Button>
-                    </div>
-                    
-                    {/* Derecha: Botones de Acción Operativa */}
-                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
 
-                        <ExportButton
-                            onExportAll={() => handleExportExcel("all")}
-                            onExportFiltered={() => handleExportExcel("filtered")}
-                            filteredCount={filteredPayments.length}
-                            totalCount={payments.length}
-                            isExporting={isExporting}
-                            allLabel="Todos los Pagos"
-                            allDescription="Exportar el registro completo de pagos a proveedores"
-                            filteredLabel="Pagos Filtrados"
-                            filteredDescription="Exportar solo los pagos visibles actualmente"
-                        />
+                        {/* Derecha: Acciones */}
+                        <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
+                            {activeTab === "gastos" && (
+                                <ExportButton
+                                    onExportAll={() => handleExportExcel("all")}
+                                    onExportFiltered={() => handleExportExcel("filtered")}
+                                    filteredCount={filteredPayments.length}
+                                    totalCount={payments.length}
+                                    isExporting={isExporting}
+                                    allLabel="Todos los Pagos"
+                                    allDescription="Exportar registro completo"
+                                    filteredLabel="Filtrados"
+                                    filteredDescription="Solo visibles"
+                                />
+                            )}
 
-                        <Button
-                            size="sm"
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            <Plus className="w-3.5 h-3.5 mr-2" />
-                            Nuevo Gasto
-                        </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => activeTab === "gastos" ? setIsCreateModalOpen(true) : setIsNCModalOpen(true)}
+                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
+                            >
+                                <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                {activeTab === "gastos" ? "Nuevo Gasto" : "Nueva NC"}
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Expanded Filters Panel */}
-                {isFiltersOpen && (
+                {/* Advanced Filters Panel - Solo para Gastos */}
+                {isFiltersOpen && activeTab === "gastos" && (
                     <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                             <SelectERP
@@ -998,14 +1548,28 @@ function ProviderPayments() {
                     </div>
                 )}
 
-                <DataTable
-                    data={filteredPayments}
-                    columns={columns}
-                    loading={loading}
-                    searchable={false}
-                    onRowClick={openDetailModal}
-                    emptyMessage="No se encontraron movimientos financieros con los criterios actuales."
-                />
+                {/* Contenido de las Tablas */}
+                <div className="relative min-h-[400px]">
+                    {activeTab === "gastos" ? (
+                        <DataTable
+                            data={filteredPayments}
+                            columns={columns}
+                            loading={loading}
+                            searchable={false}
+                            onRowClick={openDetailModal}
+                            emptyMessage="No se encontraron movimientos financieros con los criterios actuales."
+                        />
+                    ) : (
+                        <DataTable
+                            data={creditNotes}
+                            columns={ncColumns}
+                            loading={loading}
+                            searchable={false}
+                            onRowClick={handleViewNCDetail}
+                            emptyMessage="No hay notas de crédito registradas"
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Create/Edit Modal */}
@@ -1272,7 +1836,7 @@ function ProviderPayments() {
                             <div className="text-right flex flex-col items-end gap-2">
                                 <StatusBadge status={selectedPayment.status} />
                                 <div className="text-xs text-slate-300">
-                                    {formatDate(selectedPayment.transaction_date, { format: "long" })}
+                                    {formatDateSafe(selectedPayment.transaction_date, "long")}
                                 </div>
                             </div>
                         </div>
@@ -1353,18 +1917,73 @@ function ProviderPayments() {
                             </div>
                         )}
 
+                        {/* Notas de Crédito Aplicadas */}
+                        {selectedPayment.credit_notes_applied && selectedPayment.credit_notes_applied.length > 0 && (
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">
+                                    Notas de Crédito Aplicadas
+                                </label>
+                                <div className="space-y-2">
+                                    {selectedPayment.credit_notes_applied.map((nc) => (
+                                        <div
+                                            key={nc.id}
+                                            className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                                                    <CreditCard className="w-4 h-4 text-slate-600" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-700 font-mono">
+                                                        {nc.note_number}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {nc.reason} • {nc.issue_date ? formatDate(nc.issue_date) : "—"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right flex items-center gap-3">
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-800 tabular-nums">
+                                                        {formatCurrency(nc.amount)}
+                                                    </p>
+                                                    <NCStatusBadge status={nc.status} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Botones de Acción */}
-                        <div className="flex items-center justify-end gap-3 mt-6 pt-2">
-                            <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Cerrar</Button>
-                            <Button
-                                onClick={() => {
-                                    setIsDetailModalOpen(false);
-                                    openEditModal(selectedPayment);
-                                }}
-                                className="bg-slate-900 text-white hover:bg-slate-800"
-                            >
-                                Editar Movimiento
-                            </Button>
+                        <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-200">
+                            <div>
+                                {selectedPayment.status === 'pendiente' && (
+                                    <Button
+                                        onClick={() => handleApprove(selectedPayment)}
+                                        className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                                        Aprobar Gasto
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>
+                                    Cerrar
+                                </Button>
+                                <Button
+                                    onClick={() => {
+                                        setIsDetailModalOpen(false);
+                                        openEditModal(selectedPayment);
+                                    }}
+                                    className="bg-slate-900 text-white hover:bg-slate-800"
+                                >
+                                    <Edit2 className="w-4 h-4 mr-2" />
+                                    Editar
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1486,17 +2105,551 @@ function ProviderPayments() {
                 )}
             </Modal>
 
+            {/* Void Credit Note Dialog */}
+            <PromptDialog
+                open={isVoidNCDialogOpen}
+                onClose={() => setIsVoidNCDialogOpen(false)}
+                onConfirm={handleVoidNC}
+                title="Anular Nota de Crédito"
+                description="Por favor, ingrese el motivo de la anulación. Esta acción es irreversible y revertirá todas las aplicaciones."
+                label="Motivo de Anulación"
+                placeholder="Ej: Error en el monto, duplicidad..."
+                confirmText="Anular NC"
+                confirmVariant="destructive"
+                required
+            />
+
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onClose={() => setDeleteConfirm({ open: false, id: null })}
+                onClose={() => setDeleteConfirm({ open: false, id: null, type: null })}
                 title="Confirmar Eliminación"
-                description="¿Estás seguro de que deseas eliminar este registro financiero? Esta acción es permanente y afectará los reportes mensuales."
+                description={deleteConfirm.type === 'credit-note'
+                    ? "¿Estás seguro de que deseas eliminar esta nota de crédito? Esta acción es permanente."
+                    : "¿Estás seguro de que deseas eliminar este registro financiero? Esta acción es permanente y afectará los reportes mensuales."
+                }
                 confirmText="Eliminar Permanentemente"
                 cancelText="Cancelar"
                 variant="danger"
                 onConfirm={handleDelete}
             />
+
+            {/* Modal Nueva Nota de Crédito */}
+            <Modal
+                isOpen={isNCModalOpen}
+                onClose={() => {
+                    setIsNCModalOpen(false);
+                    resetNCForm();
+                }}
+                title="Registrar Nota de Crédito de Proveedor"
+                size="3xl"
+            >
+                <form onSubmit={handleCreateNC} className="space-y-6">
+                    {/* Section 1: Proveedor y Factura */}
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                            Documento de Origen
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div>
+                                <Label className="mb-1.5 block">Proveedor *</Label>
+                                <SelectERP
+                                    value={ncForm.provider}
+                                    onChange={(val) => {
+                                        setNCForm({ ...ncForm, provider: val, transfer: "" });
+                                        fetchProviderTransfersForNC(val);
+                                    }}
+                                    options={providerOptions}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    placeholder="Seleccionar proveedor"
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">Factura Original *</Label>
+                                <SelectERP
+                                    value={ncForm.transfer}
+                                    onChange={(val) => setNCForm({ ...ncForm, transfer: val })}
+                                    options={[
+                                        { id: "", name: "Seleccionar factura..." },
+                                        ...providerTransfers.map(t => ({
+                                            id: String(t.id),
+                                            name: `${t.invoice_number || `ID-${t.id}`} - ${formatCurrency(t.amount)} - ${t.description?.substring(0, 30) || 'Sin descripción'}...`
+                                        }))
+                                    ]}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    disabled={!ncForm.provider}
+                                    placeholder={ncForm.provider ? "Seleccionar factura..." : "Primero seleccione proveedor"}
+                                />
+                                {ncForm.provider && providerTransfers.length === 0 && (
+                                    <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                                        <AlertCircle className="w-3 h-3" />
+                                        Este proveedor no tiene facturas registradas
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Mostrar info de la factura seleccionada */}
+                        {ncForm.transfer && (
+                            <div className="mt-4 p-4 bg-slate-100 border border-slate-300 rounded-lg">
+                                {(() => {
+                                    const selectedTransfer = providerTransfers.find(t => String(t.id) === ncForm.transfer);
+                                    if (!selectedTransfer) return null;
+                                    return (
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Factura Seleccionada</p>
+                                                <p className="text-sm font-medium text-slate-800">
+                                                    {selectedTransfer.invoice_number || `ID-${selectedTransfer.id}`}
+                                                </p>
+                                                <p className="text-xs text-slate-600 mt-0.5">{selectedTransfer.description}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-slate-500">Monto Original</p>
+                                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedTransfer.amount)}</p>
+                                                {parseFloat(selectedTransfer.balance) < parseFloat(selectedTransfer.amount) && (
+                                                    <p className="text-xs text-slate-500 mt-0.5">
+                                                        Saldo: {formatCurrency(selectedTransfer.balance)}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Section 2: Datos de la NC */}
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 pt-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                            Datos de la Nota de Crédito
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
+                            <div>
+                                <Label className="mb-1.5 block">N° Nota de Crédito *</Label>
+                                <Input
+                                    value={ncForm.note_number}
+                                    onChange={(e) => setNCForm({ ...ncForm, note_number: e.target.value })}
+                                    placeholder="Ej: NC-001-2025"
+                                    className="font-mono"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">Monto de la NC *</Label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        value={ncForm.amount}
+                                        onChange={(e) => setNCForm({ ...ncForm, amount: e.target.value })}
+                                        placeholder="0.00"
+                                        className="pl-7 font-mono font-bold text-slate-900"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">Fecha de Emisión</Label>
+                                <Input
+                                    type="date"
+                                    value={ncForm.issue_date}
+                                    onChange={(e) => setNCForm({ ...ncForm, issue_date: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">Fecha de Recepción</Label>
+                                <Input
+                                    type="date"
+                                    value={ncForm.received_date}
+                                    onChange={(e) => setNCForm({ ...ncForm, received_date: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 3: Motivo */}
+                    <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <FileX className="w-3.5 h-3.5" />
+                            Motivo de la Nota de Crédito
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div>
+                                <Label className="mb-1.5 block">Razón *</Label>
+                                <SelectERP
+                                    value={ncForm.reason}
+                                    onChange={(val) => setNCForm({ ...ncForm, reason: val })}
+                                    options={NC_REASON_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">Detalle / Observaciones</Label>
+                                <Input
+                                    value={ncForm.reason_detail}
+                                    onChange={(e) => setNCForm({ ...ncForm, reason_detail: e.target.value })}
+                                    placeholder="Descripción adicional..."
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <Label className="mb-1.5 block">Adjuntar PDF de la NC (Opcional)</Label>
+                                <FileUpload
+                                    accept=".pdf"
+                                    onFileChange={(file) => setNCForm({ ...ncForm, pdf_file: file })}
+                                    helperText="PDF del documento original"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <ModalFooter className="px-0 pb-0">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                setIsNCModalOpen(false);
+                                resetNCForm();
+                            }}
+                            className="text-slate-500 font-semibold"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting || !ncForm.provider || !ncForm.transfer || !ncForm.note_number || !ncForm.amount}
+                            className="bg-slate-900 text-white hover:bg-black min-w-[160px] shadow-lg shadow-slate-200 transition-all active:scale-95"
+                        >
+                            {isSubmitting ? "Registrando..." : "Registrar NC"}
+                        </Button>
+                    </ModalFooter>
+                </form>
+            </Modal>
+
+            {/* Modal Detalle NC */}
+            <Modal
+                isOpen={isNCDetailModalOpen}
+                onClose={() => {
+                    setIsNCDetailModalOpen(false);
+                    setSelectedNC(null);
+                }}
+                title="Detalle de Nota de Crédito"
+                size="2xl"
+            >
+                {selectedNC && (
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700">
+                            <div>
+                                <p className="text-xs font-medium text-slate-400 mb-1">Monto Total</p>
+                                <h2 className="text-3xl font-bold text-white tabular-nums">
+                                    {formatCurrency(selectedNC.amount)}
+                                </h2>
+                            </div>
+                            <div className="text-right flex flex-col items-end gap-2">
+                                <NCStatusBadge status={selectedNC.status} />
+                                <div className="text-xs text-slate-300 font-mono">
+                                    {selectedNC.note_number}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Proveedor</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
+                                        <Building2 className="w-4 h-4 text-slate-600" />
+                                    </div>
+                                    <p className="text-sm font-semibold text-slate-700">{selectedNC.provider_name}</p>
+                                </div>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Motivo</label>
+                                <p className="text-sm font-medium text-slate-700">
+                                    {NC_REASON_OPTIONS.find(r => r.id === selectedNC.reason)?.name || selectedNC.reason}
+                                </p>
+                                {selectedNC.reason_detail && (
+                                    <p className="text-xs text-slate-500 mt-1">{selectedNC.reason_detail}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Factura Original */}
+                        {selectedNC.original_transfer_info && (
+                            <div className="bg-slate-100 rounded-lg p-4 border border-slate-300">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">
+                                    Factura Original Asociada
+                                </label>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800">
+                                            {selectedNC.original_transfer_info.invoice_number || `#${selectedNC.original_transfer_info.id}`}
+                                        </p>
+                                        <p className="text-xs text-slate-600 mt-0.5">{selectedNC.original_transfer_info.description}</p>
+                                    </div>
+                                    <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                        {formatCurrency(selectedNC.original_transfer_info.amount)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Montos */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-center">
+                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Monto Total</label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.amount)}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-center">
+                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Aplicado</label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.applied_amount)}</p>
+                            </div>
+                            <div className="bg-slate-100 rounded-lg p-4 border border-slate-300 text-center">
+                                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Disponible</label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.available_amount)}</p>
+                            </div>
+                        </div>
+
+                        {/* Aplicaciones */}
+                        {selectedNC.applications && selectedNC.applications.length > 0 && (
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">
+                                    Aplicaciones Realizadas
+                                </label>
+                                <div className="space-y-2">
+                                    {selectedNC.applications.map((app, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100">
+                                            <div>
+                                                <p className="text-sm font-medium text-slate-700">
+                                                    Factura: {app.transfer_invoice_number || `#${app.transfer}`}
+                                                </p>
+                                                <p className="text-xs text-slate-500">{formatDate(app.applied_at)}</p>
+                                            </div>
+                                            <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                                {formatCurrency(app.amount)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Info Anulación */}
+                        {selectedNC.status === 'anulada' && (
+                            <div className="bg-slate-100 rounded-lg p-4 border border-slate-300">
+                                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-2">
+                                    Información de Anulación
+                                </label>
+                                <p className="text-sm text-slate-700">{selectedNC.void_reason}</p>
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Anulada el {formatDate(selectedNC.voided_at)} por {selectedNC.voided_by_name}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Botones */}
+                        <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-200">
+                            <div>
+                                {selectedNC.status !== 'aplicada' && selectedNC.status !== 'anulada' && (
+                                    <Button
+                                        onClick={() => {
+                                            setIsNCDetailModalOpen(false);
+                                            openApplyNCModal(selectedNC);
+                                        }}
+                                        className="bg-slate-900 text-white hover:bg-slate-800"
+                                    >
+                                        <RotateCcw className="w-4 h-4 mr-2" />
+                                        Aplicar NC
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {selectedNC.status !== 'anulada' && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setIsVoidNCDialogOpen(true)}
+                                        className="text-slate-600 border-slate-300 hover:bg-slate-100"
+                                    >
+                                        <XCircle className="w-4 h-4 mr-2" />
+                                        Anular NC
+                                    </Button>
+                                )}
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setIsNCDetailModalOpen(false);
+                                        setSelectedNC(null);
+                                    }}
+                                >
+                                    Cerrar
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Modal Aplicar NC */}
+            <Modal
+                isOpen={isApplyNCModalOpen}
+                onClose={() => {
+                    setIsApplyNCModalOpen(false);
+                    setSelectedNC(null);
+                    setApplyFormData([]);
+                    setPendingTransfers([]);
+                }}
+                title="Aplicar Nota de Crédito"
+                size="3xl"
+            >
+                {selectedNC && (
+                    <div className="space-y-6">
+                        {/* Resumen NC */}
+                        <div className="bg-slate-100 rounded-xl p-5 border border-slate-300">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-medium text-slate-500 mb-1">Nota de Crédito</p>
+                                    <p className="font-mono font-bold text-lg text-slate-900">{selectedNC.note_number}</p>
+                                    <p className="text-sm text-slate-600 mt-1">{selectedNC.provider_name}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs font-medium text-slate-500 mb-1">Saldo Disponible</p>
+                                    <p className="text-2xl font-bold tabular-nums text-slate-900">{formatCurrency(selectedNC.available_amount)}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Facturas Pendientes */}
+                        <div>
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Receipt className="w-3.5 h-3.5" />
+                                Facturas Pendientes del Proveedor
+                            </h4>
+
+                            {pendingTransfers.length === 0 ? (
+                                <div className="bg-slate-50 rounded-lg p-6 text-center border border-slate-200">
+                                    <FileX className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                                    <p className="text-sm text-slate-600">No hay facturas pendientes de este proveedor</p>
+                                </div>
+                            ) : (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Factura</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Descripción</th>
+                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Saldo</th>
+                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase w-[140px]">Aplicar</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {pendingTransfers.map((transfer) => {
+                                                const appData = applyFormData.find(a => a.transfer_id === transfer.id) || { amount: '' };
+                                                return (
+                                                    <tr key={transfer.id} className="hover:bg-slate-50/50">
+                                                        <td className="px-4 py-3">
+                                                            <span className="font-mono text-sm font-medium text-slate-700">
+                                                                {transfer.invoice_number || `ID-${transfer.id}`}
+                                                            </span>
+                                                            <span className="text-xs text-slate-400 block mt-0.5">
+                                                                {formatDate(transfer.transaction_date, { format: 'short' })}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="text-sm text-slate-600 truncate block max-w-[200px]" title={transfer.description}>
+                                                                {transfer.description}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className="font-bold text-slate-700 tabular-nums">
+                                                                {formatCurrency(transfer.balance)}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="relative">
+                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    max={Math.min(parseFloat(transfer.balance), parseFloat(selectedNC.available_amount))}
+                                                                    value={appData.amount}
+                                                                    onChange={(e) => {
+                                                                        const newValue = e.target.value;
+                                                                        setApplyFormData(prev => {
+                                                                            const existing = prev.find(a => a.transfer_id === transfer.id);
+                                                                            if (existing) {
+                                                                                return prev.map(a =>
+                                                                                    a.transfer_id === transfer.id
+                                                                                        ? { ...a, amount: newValue }
+                                                                                        : a
+                                                                                );
+                                                                            } else {
+                                                                                return [...prev, { transfer_id: transfer.id, amount: newValue, notes: '' }];
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                    className="w-full pl-6 pr-2 py-1.5 text-sm font-mono border border-slate-200 rounded-md focus:border-slate-400 focus:outline-none text-right"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Resumen de lo que se va a aplicar */}
+                        {applyFormData.length > 0 && (
+                            <div className="bg-slate-100 rounded-lg p-4 border border-slate-300">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-slate-700">Total a Aplicar:</span>
+                                    <span className="text-lg font-bold text-slate-900 tabular-nums">
+                                        {formatCurrency(applyFormData.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0))}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        <ModalFooter className="px-0 pb-0">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                    setIsApplyNCModalOpen(false);
+                                    setSelectedNC(null);
+                                    setApplyFormData([]);
+                                }}
+                                className="text-slate-500 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={handleApplyNC}
+                                disabled={isSubmitting || applyFormData.filter(a => parseFloat(a.amount) > 0).length === 0}
+                                className="bg-slate-900 text-white hover:bg-slate-800 min-w-[160px]"
+                            >
+                                {isSubmitting ? "Aplicando..." : "Confirmar Aplicación"}
+                            </Button>
+                        </ModalFooter>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 }

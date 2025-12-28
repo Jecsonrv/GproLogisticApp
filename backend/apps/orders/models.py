@@ -1,10 +1,15 @@
 from django.db import models
+from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
 from apps.clients.models import Client
 from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank
 from apps.validators import validate_document_file
 from apps.core.models import SoftDeleteModel
+from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
 
 class ServiceOrder(SoftDeleteModel):
     order_number = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Orden")
@@ -314,14 +319,17 @@ class OrderCharge(SoftDeleteModel):
     unit_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.00'))],
+        validators=[MinValueValidator(Decimal('0.01'))],  # Minimo $0.01
         verbose_name="Precio Unitario (Sin IVA)"
     )
     discount = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('100.00'))  # Maximo 100%
+        ],
         verbose_name="Descuento (%)"
     )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))], verbose_name="Subtotal")
@@ -360,12 +368,13 @@ class OrderCharge(SoftDeleteModel):
 
         # Sincronizar iva_type desde el servicio si es nuevo registro
         if not self.pk and self.service:
-            # Usar el iva_type del servicio si está disponible
+            # Usar el iva_type del servicio si esta disponible
             if hasattr(self.service, 'iva_type') and self.service.iva_type:
                 self.iva_type = self.service.iva_type
             else:
                 # Compatibilidad: usar applies_iva para determinar el tipo
-                self.iva_type = 'gravado' if self.service.applies_iva else 'exento'
+                # CORREGIDO: Usar 'no_sujeto' en lugar de 'exento' (que no existe en IVA_TYPE_CHOICES)
+                self.iva_type = 'gravado' if self.service.applies_iva else 'no_sujeto'
 
         # Sincronizar estado de facturación
         if self.invoice:
@@ -378,11 +387,11 @@ class OrderCharge(SoftDeleteModel):
         discount_amount = base_subtotal * (self.discount / Decimal('100.00'))
         self.subtotal = base_subtotal - discount_amount
 
-        # Calcular IVA según tratamiento fiscal
+        # Calcular IVA segun tratamiento fiscal (usando constante centralizada)
         if self.iva_type == 'gravado':
-            self.iva_amount = self.subtotal * Decimal('0.13')
+            self.iva_amount = self.subtotal * IVA_RATE
         else:
-            # Exento o No Sujeto: no aplica IVA
+            # No Sujeto: no aplica IVA
             self.iva_amount = Decimal('0.00')
 
         self.total = self.subtotal + self.iva_amount
@@ -392,7 +401,6 @@ class OrderCharge(SoftDeleteModel):
         """Retorna etiqueta corta para UI"""
         labels = {
             'gravado': 'IVA 13%',
-            'exento': 'Exento',
             'no_sujeto': 'No Sujeto'
         }
         return labels.get(self.iva_type, 'N/A')
@@ -549,13 +557,37 @@ class Invoice(models.Model):
         self.iva_total = self.iva_services + (self.iva_third_party if hasattr(self, 'iva_third_party') else Decimal('0.00'))
 
         # Calcular retención del 1% para Grandes Contribuyentes con DTE
-        # IMPORTANTE: La retención se aplica SOLO sobre SERVICIOS, NO sobre gastos reembolsables a terceros
-        # Aplica solo si el subtotal de servicios (sin IVA) supera $100.00 (Art. 162 Código Tributario El Salvador)
+        # IMPORTANTE: La retención se aplica SOLO sobre la BASE GRAVADA de servicios
+        # Los montos 'exento' y 'no_sujeto' NO deben considerarse para el cálculo de retención
+        # Aplica solo si la base gravada supera $100.00 (Art. 162 Código Tributario El Salvador)
         client = self.service_order.client
 
-        # Usar los métodos del modelo Client para cálculo de retención
-        if self.invoice_type == 'DTE' and client.applies_retention(self.subtotal_services):
-            self.retencion = client.calculate_retention(self.subtotal_services)
+        # Calcular base gravada: solo cargos de servicios con iva_type='gravado'
+        # NOTA: Si es nueva factura (sin pk), los cargos aún no están asignados,
+        # la retención correcta se calculará en calculate_totals() o recalculate_retention()
+        if self.pk:
+            base_gravada_servicios = sum(
+                c.subtotal for c in self.charges.filter(is_deleted=False, iva_type='gravado')
+            ) or Decimal('0.00')
+        else:
+            # Factura nueva: intentar calcular desde la orden de servicio si existe
+            if self.service_order:
+                # Calcular base gravada desde los cargos de la orden que se van a facturar
+                # Solo consideramos los cargos NO facturados (invoice__isnull=True)
+                # y que sean gravados (iva_type='gravado')
+                base_gravada_servicios = sum(
+                    c.subtotal for c in self.service_order.charges.filter(
+                        is_deleted=False, 
+                        iva_type='gravado',
+                        invoice__isnull=True
+                    )
+                ) or Decimal('0.00')
+            else:
+                base_gravada_servicios = Decimal('0.00')
+
+        # Usar los métodos del modelo Client para cálculo de retención sobre BASE GRAVADA
+        if self.invoice_type == 'DTE' and client.applies_retention(base_gravada_servicios):
+            self.retencion = client.calculate_retention(base_gravada_servicios)
         else:
             self.retencion = Decimal('0.00')
 
@@ -563,13 +595,14 @@ class Invoice(models.Model):
         self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
 
         # Actualizar estado
+        today = timezone.localdate()
         if self.balance <= 0 and self.status != 'cancelled':
             self.status = 'paid'
         elif self.paid_amount > 0 and self.balance > 0:
             self.status = 'partial'
         elif self.credited_amount > 0 and self.balance > 0:
             self.status = 'partial'
-        elif self.due_date and self.due_date < timezone.now().date() and self.balance > 0:
+        elif self.due_date and self.due_date < today and self.balance > 0:
             self.status = 'overdue'
         elif self.status != 'cancelled':
             self.status = 'pending'
@@ -656,57 +689,102 @@ class Invoice(models.Model):
         """Calcula cuántos días lleva vencida la factura"""
         if not self.due_date or self.status == 'paid':
             return 0
-        today = timezone.now().date()
+        today = timezone.localdate()
         if today > self.due_date:
             return (today - self.due_date).days
         return 0
 
 
 class CreditNote(SoftDeleteModel):
-    """Nota de Crédito aplicada a una factura"""
+    """
+    Nota de Credito aplicada a una factura.
+
+    VALIDACIONES ATOMICAS:
+    - La suma de todas las NC no puede exceder el total_amount de la factura
+    - Se usa transaccion atomica para prevenir race conditions
+    """
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='credit_notes', verbose_name="Factura")
-    note_number = models.CharField(max_length=50, verbose_name="Número de NC")
-    issue_date = models.DateField(default=timezone.localdate, verbose_name="Fecha de Emisión")
+    note_number = models.CharField(max_length=50, verbose_name="Numero de NC")
+    issue_date = models.DateField(default=timezone.localdate, verbose_name="Fecha de Emision")
     amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto Acreditado")
     reason = models.CharField(max_length=255, verbose_name="Motivo")
-    
+
     pdf_file = models.FileField(
         upload_to='invoices/credit_notes/',
         null=True,
         blank=True,
-        verbose_name="PDF Nota Crédito",
+        verbose_name="PDF Nota Credito",
         validators=[validate_document_file],
-        help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+        help_text="Solo PDF, JPG, PNG. Maximo 5MB"
     )
-    
+
     created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Registrado por")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Nota de Crédito"
-        verbose_name_plural = "Notas de Crédito"
+        verbose_name = "Nota de Credito"
+        verbose_name_plural = "Notas de Credito"
         ordering = ['-issue_date', '-id']
 
     def __str__(self):
         return f"NC {self.note_number} - {self.invoice.invoice_number}"
 
+    def clean(self):
+        """Validacion de integridad de la nota de credito"""
+        super().clean()
+
+        if self.invoice:
+            # Calcular suma de NC existentes (excluyendo esta si es update)
+            existing_nc_amount = self.invoice.credit_notes.filter(
+                is_deleted=False
+            ).exclude(pk=self.pk).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+
+            total_after_this = existing_nc_amount + self.amount
+
+            # Validar que la suma total no exceda el monto facturado
+            if total_after_this > self.invoice.total_amount:
+                max_allowed = self.invoice.total_amount - existing_nc_amount
+                raise ValidationError({
+                    'amount': f'El monto de la NC (${self.amount}) excede el maximo permitido (${max_allowed}). '
+                              f'Total facturado: ${self.invoice.total_amount}, NC existentes: ${existing_nc_amount}'
+                })
+
     def save(self, *args, **kwargs):
-        """Actualiza el monto acreditado de la factura"""
-        super().save(*args, **kwargs)
-        invoice = self.invoice
-        # Sumar solo NC activas (SoftDeleteModel filtra automáticamente, pero usaremos manager normal para seguridad)
-        notes = invoice.credit_notes.filter(is_deleted=False)
-        invoice.credited_amount = sum(n.amount for n in notes)
-        invoice.save()
+        """Actualiza el monto acreditado de la factura con transaccion atomica"""
+        # Ejecutar validaciones
+        self.full_clean()
+
+        with transaction.atomic():
+            # Obtener lock sobre la factura para prevenir race conditions
+            invoice = Invoice.objects.select_for_update().get(pk=self.invoice_id)
+
+            super().save(*args, **kwargs)
+
+            # Recalcular credited_amount usando agregacion
+            total_credited = invoice.credit_notes.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+
+            invoice.credited_amount = total_credited
+            invoice.save()
 
     def delete(self, *args, **kwargs):
-        """Al borrar (soft delete), recalcular saldo de factura"""
-        super().delete(*args, **kwargs)
-        invoice = self.invoice
-        notes = invoice.credit_notes.filter(is_deleted=False)
-        invoice.credited_amount = sum(n.amount for n in notes)
-        invoice.save()
+        """Al borrar (soft delete), recalcular saldo de factura con transaccion atomica"""
+        with transaction.atomic():
+            invoice = Invoice.objects.select_for_update().get(pk=self.invoice_id)
+
+            super().delete(*args, **kwargs)
+
+            # Recalcular credited_amount
+            total_credited = invoice.credit_notes.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+
+            invoice.credited_amount = total_credited
+            invoice.save()
 
 
 class InvoicePayment(SoftDeleteModel):

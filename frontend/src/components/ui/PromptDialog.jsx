@@ -20,6 +20,7 @@ const PromptDialog = ({
     cancelText = "Cancelar",
     required = false,
     type = "text",
+    confirmVariant = "default",
 }) => {
     const [value, setValue] = useState(defaultValue);
 
@@ -65,7 +66,7 @@ const PromptDialog = ({
                     <Button variant="outline" onClick={onClose}>
                         {cancelText}
                     </Button>
-                    <Button onClick={handleConfirm} disabled={required && !value.trim()}>
+                    <Button onClick={handleConfirm} disabled={required && !value.trim()} variant={confirmVariant}>
                         {confirmText}
                     </Button>
                 </DialogFooter>

@@ -16,6 +16,7 @@ import {
     Label,
     Badge,
     Skeleton,
+    SkeletonTable,
     ConfirmDialog,
     SelectERP,
 } from "../components/ui";
@@ -384,7 +385,7 @@ function Catalogs() {
                             case "providerCategories":
                                 return (
                                     <>
-                                        <div className="col-span-12 md:col-span-6">
+                                        <div className="col-span-12">
                                             <Label className="mb-1.5 block">
                                                 Nombre *
                                             </Label>
@@ -660,9 +661,28 @@ function Catalogs() {
     if (loading) {
         return (
             <div className="space-y-6">
-                <Skeleton className="h-10 w-64" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-96 w-full" />
+                {/* Tabs Skeleton */}
+                <div className="flex gap-4 mb-6 p-1 bg-slate-100 rounded-lg w-fit">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                        <Skeleton key={i} className="h-9 w-28 rounded-md bg-slate-200" />
+                    ))}
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col pb-4">
+                    {/* Toolbar Skeleton */}
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
+                        <Skeleton className="h-9 flex-1 max-w-lg rounded-lg" />
+                        <div className="flex gap-2">
+                            <Skeleton className="h-9 w-24 rounded-lg" />
+                            <Skeleton className="h-9 w-32 rounded-lg" />
+                        </div>
+                    </div>
+
+                    {/* Table Skeleton */}
+                    <div className="p-4">
+                        <SkeletonTable rows={10} columns={4} />
+                    </div>
+                </div>
             </div>
         );
     }
@@ -746,7 +766,7 @@ function Catalogs() {
                     "subClients",
                 ].map((tab) => (
                     <TabsContent value={tab} key={tab}>
-                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col pb-4">
                             {/* Barra de Herramientas Unificada */}
                             <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
                                 {/* Izquierda: Buscador */}

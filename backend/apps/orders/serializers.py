@@ -233,7 +233,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
     def get_days_overdue(self, obj):
         from django.utils import timezone
         if obj.due_date and obj.balance > 0:
-            days = (timezone.now().date() - obj.due_date).days
+            today = timezone.localdate()
+            days = (today - obj.due_date).days
             return days if days > 0 else 0
         return 0
 
@@ -285,7 +286,8 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     def get_days_overdue(self, obj):
         from django.utils import timezone
         if obj.due_date and obj.balance > 0:
-            days = (timezone.now().date() - obj.due_date).days
+            today = timezone.localdate()
+            days = (today - obj.due_date).days
             return days if days > 0 else 0
         return 0
 

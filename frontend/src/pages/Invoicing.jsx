@@ -49,6 +49,32 @@ import api from "../lib/axios";
 import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
+import BillingWizard from "../components/BillingWizard";
+
+// ============================================
+// HELPERS
+// ============================================
+const formatDateSafe = (dateStr, variant = "short") => {
+    if (!dateStr) return "—";
+    try {
+        // Asegurar que solo tomamos la parte de la fecha YYYY-MM-DD
+        const dateOnly = String(dateStr).split("T")[0];
+        const parts = dateOnly.split("-");
+        if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            // Meses en JS son 0-11
+            const dateObj = new Date(year, month - 1, day);
+            const options =
+                variant === "long"
+                    ? { day: "2-digit", month: "long", year: "numeric" }
+                    : { day: "2-digit", month: "short", year: "numeric" };
+            return dateObj.toLocaleDateString("es-SV", options);
+        }
+        return formatDate(dateStr, { format: variant });
+    } catch (e) {
+        return dateStr;
+    }
+};
 
 /**
  * Invoicing - Módulo de Facturación y CXC
@@ -140,22 +166,22 @@ const KPICard = ({
     icon: Icon,
 }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-500 mb-1 truncate" title={label}>
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
+                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
                 {subtext && (
-                    <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium mt-0.5 truncate">
                         {subtext}
                     </p>
                 )}
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -189,6 +215,8 @@ const Invoicing = () => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+    const [isBillingWizardOpen, setIsBillingWizardOpen] = useState(false);
+    const [selectedServiceOrderForBilling, setSelectedServiceOrderForBilling] = useState(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isEditingCN, setIsEditingCN] = useState(false);
@@ -225,6 +253,7 @@ const Invoicing = () => {
         payment_method: "transferencia",
         reference: "",
         notes: "",
+        receipt_file: null,
     });
 
     // Generate invoice form
@@ -579,6 +608,7 @@ const Invoicing = () => {
             payment_method: "transferencia",
             reference: "",
             notes: "",
+            receipt_file: null,
         });
         setIsPaymentModalOpen(true);
     };
@@ -596,6 +626,7 @@ const Invoicing = () => {
             pdf_file: null,
             client_name: invoice.client_name,
             service_order_number: invoice.service_order_number,
+            is_dte_issued: invoice.is_dte_issued || false,
         });
         setIsEditModalOpen(true);
     };
@@ -646,9 +677,24 @@ const Invoicing = () => {
         }
 
         try {
+            const formData = new FormData();
+            formData.append("amount", paymentForm.amount);
+            formData.append("payment_date", paymentForm.payment_date);
+            formData.append("payment_method", paymentForm.payment_method);
+            if (paymentForm.reference) {
+                formData.append("reference", paymentForm.reference);
+            }
+            if (paymentForm.notes) {
+                formData.append("notes", paymentForm.notes);
+            }
+            if (paymentForm.receipt_file) {
+                formData.append("receipt_file", paymentForm.receipt_file);
+            }
+
             await api.post(
                 `/orders/invoices/${selectedInvoice.id}/add_payment/`,
-                paymentForm
+                formData,
+                { headers: { "Content-Type": "multipart/form-data" } }
             );
             toast.success("El pago ha sido registrado correctamente.");
             fetchInvoices();
@@ -858,7 +904,7 @@ const Invoicing = () => {
                         {row.note_number}
                     </span>
                     <span className="text-[10px] text-slate-400 font-medium mt-0.5">
-                        {formatDate(row.issue_date, { format: 'short' })}
+                        {formatDateSafe(row.issue_date)}
                     </span>
                 </div>
             ),
@@ -1017,15 +1063,7 @@ const Invoicing = () => {
             sortable: false,
             render: (row) => (
                 <div className="text-[11px] text-slate-500 font-medium tabular-nums py-1">
-                    {row.issue_date
-                        ? new Date(
-                              row.issue_date + "T00:00:00"
-                          ).toLocaleDateString("es-SV", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                          })
-                        : "-"}
+                    {formatDateSafe(row.issue_date)}
                 </div>
             ),
         },
@@ -1045,17 +1083,11 @@ const Invoicing = () => {
                                         : "text-slate-500"
                                 )}
                             >
-                                {new Date(
-                                    row.due_date + "T00:00:00"
-                                ).toLocaleDateString("es-SV", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    year: "numeric",
-                                })}
+                                {formatDateSafe(row.due_date)}
                             </div>
                             {row.days_overdue > 0 && (
                                 <div className="text-[9px] text-red-600 font-bold uppercase tracking-tight">
-                                    {row.days_overdue}d vencida
+                                    {row.days_overdue === 1 ? 'Venció ayer' : `${row.days_overdue}d vencida`}
                                 </div>
                             )}
                         </>
@@ -1167,20 +1199,16 @@ const Invoicing = () => {
                         </button>
                     </div>
                     <div className="flex justify-center">
-                        {!row.is_dte_issued ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenEditModal(row);
-                                }}
-                                title="Editar Factura"
-                                className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                            >
-                                <Edit2 className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <div className="w-7" />
-                        )}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditModal(row);
+                            }}
+                            title={row.is_dte_issued ? "Editar Factura (DTE Emitido)" : "Editar Factura"}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
                     </div>
                     <div className="flex justify-center">
                         <button
@@ -1213,10 +1241,10 @@ const Invoicing = () => {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            
-            {/* Bloque Estratégico (KPIs) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+
+            {/* Bloque Estratégico (KPIs) - Responsive: 2 cols móvil, 3 tablet, 5 desktop */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total facturado"
                     value={formatCurrency(summary.total_invoiced)}
@@ -1249,99 +1277,100 @@ const Invoicing = () => {
             </div>
 
             {/* Bloque Operativo (Tabla + Herramientas) */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                
-                {/* Barra de Herramientas Unificada */}
-                <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                    
-                    {/* Izquierda: Tabs + Buscador + Filtro */}
-                    <div className="flex flex-col sm:flex-row items-center gap-3 flex-1 w-full xl:max-w-4xl">
-                        
-                        {/* Tabs Integradas */}
-                        <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50 shrink-0 w-full sm:w-auto">
-                            <button
-                                onClick={() => setActiveTab("invoices")}
-                                className={cn(
-                                    "flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
-                                    activeTab === "invoices"
-                                        ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                )}
-                            >
-                                Facturas
-                            </button>
-                            <button
-                                onClick={() => setActiveTab("credit-notes")}
-                                className={cn(
-                                    "flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
-                                    activeTab === "credit-notes"
-                                        ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                )}
-                            >
-                                Notas Crédito
-                            </button>
-                        </div>
+            <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
 
-                        <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+                {/* Barra de Herramientas - Responsive */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/30">
 
-                        {/* Search & Filter */}
-                        <div className="flex items-center gap-2 flex-1 w-full">
-                            <div className="relative flex-1 group">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
-                                <input
-                                    placeholder={activeTab === "invoices" ? "Buscar factura, cliente, OS..." : "Buscar nota crédito..."}
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
-                                />
-                            </div>
-                            {activeTab === "invoices" && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                    {/* Fila principal: Tabs + Búsqueda + Acciones (en desktop todo en una fila) */}
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+
+                        {/* Izquierda: Tabs + Búsqueda + Filtros */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
+                            {/* Tabs */}
+                            <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50 w-full sm:w-auto shrink-0">
+                                <button
+                                    onClick={() => setActiveTab("invoices")}
                                     className={cn(
-                                        "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all",
-                                        isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                        activeTab === "invoices"
+                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                     )}
                                 >
-                                    <Filter className="w-3.5 h-3.5 mr-2 text-slate-500" />
-                                    Filtros
-                                    {activeFiltersCount > 0 && (
-                                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
-                                            {activeFiltersCount}
-                                        </span>
+                                    Facturas
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("credit-notes")}
+                                    className={cn(
+                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                        activeTab === "credit-notes"
+                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                     )}
-                                </Button>
-                            )}
+                                >
+                                    N. Crédito
+                                </button>
+                            </div>
+
+                            <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0" />
+
+                            {/* Búsqueda + Filtros */}
+                            <div className="flex items-center gap-2 flex-1">
+                                <div className="relative flex-1 group">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                                    <input
+                                        placeholder={activeTab === "invoices" ? "Buscar factura, cliente, OS..." : "Buscar nota crédito..."}
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                    />
+                                </div>
+                                {activeTab === "invoices" && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                        className={cn(
+                                            "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
+                                            isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                        )}
+                                    >
+                                        <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
+                                        <span className="hidden sm:inline">Filtros</span>
+                                        {activeFiltersCount > 0 && (
+                                            <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
+                                                {activeFiltersCount}
+                                            </span>
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Derecha: Botones de Acción */}
-                    <div className="flex items-center gap-3 w-full xl:w-auto justify-end">
-                        <div className="h-6 w-px bg-slate-200 hidden xl:block" />
+                        {/* Derecha: Acciones */}
+                        <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
+                            <ExportButton
+                                onExportAll={() => handleExportExcel("all")}
+                                onExportFiltered={() => handleExportExcel("filtered")}
+                                filteredCount={filteredInvoices.length}
+                                totalCount={invoices.length}
+                                isExporting={isExporting}
+                                allLabel="Todas las Facturas"
+                                allDescription="Exportar registro completo"
+                                filteredLabel="Filtradas"
+                                filteredDescription="Solo visibles"
+                            />
 
-                        <ExportButton
-                            onExportAll={() => handleExportExcel("all")}
-                            onExportFiltered={() => handleExportExcel("filtered")}
-                            filteredCount={filteredInvoices.length}
-                            totalCount={invoices.length}
-                            isExporting={isExporting}
-                            allLabel="Todas las Facturas"
-                            allDescription="Exportar el registro completo de facturas"
-                            filteredLabel="Facturas Filtradas"
-                            filteredDescription="Exportar solo las facturas visibles actualmente"
-                        />
-
-                        <Button
-                            size="sm"
-                            onClick={() => setIsGenerateModalOpen(true)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            <Plus className="w-3.5 h-3.5 mr-2" />
-                            Nueva Factura
-                        </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => setIsGenerateModalOpen(true)}
+                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
+                            >
+                                <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                Generar Factura
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -1484,7 +1513,7 @@ const Invoicing = () => {
 
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
                             Detalle de la Nota de Crédito
                         </h4>
 
@@ -1569,7 +1598,7 @@ const Invoicing = () => {
                         <Button
                             type="submit"
                             disabled={isSubmitting}
-                            className="bg-purple-600 text-white hover:bg-purple-700 shadow-lg shadow-purple-100 transition-all active:scale-95 min-w-[160px]"
+                            className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
                         >
                             {isSubmitting ? "Procesando..." : isEditingCN ? "Actualizar Nota" : "Registrar Nota"}
                         </Button>
@@ -1679,6 +1708,15 @@ const Invoicing = () => {
                                         placeholder="Detalles adicionales..."
                                     />
                                 </div>
+
+                                <div className="md:col-span-2">
+                                    <Label className="mb-1.5 block">Comprobante de Pago (Opcional)</Label>
+                                    <FileUpload
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onFileChange={(file) => setPaymentForm({ ...paymentForm, receipt_file: file })}
+                                        helperText="PDF o imagen del comprobante de transferencia/depósito"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -1720,219 +1758,62 @@ const Invoicing = () => {
                 )}
             </Modal>
 
-            {/* Generate Invoice Modal */}
+            {/* Select Service Order Modal */}
             <Modal
                 isOpen={isGenerateModalOpen}
                 onClose={() => {
                     setIsGenerateModalOpen(false);
-                    resetGenerateForm();
+                    setSelectedServiceOrderForBilling(null);
                 }}
-                title="Nueva Pre-factura"
-                size="3xl"
+                title="Generar Factura"
+                size="lg"
             >
-                <div className="space-y-6">
-                    {/* Section 1: Origen */}
-                    <div>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                            Selección de Orden
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 gap-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                                <SelectERP
-                                    label="Orden de Servicio"
-                                    value={generateForm.service_order}
-                                    onChange={handleServiceOrderSelect}
-                                    options={[
-                                        { id: "", name: "Seleccionar orden de servicio..." },
-                                        ...allServiceOrders.map((o) => ({
-                                            id: o.id,
-                                            name: `${o.order_number} - ${o.client_name} - ${formatCurrency(o.total_amount || 0)}`,
-                                        })),
-                                    ]}
-                                    getOptionLabel={(opt) => opt.name}
-                                    getOptionValue={(opt) => opt.id}
-                                    searchable
-                                    placeholder="Buscar por número de OS o cliente..."
-                                    required
-                                />
+                <div className="space-y-5">
+                    <p className="text-sm text-slate-600">
+                        Seleccione la orden de servicio para la cual desea generar una factura.
+                    </p>
 
-                                {generateForm.client_name && (
-                                    <div className="mt-6 md:mt-0 p-3 bg-slate-50 border border-slate-200 rounded-md flex items-center gap-3">
-                                        <div className="p-2 bg-white border border-slate-200 rounded-full shrink-0">
-                                            <Building2 className="w-4 h-4 text-slate-500" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-0.5">Cliente de Facturación</span>
-                                            <p className="text-sm font-bold text-slate-900 truncate" title={generateForm.client_name}>{generateForm.client_name}</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                    <div>
+                        <Label className="mb-1.5 block">Orden de Servicio</Label>
+                        <SelectERP
+                            value={selectedServiceOrderForBilling?.id || ""}
+                            onChange={(val) => {
+                                const order = allServiceOrders.find(o => String(o.id) === String(val));
+                                setSelectedServiceOrderForBilling(order || null);
+                            }}
+                            options={[
+                                { id: "", name: "Seleccionar orden de servicio..." },
+                                ...allServiceOrders.map((o) => ({
+                                    id: o.id,
+                                    name: `${o.order_number} - ${o.client_name}`,
+                                })),
+                            ]}
+                            getOptionLabel={(opt) => opt.name}
+                            getOptionValue={(opt) => opt.id}
+                            searchable
+                            placeholder="Buscar por número de OS o cliente..."
+                        />
                     </div>
 
-                    {/* Items to Bill */}
-                    {generateForm.service_order && (
-                        <div>
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 pt-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                Conceptos Facturables
-                            </h4>
-
-                            {loadingItems ? (
-                                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200">
-                                    <RefreshCw className="animate-spin h-8 w-8 text-slate-400 mx-auto mb-3" />
-                                    <p className="text-sm text-slate-500 font-medium">Cargando items disponibles...</p>
-                                </div>
-                            ) : billableItems.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/30">
-                                    <div className="p-3 bg-white rounded-full mb-3 border border-slate-200 shadow-sm">
-                                        <CheckCircle className="w-6 h-6 text-slate-300" />
+                    {selectedServiceOrderForBilling && (
+                        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                        <Receipt className="w-5 h-5 text-slate-500" />
                                     </div>
-                                    <p className="text-sm font-medium text-slate-900">Sin cargos pendientes</p>
-                                    <p className="text-xs text-slate-500 mt-1">Todos los conceptos de esta orden ya han sido facturados.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {/* Items Table - ERP Style */}
-                                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-                                        <div className="overflow-x-auto max-h-[300px]">
-                                            <table className="w-full text-sm">
-                                                <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                                                    <tr>
-                                                        <th className="w-12 p-3 text-center">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedItemIds.length === billableItems.length && billableItems.length > 0}
-                                                                onChange={(e) => setSelectedItemIds(e.target.checked ? billableItems.map((i) => i.id) : [])}
-                                                                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                                            />
-                                                        </th>
-                                                        <th className="text-left p-3 font-bold text-slate-600 uppercase text-[10px] tracking-wider">Detalle del Concepto</th>
-                                                        <th className="text-right p-3 font-bold text-slate-600 uppercase text-[10px] tracking-wider w-32">Total</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {billableItems.map((item) => {
-                                                        const isSelected = selectedItemIds.includes(item.id);
-                                                        return (
-                                                            <tr
-                                                                key={item.id}
-                                                                className={cn("transition-colors cursor-pointer", isSelected ? "bg-blue-50/30" : "hover:bg-slate-50")}
-                                                                onClick={() => {
-                                                                    setSelectedItemIds(prev => prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]);
-                                                                }}
-                                                            >
-                                                                <td className="p-3 text-center">
-                                                                    <input type="checkbox" checked={isSelected} readOnly className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
-                                                                </td>
-                                                                <td className="p-3">
-                                                                    <div className="flex flex-col">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border", item.type === "service" ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-indigo-50 text-indigo-700 border-indigo-100")}>
-                                                                                {item.type === "service" ? "Honorario" : "Reembolsable"}
-                                                                            </span>
-                                                                            <span className="text-xs font-semibold text-slate-700">{item.description}</span>
-                                                                        </div>
-                                                                        {item.notes && <span className="text-[10px] text-slate-400 font-medium italic">{item.notes}</span>}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="p-3 text-right font-mono text-xs font-bold text-slate-900 tabular-nums">
-                                                                    {formatCurrency(item.total)}
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {/* Totals Preview */}
-                                    <div className="flex justify-end pt-2">
-                                        <div className="w-72 bg-slate-900 rounded-xl p-5 text-white shadow-lg">
-                                            <div className="space-y-2 border-b border-white/10 pb-3 mb-3">
-                                                <div className="flex justify-between text-xs text-slate-400">
-                                                    <span>Base Imponible:</span>
-                                                    <span className="font-mono tabular-nums">{formatCurrency(selectedTotals.subtotal)}</span>
-                                                </div>
-                                                <div className="flex justify-between text-xs text-slate-400">
-                                                    <span>IVA (13%):</span>
-                                                    <span className="font-mono tabular-nums">{formatCurrency(selectedTotals.iva)}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-xs font-black uppercase tracking-widest text-slate-200">Total a Facturar:</span>
-                                                <span className="text-2xl font-black tabular-nums">{formatCurrency(selectedTotals.total)}</span>
-                                            </div>
-                                        </div>
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Orden Seleccionada</p>
+                                        <p className="text-sm font-bold text-slate-900">{selectedServiceOrderForBilling.order_number}</p>
                                     </div>
                                 </div>
-                            )}
+                                <div className="text-right">
+                                    <p className="text-xs text-slate-500">Cliente</p>
+                                    <p className="text-sm font-semibold text-slate-700">{selectedServiceOrderForBilling.client_name}</p>
+                                </div>
+                            </div>
                         </div>
                     )}
-
-                    {/* Section 3: Documentación */}
-                    <div className="pt-2">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                            Datos del Documento
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div className="md:col-span-2 grid grid-cols-2 gap-5">
-                                <div>
-                                    <Label className="mb-1.5 block">N° de Factura / Pre-correlativo</Label>
-                                    <Input
-                                        value={generateForm.invoice_number}
-                                        onChange={(e) => setGenerateForm({ ...generateForm, invoice_number: e.target.value })}
-                                        placeholder="Opcional"
-                                        className="font-mono uppercase"
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="mb-1.5 block">Tipo de Documento</Label>
-                                    <SelectERP
-                                        value={generateForm.invoice_type}
-                                        onChange={(val) => setGenerateForm({ ...generateForm, invoice_type: val })}
-                                        options={INVOICE_TYPE_OPTIONS}
-                                        getOptionLabel={(opt) => opt.name}
-                                        getOptionValue={(opt) => opt.id}
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <Label className="mb-1.5 block">Fecha de Emisión</Label>
-                                <Input
-                                    type="date"
-                                    value={generateForm.invoice_date}
-                                    onChange={(e) => setGenerateForm({ ...generateForm, invoice_date: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label className="mb-1.5 block">Fecha de Vencimiento</Label>
-                                <Input
-                                    type="date"
-                                    value={generateForm.due_date}
-                                    onChange={(e) => setGenerateForm({ ...generateForm, due_date: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <Label className="mb-1.5 block">Copia Digital (PDF)</Label>
-                                <FileUpload
-                                    accept=".pdf"
-                                    onFileChange={(file) => setGenerateForm({ ...generateForm, invoice_file: file })}
-                                    helperText="Adjunte el documento digital si ya fue emitido"
-                                />
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <ModalFooter>
@@ -1940,34 +1821,92 @@ const Invoicing = () => {
                         variant="ghost"
                         onClick={() => {
                             setIsGenerateModalOpen(false);
-                            resetGenerateForm();
+                            setSelectedServiceOrderForBilling(null);
                         }}
                         className="text-slate-500 font-semibold"
                     >
                         Cancelar
                     </Button>
                     <Button
-                        onClick={handleGenerateInvoice}
-                        disabled={selectedItemIds.length === 0 || isSubmitting}
-                        className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
+                        onClick={() => {
+                            setIsGenerateModalOpen(false);
+                            setIsBillingWizardOpen(true);
+                        }}
+                        disabled={!selectedServiceOrderForBilling}
+                        className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[140px]"
                     >
-                        {isSubmitting ? "Procesando..." : "Generar Pre-factura"}
+                        Continuar
                     </Button>
                 </ModalFooter>
             </Modal>
+
+            {/* Billing Wizard */}
+            <BillingWizard
+                isOpen={isBillingWizardOpen}
+                onClose={() => {
+                    setIsBillingWizardOpen(false);
+                    setSelectedServiceOrderForBilling(null);
+                }}
+                serviceOrder={selectedServiceOrderForBilling}
+                onInvoiceCreated={() => {
+                    fetchInvoices();
+                    fetchSummary();
+                    fetchAllServiceOrders();
+                }}
+            />
 
             {/* Edit Invoice Modal */}
             <Modal
                 isOpen={isEditModalOpen}
                 onClose={() => setIsEditModalOpen(false)}
-                title="Editar Factura"
+                title={editForm.is_dte_issued ? "Editar Factura (DTE Emitido)" : "Editar Factura"}
                 size="lg"
             >
                 <div className="space-y-6">
+                    {/* Alerta para DTE emitido */}
+                    {editForm.is_dte_issued && (
+                        <div className="bg-slate-100 border border-slate-300 rounded-xl p-4 flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                                <Info className="w-4 h-4 text-slate-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">Documento fiscal emitido</p>
+                                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                                    Campos editables: número de factura, fecha de vencimiento, notas y archivo PDF.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Resumen de la factura */}
+                    {selectedInvoice && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                        <Receipt className="w-5 h-5 text-slate-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Orden de Servicio</p>
+                                        <p className="text-sm font-bold text-slate-700">
+                                            {editForm.service_order_number}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</p>
+                                    <p className="text-sm font-semibold text-slate-700 truncate max-w-[200px]">
+                                        {editForm.client_name}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            Datos Generales
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                            Datos del Documento
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
@@ -1980,22 +1919,31 @@ const Invoicing = () => {
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Tipo de Documento *</Label>
+                                <Label className={cn("mb-1.5 block", editForm.is_dte_issued && "text-slate-400")}>
+                                    Tipo de Documento *
+                                    {editForm.is_dte_issued && <span className="text-[10px] ml-2">(bloqueado)</span>}
+                                </Label>
                                 <SelectERP
                                     value={editForm.invoice_type}
                                     onChange={(val) => setEditForm({ ...editForm, invoice_type: val })}
                                     options={INVOICE_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
+                                    disabled={editForm.is_dte_issued}
                                     required
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha de Emisión *</Label>
+                                <Label className={cn("mb-1.5 block", editForm.is_dte_issued && "text-slate-400")}>
+                                    Fecha de Emisión *
+                                    {editForm.is_dte_issued && <span className="text-[10px] ml-2">(bloqueado)</span>}
+                                </Label>
                                 <Input
                                     type="date"
                                     value={editForm.issue_date}
                                     onChange={(e) => setEditForm({ ...editForm, issue_date: e.target.value })}
+                                    disabled={editForm.is_dte_issued}
+                                    className={editForm.is_dte_issued ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""}
                                     required
                                 />
                             </div>
@@ -2010,11 +1958,9 @@ const Invoicing = () => {
                         </div>
                     </div>
 
-                    <div className="border-t border-slate-100" />
-
                     <div>
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
                             Información Adicional
                         </h4>
                         <div className="space-y-4">
@@ -2031,7 +1977,7 @@ const Invoicing = () => {
                                 <FileUpload
                                     accept=".pdf"
                                     onFileChange={(file) => setEditForm({ ...editForm, pdf_file: file })}
-                                    helperText="Reemplazar archivo existente"
+                                    helperText={editForm.is_dte_issued ? "Puede actualizar el PDF del DTE emitido" : "Reemplazar archivo existente"}
                                 />
                             </div>
                         </div>
@@ -2046,7 +1992,10 @@ const Invoicing = () => {
                     >
                         Cancelar
                     </Button>
-                    <Button onClick={handleUpdateInvoice} className="bg-amber-600 text-white hover:bg-amber-700">
+                    <Button
+                        onClick={handleUpdateInvoice}
+                        className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[140px]"
+                    >
                         Guardar Cambios
                     </Button>
                 </ModalFooter>
