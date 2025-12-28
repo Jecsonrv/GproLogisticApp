@@ -92,9 +92,23 @@ function ServiceOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ["service-orders"] });
             refetchOrder();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.message || "No se pudo actualizar la orden. Intente nuevamente.";
-            toast.error(errorMsg);
+            console.error("Error updating order:", error);
+            let errorMessage = "No se pudo actualizar la orden. Intente nuevamente.";
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.message) errorMessage = data.message;
+                else if (data.error) errorMessage = data.error;
+                else if (data.detail) errorMessage = data.detail;
+                else if (typeof data === 'object') {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        const firstError = data[keys[0]];
+                        if (Array.isArray(firstError)) errorMessage = firstError[0];
+                        else if (typeof firstError === 'string') errorMessage = firstError;
+                    }
+                }
+            }
+            toast.error(errorMessage);
         }
     };
 

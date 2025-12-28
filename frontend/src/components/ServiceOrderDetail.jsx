@@ -102,7 +102,22 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             toast.success(`Estado actualizado a: ${STATUS_OPTIONS.find(s => s.id === newStatus)?.name}`);
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error("Error al actualizar el estado");
+            console.error("Error updating status:", error);
+            let errorMessage = "Error al actualizar el estado";
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.error) errorMessage = data.error;
+                else if (data.detail) errorMessage = data.detail;
+                else if (typeof data === 'object') {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        const firstError = data[keys[0]];
+                        if (Array.isArray(firstError)) errorMessage = firstError[0];
+                        else if (typeof firstError === 'string') errorMessage = firstError;
+                    }
+                }
+            }
+            toast.error(errorMessage);
             fetchOrderDetail(false); // Revert on error
         }
     };
@@ -198,10 +213,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             toast.success("Cargo agregado exitosamente");
             fetchOrderDetail(false);
             setIsAddingCharge(false);
-            resetChargeForm();
-            if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            // El interceptor de axios ya muestra el toast de error automáticamente
+            console.error("Error adding charge:", error);
+            let errorMessage = "Error al procesar el cargo";
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.error) errorMessage = data.error;
+                else if (data.detail) errorMessage = data.detail;
+                else if (typeof data === 'object') {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        const firstError = data[keys[0]];
+                        if (Array.isArray(firstError)) errorMessage = firstError[0];
+                        else if (typeof firstError === 'string') errorMessage = firstError;
+                    }
+                }
+            }
+            toast.error(errorMessage);
         }
     };
 
@@ -219,7 +247,22 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(false);
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            // El interceptor de axios ya muestra el toast de error automáticamente
+            console.error("Error deleting charge:", error);
+            let errorMessage = "Error al eliminar cargo";
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.error) errorMessage = data.error;
+                else if (data.detail) errorMessage = data.detail;
+                else if (typeof data === 'object') {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        const firstError = data[keys[0]];
+                        if (Array.isArray(firstError)) errorMessage = firstError[0];
+                        else if (typeof firstError === 'string') errorMessage = firstError;
+                    }
+                }
+            }
+            toast.error(errorMessage);
         }
     };
 
@@ -263,9 +306,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             toast.success("Servicio actualizado correctamente");
             setEditingChargeId(null);
             fetchOrderDetail(false); // Refresh sin loader
-            if (onUpdate) onUpdate();
         } catch (error) {
-            // El interceptor de axios ya muestra el toast de error automáticamente
+            console.error("Error saving charge:", error);
+            let errorMessage = "Error al actualizar servicio";
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.error) errorMessage = data.error;
+                else if (data.detail) errorMessage = data.detail;
+                else if (typeof data === 'object') {
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        const firstError = data[keys[0]];
+                        if (Array.isArray(firstError)) errorMessage = firstError[0];
+                        else if (typeof firstError === 'string') errorMessage = firstError;
+                    }
+                }
+            }
+            toast.error(errorMessage);
         }
     };
 
