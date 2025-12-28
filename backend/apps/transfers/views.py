@@ -146,6 +146,12 @@ class TransferViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Asignar usuario que crea la transferencia"""
+        # Validar que la orden de servicio no esté cerrada antes de crear un NUEVO gasto
+        service_order = serializer.validated_data.get('service_order')
+        if service_order and service_order.status == 'cerrada':
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'service_order': 'No se pueden agregar nuevos gastos a una orden de servicio cerrada.'})
+
         serializer.context['request'] = self.request
         transfer = serializer.save(created_by=self.request.user)
         transfer._current_user = self.request.user
@@ -454,14 +460,12 @@ class TransferViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Monto inválido'},
                 status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Validar que la orden de servicio no esté cerrada
-        if transfer.service_order and transfer.service_order.status == 'cerrada':
-            return Response(
-                {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validar que la orden de servicio no esté cerrada (REVERTIDO: Permitir pagos de deudas viejas)
+        # if transfer.service_order and transfer.service_order.status == 'cerrada':
+        #     return Response(
+        #         {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         # Validar que la orden de servicio no esté cerrada
         if transfer.service_order and transfer.service_order.status == 'cerrada':
@@ -536,12 +540,12 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Validar que la orden de servicio no esté cerrada
-        if transfer.service_order and transfer.service_order.status == 'cerrada':
-            return Response(
-                {'error': 'No se pueden registrar notas de crédito en una orden de servicio cerrada'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validar que la orden de servicio no esté cerrada (REVERTIDO: Permitir NC para corregir saldos)
+        # if transfer.service_order and transfer.service_order.status == 'cerrada':
+        #     return Response(
+        #         {'error': 'No se pueden registrar notas de crédito en una orden de servicio cerrada'},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         # Validar datos requeridos
         amount = request.data.get('amount')
@@ -791,14 +795,14 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validar que ninguna orden de servicio asociada esté cerrada
-        closed_orders = transfers.filter(service_order__status='cerrada')
-        if closed_orders.exists():
-            closed_ids = ", ".join([str(t.id) for t in closed_orders])
-            return Response(
-                {'error': f'No se pueden pagar facturas de órdenes cerradas. Facturas: {closed_ids}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Validar que ninguna orden de servicio asociada esté cerrada (REVERTIDO: Permitir pagos de deudas viejas)
+        # closed_orders = transfers.filter(service_order__status='cerrada')
+        # if closed_orders.exists():
+        #     closed_ids = ", ".join([str(t.id) for t in closed_orders])
+        #     return Response(
+        #         {'error': f'No se pueden pagar facturas de órdenes cerradas. Facturas: {closed_ids}'},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         # Validar que haya saldo suficiente
         total_balance = sum(t.balance for t in transfers)
