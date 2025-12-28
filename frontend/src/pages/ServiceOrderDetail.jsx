@@ -55,7 +55,7 @@ function ServiceOrderDetailPage() {
     const fetchCatalogs = async () => {
         try {
             const [clientsRes, providersRes, typesRes] = await Promise.all([
-                axios.get("/clients/"),
+                axios.get("/clients/active/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/shipment-types/"),
             ]);

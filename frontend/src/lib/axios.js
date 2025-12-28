@@ -45,16 +45,25 @@ const extractErrorMessage = (error) => {
     const fieldErrors = Object.entries(data)
         .filter(([key]) => !["status", "code"].includes(key))
         .map(([key, value]) => {
-            const fieldName = key.replace(/_/g, " ");
             const msg = Array.isArray(value) ? value.join(", ") : value;
-            return `${fieldName}: ${msg}`;
+            // Si hay solo un error de un campo, devolver solo el mensaje sin el nombre del campo
+            // Si hay múltiples campos, incluir el nombre para claridad
+            return { key, msg };
         });
 
     if (fieldErrors.length > 0) {
-        return fieldErrors.length === 1
-            ? fieldErrors[0]
-            : fieldErrors.slice(0, 3).join(". ") +
-                  (fieldErrors.length > 3 ? "..." : "");
+        // Si es un solo campo, mostrar solo el mensaje
+        if (fieldErrors.length === 1) {
+            return fieldErrors[0].msg;
+        }
+        // Si son múltiples campos, incluir el nombre del campo
+        return fieldErrors
+            .slice(0, 3)
+            .map(({ key, msg }) => {
+                const fieldName = key.replace(/_/g, " ");
+                return `${fieldName}: ${msg}`;
+            })
+            .join(". ") + (fieldErrors.length > 3 ? "..." : "");
     }
 
     return "Ha ocurrido un error";
@@ -149,6 +158,11 @@ api.interceptors.response.use(
         // Marcar errores de red para manejo especial
         if (!error.response) {
             error.isNetworkError = true;
+        }
+
+        // No mostrar toast para peticiones canceladas (AbortController)
+        if (axios.isCancel(error)) {
+            return Promise.reject(error);
         }
 
         // Mostrar toast de error automáticamente si no está deshabilitado

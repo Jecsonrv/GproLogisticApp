@@ -230,7 +230,7 @@ const ServiceOrders = () => {
     const fetchCatalogs = async () => {
         try {
             const [clientsRes, typesRes, providersRes, categoriesRes] = await Promise.all([
-                axios.get("/clients/"),
+                axios.get("/clients/active/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/provider-categories/"),

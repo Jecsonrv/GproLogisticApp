@@ -354,17 +354,29 @@ class OrderCharge(SoftDeleteModel):
         """
         # Permitir bypass de validación para operaciones de facturación
         skip_order_validation = kwargs.pop('skip_order_validation', False)
-        
-        # Validación: No permitir modificar cargos de órdenes cerradas o facturadas
+
+        # Validación de modificación de cargos:
+        # - Nuevos cargos (not self.pk): Solo bloquear si orden está CERRADA
+        # - Cargos existentes: Bloquear si orden cerrada O si el cargo ya está facturado
         # EXCEPTO cuando se está vinculando/desvinculando de una factura (skip_order_validation=True)
         # Y EXCEPTO cuando se edita desde la pre-factura (el cargo tiene factura y esta no tiene DTE)
         is_pre_invoice_edit = self.invoice and not self.invoice.is_dte_issued
+        is_new_charge = not self.pk
 
-        if not skip_order_validation and not is_pre_invoice_edit and (self.service_order.status == 'cerrada' or self.service_order.facturado):
-            if self.is_deleted and not self.service_order.facturado:
-                pass  # Permitir borrar cargo de orden cerrada
-            elif not self.is_deleted:
-                raise ValidationError("No se pueden modificar cargos de una orden cerrada o facturada.")
+        if not skip_order_validation and not is_pre_invoice_edit:
+            # Para nuevos cargos: solo bloquear si la orden está cerrada
+            if is_new_charge and self.service_order.status == 'cerrada':
+                raise ValidationError("No se pueden agregar cargos a una orden cerrada.")
+            # Para cargos existentes: bloquear si orden cerrada O si este cargo específico ya está facturado
+            elif not is_new_charge:
+                cargo_facturado = self.invoice_id is not None
+                if self.service_order.status == 'cerrada':
+                    if self.is_deleted:
+                        pass  # Permitir borrar cargo de orden cerrada
+                    else:
+                        raise ValidationError("No se pueden modificar cargos de una orden cerrada.")
+                elif cargo_facturado and not self.is_deleted:
+                    raise ValidationError("No se puede modificar un cargo que ya ha sido facturado.")
 
         # Sincronizar iva_type desde el servicio si es nuevo registro
         if not self.pk and self.service:

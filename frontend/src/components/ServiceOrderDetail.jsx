@@ -29,7 +29,8 @@ import DocumentsTabUnified from "./DocumentsTabUnified";
 import HistoryTab from "./HistoryTab";
 import ExpenseCalculatorTab from "./ExpenseCalculatorTab";
 import BillingWizard from "./BillingWizard";
-import axios from "../lib/axios";
+import api from "../lib/axios";
+import axios from "axios";
 import toast from "react-hot-toast";
 import { formatCurrency } from "../lib/utils";
 
@@ -94,7 +95,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             const oldStatus = order.status;
             setOrder({ ...order, status: newStatus });
 
-            await axios.patch(`/orders/service-orders/${orderId}/`, {
+            await api.patch(`/orders/service-orders/${orderId}/`, {
                 status: newStatus
             });
             
@@ -128,7 +129,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const fetchOrderDetail = async (showLoader = true, signal) => {
         try {
             if (showLoader) setLoading(true);
-            const response = await axios.get(
+            const response = await api.get(
                 `/orders/service-orders/${orderId}/`,
                 { signal }
             );
@@ -149,7 +150,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const fetchServices = async (signal) => {
         try {
-            const response = await axios.get("/catalogs/services/activos/", { signal });
+            const response = await api.get("/catalogs/services/activos/", { signal });
             setServices(response.data);
         } catch (error) {
             if (!axios.isCancel(error)) {
@@ -160,7 +161,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const fetchProviders = async (signal) => {
         try {
-            const response = await axios.get("/catalogs/providers/", { signal });
+            const response = await api.get("/catalogs/providers/", { signal });
             setProviders(response.data);
         } catch (error) {
              if (!axios.isCancel(error)) {
@@ -171,7 +172,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const fetchClientPrices = async (clientId, signal) => {
         try {
-            const response = await axios.get(
+            const response = await api.get(
                 `/catalogs/client-service-prices/by-client/${clientId}/`,
                 { signal }
             );
@@ -190,7 +191,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         }
 
         try {
-            await axios.post(`/orders/service-orders/${orderId}/add_charge/`, {
+            await api.post(`/orders/service-orders/${orderId}/add_charge/`, {
                 ...chargeForm,
                 discount: parseFloat(chargeForm.discount || 0),
             });
@@ -200,11 +201,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             resetChargeForm();
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.error ||
-                error.response?.data?.detail ||
-                "Error al procesar el cargo";
-            toast.error(errorMsg);
+            // El interceptor de axios ya muestra el toast de error automáticamente
         }
     };
 
@@ -217,16 +214,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         setConfirmDialog({ open: false, id: null });
 
         try {
-            await axios.delete(`/orders/charges/${id}/`);
+            await api.delete(`/orders/charges/${id}/`);
             toast.success("Cargo eliminado exitosamente");
             fetchOrderDetail(false);
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            const errorMessage =
-                error.response?.data?.error ||
-                error.response?.data?.detail ||
-                "Error al eliminar cargo";
-            toast.error(errorMessage);
+            // El interceptor de axios ya muestra el toast de error automáticamente
         }
     };
 
@@ -255,7 +248,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const handleSaveEditCharge = async () => {
         try {
-            const response = await axios.patch(
+            const response = await api.patch(
                 `/orders/service-orders/${orderId}/update_charge/`,
                 {
                     charge_id: editingChargeId,
@@ -272,11 +265,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(false); // Refresh sin loader
             if (onUpdate) onUpdate();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.error ||
-                error.response?.data?.detail ||
-                "Error al actualizar servicio";
-            toast.error(errorMsg);
+            // El interceptor de axios ya muestra el toast de error automáticamente
         }
     };
 

@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
+from django.core.exceptions import ValidationError
 from .models import ServiceOrder, OrderDocument, OrderCharge
 from .serializers import ServiceOrderSerializer, OrderDocumentSerializer
 from .serializers_new import ServiceOrderDetailSerializer
@@ -293,6 +294,18 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 {'error': 'Servicio no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        except ValidationError as e:
+            # Extraer mensaje limpio del ValidationError
+            if hasattr(e, 'message'):
+                error_msg = e.message
+            elif hasattr(e, 'messages'):
+                error_msg = e.messages[0] if e.messages else str(e)
+            else:
+                error_msg = str(e).strip("[]'\"")
+            return Response(
+                {'error': error_msg},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -368,6 +381,18 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Cargo no encontrado'},
                 status=status.HTTP_404_NOT_FOUND
+            )
+        except ValidationError as e:
+            # Extraer mensaje limpio del ValidationError
+            if hasattr(e, 'message'):
+                error_msg = e.message
+            elif hasattr(e, 'messages'):
+                error_msg = e.messages[0] if e.messages else str(e)
+            else:
+                error_msg = str(e).strip("[]'\"")
+            return Response(
+                {'error': error_msg},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(

@@ -214,7 +214,7 @@ const Services = () => {
 
     const fetchClients = async () => {
         try {
-            const response = await axios.get("/clients/");
+            const response = await axios.get("/clients/active/");
             setClients(response.data);
         } catch {
             // Silencioso

@@ -424,7 +424,7 @@ function ProviderPayments() {
                     axios.get("/orders/service-orders/"),
                     axios.get("/catalogs/providers/"),
                     axios.get("/catalogs/banks/"),
-                    axios.get("/clients/"),
+                    axios.get("/clients/active/"),
                 ]);
             setServiceOrders(ordersRes.data);
             setProviders(providersRes.data);

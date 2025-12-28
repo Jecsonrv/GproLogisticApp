@@ -25,6 +25,82 @@ class ClientViewSet(viewsets.ModelViewSet):
             return ClientListSerializer
         return ClientSerializer
 
+    def update(self, request, *args, **kwargs):
+        """Validar antes de actualizar un cliente"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+
+        # Si se intenta desactivar el cliente
+        if 'is_active' in request.data and not request.data['is_active'] and instance.is_active:
+            # Verificar si tiene órdenes de servicio no cerradas
+            active_orders = ServiceOrder.objects.filter(
+                client=instance
+            ).exclude(status='cerrada').count()
+
+            if active_orders > 0:
+                return Response(
+                    {'error': f'No se puede desactivar el cliente porque tiene {active_orders} orden(es) de servicio activa(s). Cierre todas las órdenes antes de desactivar el cliente.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Verificar si tiene facturas pendientes
+            from apps.orders.models import Invoice
+            pending_invoices = Invoice.objects.filter(
+                service_order__client=instance,
+                balance__gt=0
+            ).exclude(status__in=['paid', 'cancelled']).count()
+
+            if pending_invoices > 0:
+                return Response(
+                    {'error': f'No se puede desactivar el cliente porque tiene {pending_invoices} factura(s) con saldo pendiente. Liquide todas las facturas antes de desactivar el cliente.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Validar antes de eliminar un cliente"""
+        instance = self.get_object()
+
+        # Verificar si tiene órdenes de servicio asociadas
+        orders_count = ServiceOrder.objects.filter(client=instance).count()
+        if orders_count > 0:
+            return Response(
+                {'error': f'No se puede eliminar el cliente porque tiene {orders_count} orden(es) de servicio asociada(s). Los clientes con historial no pueden ser eliminados, solo desactivados.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Verificar si tiene facturas asociadas
+        from apps.orders.models import Invoice
+        invoices_count = Invoice.objects.filter(service_order__client=instance).count()
+        if invoices_count > 0:
+            return Response(
+                {'error': f'No se puede eliminar el cliente porque tiene {invoices_count} factura(s) asociada(s). Los clientes con historial de facturación no pueden ser eliminados.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Verificar si tiene transfers asociados
+        transfers_count = Transfer.objects.filter(client=instance).count()
+        if transfers_count > 0:
+            return Response(
+                {'error': f'No se puede eliminar el cliente porque tiene {transfers_count} transferencia(s) asociada(s).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def active(self, request):
+        """Obtener solo clientes activos - útil para selectores en formularios"""
+        active_clients = Client.objects.filter(is_active=True).order_by('name')
+        serializer = ClientListSerializer(active_clients, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def account_statement(self, request, pk=None):
         """Estado de cuenta detallado de un cliente con facturas y pagos"""
