@@ -59,21 +59,26 @@ class TransferViewSet(viewsets.ModelViewSet):
         Validar si un gasto puede ser editado.
 
         RESTRICCIONES:
-        1. Si está facturado con DTE emitido, solo campos limitados
-        2. Si está pagado, no se puede editar el monto
-        3. Solo admin/operativo2 puede aprobar
+        1. Si la orden está cerrada, no se pueden modificar campos financieros
+        2. Si está facturado con DTE emitido, solo campos limitados
+        3. Si está pagado, no se puede editar el monto
+        4. Solo admin/operativo2 puede aprobar
         """
         errors = []
         new_status = request.data.get('status')
         new_amount = request.data.get('amount')
 
-        # 0. Validar orden cerrada
+        # 0. Validar orden cerrada (Bloquear edición financiera si OS cerrada)
         if transfer.service_order and transfer.service_order.status == 'cerrada':
-            return {
-                'error': 'La orden de servicio está cerrada.',
-                'detail': 'No se pueden modificar gastos de una orden cerrada.',
-                'code': 'ORDER_CLOSED'
-            }
+            financial_fields = {'amount', 'transfer_type', 'provider', 'currency', 'exchange_rate'}
+            requested_fields = set(request.data.keys())
+            blocked_fields = requested_fields & financial_fields
+            if blocked_fields:
+                return {
+                    'error': 'La orden de servicio está cerrada.',
+                    'detail': f'No se pueden modificar campos financieros de un gasto en una orden cerrada: {", ".join(blocked_fields)}',
+                    'code': 'ORDER_CLOSED'
+                }
 
         # 1. Validar factura con DTE emitido
         if transfer.invoice and transfer.invoice.is_dte_issued:
@@ -145,12 +150,27 @@ class TransferViewSet(viewsets.ModelViewSet):
         return super().partial_update(request, *args, **kwargs)
     
     def perform_create(self, serializer):
-        """Asignar usuario que crea la transferencia"""
-        # Validar que la orden de servicio no esté cerrada antes de crear un NUEVO gasto
+        """Asignar usuario que crea la transferencia con validación de OS cerrada"""
+        from apps.orders.models import ServiceOrder
+        from rest_framework.exceptions import ValidationError
+
+        # Obtener OS desde los datos validados del serializer
         service_order = serializer.validated_data.get('service_order')
+        
+        # Si no está en validados (poco común), buscar en request data
+        if not service_order:
+            order_id = self.request.data.get('service_order')
+            if order_id:
+                try:
+                    service_order = ServiceOrder.objects.get(id=order_id)
+                except ServiceOrder.DoesNotExist:
+                    pass
+
+        # Validar bloqueo si la OS está cerrada: NO SE PUEDEN AGREGAR GASTOS NUEVOS
         if service_order and service_order.status == 'cerrada':
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({'service_order': 'No se pueden agregar nuevos gastos a una orden de servicio cerrada.'})
+            raise ValidationError({
+                'service_order': 'No se pueden agregar nuevos gastos a una orden de servicio que ya está cerrada.'
+            })
 
         serializer.context['request'] = self.request
         transfer = serializer.save(created_by=self.request.user)
@@ -167,14 +187,18 @@ class TransferViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         """
         Eliminar un gasto con validaciones de integridad.
-
-        RESTRICCIONES:
-        1. No se puede eliminar si está facturado al cliente (tiene invoice asociada)
-        2. No se puede eliminar si tiene pagos registrados
-        3. No se puede eliminar si el estado es 'pagado'
-        4. Solo admin puede eliminar gastos aprobados
         """
         transfer = self.get_object()
+
+        # 0. Validar orden cerrada
+        if transfer.service_order and transfer.service_order.status == 'cerrada':
+            return Response(
+                {
+                    'error': 'No se puede eliminar gastos de una orden cerrada.',
+                    'code': 'ORDER_CLOSED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # 1. Validar si está facturado al cliente
         if transfer.invoice:
@@ -460,20 +484,8 @@ class TransferViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Monto inválido'},
                 status=status.HTTP_400_BAD_REQUEST
-        # Validar que la orden de servicio no esté cerrada (REVERTIDO: Permitir pagos de deudas viejas)
-        # if transfer.service_order and transfer.service_order.status == 'cerrada':
-        #     return Response(
-        #         {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
-
-        # Validar que la orden de servicio no esté cerrada
-        if transfer.service_order and transfer.service_order.status == 'cerrada':
-            return Response(
-                {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
-                status=status.HTTP_400_BAD_REQUEST
             )
-
+        
         # Actualizar método de pago y banco en el transfer si es el primer pago
         if transfer.paid_amount == 0:
             payment_method = request.data.get('payment_method', 'transferencia')
@@ -540,13 +552,6 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Validar que la orden de servicio no esté cerrada (REVERTIDO: Permitir NC para corregir saldos)
-        # if transfer.service_order and transfer.service_order.status == 'cerrada':
-        #     return Response(
-        #         {'error': 'No se pueden registrar notas de crédito en una orden de servicio cerrada'},
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
-
         # Validar datos requeridos
         amount = request.data.get('amount')
         note_number = request.data.get('note_number')
@@ -794,15 +799,6 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
                 {'error': f'Algunas facturas ya están pagadas. Facturas: {", ".join([str(t.id) for t in already_paid])}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Validar que ninguna orden de servicio asociada esté cerrada (REVERTIDO: Permitir pagos de deudas viejas)
-        # closed_orders = transfers.filter(service_order__status='cerrada')
-        # if closed_orders.exists():
-        #     closed_ids = ", ".join([str(t.id) for t in closed_orders])
-        #     return Response(
-        #         {'error': f'No se pueden pagar facturas de órdenes cerradas. Facturas: {closed_ids}'},
-        #         status=status.HTTP_400_BAD_REQUEST
-        #     )
 
         # Validar que haya saldo suficiente
         total_balance = sum(t.balance for t in transfers)
