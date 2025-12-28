@@ -70,6 +70,23 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             return ServiceOrderDetailSerializer
         return ServiceOrderSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete a service order with proper validation error handling.
+        Catches ValidationError from model's delete() method and returns JSON.
+        """
+        instance = self.get_object()
+        try:
+            instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValidationError as e:
+            # Convert Django ValidationError to DRF format
+            error_message = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
+            return Response(
+                {'error': error_message, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
     @action(detail=True, methods=['get'])
     def billable_items(self, request, pk=None):
         """

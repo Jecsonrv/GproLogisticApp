@@ -333,7 +333,7 @@ const ServiceOrders = () => {
             toast.success("La orden de servicio ha sido eliminada.");
             fetchOrders();
         } catch (error) {
-            toast.error(error.response?.data?.error || "No se pudo eliminar la orden.");
+            // El interceptor ya maneja el error
         } finally {
             setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" });
         }

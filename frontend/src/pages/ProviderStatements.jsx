@@ -18,6 +18,7 @@ import {
     CreditCard,
     FileMinus,
     Banknote,
+    Trash2,
 } from "lucide-react";
 import {
     Button,
@@ -35,6 +36,7 @@ import {
     FileUpload,
     Skeleton,
     SkeletonTable,
+    ConfirmDialog,
 } from "../components/ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -218,6 +220,7 @@ const ProviderStatements = () => {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedTransferIds, setSelectedTransferIds] = useState([]);
+    const [paymentToDelete, setPaymentToDelete] = useState(null);
 
     // Forms
     const [paymentForm, setPaymentForm] = useState({
@@ -488,6 +491,23 @@ const ProviderStatements = () => {
             );
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleDeletePayment = async () => {
+        if (!paymentToDelete) return;
+
+        try {
+            await axios.delete(`/transfers/transfer-payments/${paymentToDelete.id}/`);
+            toast.success("Pago eliminado exitosamente");
+            setPaymentToDelete(null);
+
+            // Recargar el estado de cuenta
+            if (selectedProvider) {
+                await loadProviderStatement(selectedProvider.id, selectedYear);
+            }
+        } catch (error) {
+            // El interceptor ya maneja el error
         }
     };
 
@@ -1549,6 +1569,9 @@ const ProviderStatements = () => {
                                                 <th className="px-4 py-2 text-center font-medium">
                                                     Comprobante
                                                 </th>
+                                                <th className="px-4 py-2 text-center font-medium w-20">
+                                                    Acción
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -1601,6 +1624,20 @@ const ProviderStatements = () => {
                                                                     —
                                                                 </span>
                                                             )}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setPaymentToDelete(payment);
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                title="Eliminar pago"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
                                                         </td>
                                                     </tr>
                                                 )
@@ -1932,6 +1969,17 @@ const ProviderStatements = () => {
                     </ModalFooter>
                 </form>
             </Modal>
+
+            {/* Confirm Delete Payment Dialog */}
+            <ConfirmDialog
+                isOpen={!!paymentToDelete}
+                onClose={() => setPaymentToDelete(null)}
+                onConfirm={handleDeletePayment}
+                title="Eliminar Pago"
+                description={`¿Está seguro que desea eliminar este pago de ${paymentToDelete ? formatCurrency(paymentToDelete.amount) : ''}? Esta acción no se puede deshacer.`}
+                confirmText="Eliminar"
+                confirmVariant="danger"
+            />
         </div>
     );
 };

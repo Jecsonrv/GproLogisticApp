@@ -8,7 +8,8 @@ from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
 from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication
 from .serializers import (
-    TransferSerializer, TransferListSerializer, BatchPaymentSerializer, BatchPaymentDetailSerializer,
+    TransferSerializer, TransferListSerializer, TransferPaymentSerializer,
+    BatchPaymentSerializer, BatchPaymentDetailSerializer,
     ProviderCreditNoteListSerializer, ProviderCreditNoteDetailSerializer,
     ProviderCreditNoteCreateSerializer, ApplyCreditNoteSerializer, CreditNoteApplicationSerializer
 )
@@ -1374,3 +1375,40 @@ class ProviderCreditNoteViewSet(viewsets.ModelViewSet):
             'total_count': len(data),
             'total_balance': sum(t.balance for t in transfers)
         })
+
+
+class TransferPaymentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar pagos individuales a transferencias/gastos.
+
+    Permite eliminar pagos individuales (no agrupados) realizados a proveedores.
+    Los pagos que son parte de un pago agrupado (batch_payment) deben eliminarse
+    a través del BatchPaymentViewSet.
+    """
+    queryset = TransferPayment.objects.select_related(
+        'transfer', 'created_by', 'batch_payment'
+    ).all()
+    serializer_class = TransferPaymentSerializer
+    permission_classes = [IsOperativo]
+    http_method_names = ['get', 'delete']  # Solo lectura y eliminación
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina un pago individual.
+        No permite eliminar pagos que son parte de un pago agrupado.
+        """
+        payment = self.get_object()
+
+        # Validar que no sea parte de un pago agrupado
+        if payment.batch_payment:
+            return Response(
+                {
+                    'error': f'Este pago es parte del pago agrupado #{payment.batch_payment.batch_number}. Para eliminarlo, debe eliminar el pago agrupado completo.',
+                    'code': 'BATCH_PAYMENT_PROTECTED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Eliminar el pago (el modelo se encarga de actualizar paid_amount del Transfer)
+        payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

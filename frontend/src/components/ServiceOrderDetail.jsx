@@ -98,26 +98,11 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             await api.patch(`/orders/service-orders/${orderId}/`, {
                 status: newStatus
             });
-            
+
             toast.success(`Estado actualizado a: ${STATUS_OPTIONS.find(s => s.id === newStatus)?.name}`);
             if (onUpdate) onUpdate();
         } catch (error) {
-            console.error("Error updating status:", error);
-            let errorMessage = "Error al actualizar el estado";
-            if (error.response?.data) {
-                const data = error.response.data;
-                if (data.error) errorMessage = data.error;
-                else if (data.detail) errorMessage = data.detail;
-                else if (typeof data === 'object') {
-                    const keys = Object.keys(data);
-                    if (keys.length > 0) {
-                        const firstError = data[keys[0]];
-                        if (Array.isArray(firstError)) errorMessage = firstError[0];
-                        else if (typeof firstError === 'string') errorMessage = firstError;
-                    }
-                }
-            }
-            toast.error(errorMessage);
+            // El interceptor ya maneja el error
             fetchOrderDetail(false); // Revert on error
         }
     };
@@ -153,11 +138,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             setExpenses(response.data.third_party_expenses || []);
         } catch (error) {
             if (axios.isCancel(error)) return;
-            const errorMsg =
-                error.response?.data?.detail ||
-                error.response?.data?.error ||
-                "Error al cargar detalle de la orden";
-            toast.error(errorMsg);
+            // El interceptor ya maneja el error
         } finally {
             if (showLoader) setLoading(false);
         }
@@ -214,22 +195,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(false);
             setIsAddingCharge(false);
         } catch (error) {
-            console.error("Error adding charge:", error);
-            let errorMessage = "Error al procesar el cargo";
-            if (error.response?.data) {
-                const data = error.response.data;
-                if (data.error) errorMessage = data.error;
-                else if (data.detail) errorMessage = data.detail;
-                else if (typeof data === 'object') {
-                    const keys = Object.keys(data);
-                    if (keys.length > 0) {
-                        const firstError = data[keys[0]];
-                        if (Array.isArray(firstError)) errorMessage = firstError[0];
-                        else if (typeof firstError === 'string') errorMessage = firstError;
-                    }
-                }
-            }
-            toast.error(errorMessage);
+            // El interceptor ya maneja el error
         }
     };
 
@@ -247,22 +213,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(false);
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
-            console.error("Error deleting charge:", error);
-            let errorMessage = "Error al eliminar cargo";
-            if (error.response?.data) {
-                const data = error.response.data;
-                if (data.error) errorMessage = data.error;
-                else if (data.detail) errorMessage = data.detail;
-                else if (typeof data === 'object') {
-                    const keys = Object.keys(data);
-                    if (keys.length > 0) {
-                        const firstError = data[keys[0]];
-                        if (Array.isArray(firstError)) errorMessage = firstError[0];
-                        else if (typeof firstError === 'string') errorMessage = firstError;
-                    }
-                }
-            }
-            toast.error(errorMessage);
+            // El interceptor ya maneja el error
         }
     };
 
@@ -307,22 +258,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             setEditingChargeId(null);
             fetchOrderDetail(false); // Refresh sin loader
         } catch (error) {
-            console.error("Error saving charge:", error);
-            let errorMessage = "Error al actualizar servicio";
-            if (error.response?.data) {
-                const data = error.response.data;
-                if (data.error) errorMessage = data.error;
-                else if (data.detail) errorMessage = data.detail;
-                else if (typeof data === 'object') {
-                    const keys = Object.keys(data);
-                    if (keys.length > 0) {
-                        const firstError = data[keys[0]];
-                        if (Array.isArray(firstError)) errorMessage = firstError[0];
-                        else if (typeof firstError === 'string') errorMessage = firstError;
-                    }
-                }
-            }
-            toast.error(errorMessage);
+            // El interceptor ya maneja el error
         }
     };
 
@@ -359,18 +295,10 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         { id: "history", name: "Historial", icon: Clock },
     ];
 
-    if (loading) {
+    if (loading || !order) {
         return (
             <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
-            </div>
-        );
-    }
-
-    if (!order) {
-        return (
-            <div className="text-center py-12 text-slate-500">
-                No se encontró la orden
             </div>
         );
     }
