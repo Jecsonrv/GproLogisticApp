@@ -19,6 +19,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
 
 # Fail loudly if secret key is default in production
@@ -41,8 +43,6 @@ if not DEBUG and os.getenv('AWS_ACCESS_KEY_ID'):
     
     # Media files (Uploads) in S3
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
