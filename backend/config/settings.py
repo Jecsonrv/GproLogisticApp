@@ -313,6 +313,9 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:3000'
 ).split(',') if not DEBUG else []
 
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS[:]
+
+
 # ============================================
 # SECURITY SETTINGS FOR PRODUCTION
 # ============================================
