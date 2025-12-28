@@ -169,7 +169,8 @@ class TransferViewSet(viewsets.ModelViewSet):
         # Validar bloqueo si la OS está cerrada: NO SE PUEDEN AGREGAR GASTOS NUEVOS
         if service_order and service_order.status == 'cerrada':
             raise ValidationError({
-                'service_order': 'No se pueden agregar nuevos gastos a una orden de servicio que ya está cerrada.'
+                'error': 'No se pueden agregar nuevos gastos a una orden de servicio cerrada.',
+                'code': 'ORDER_CLOSED'
             })
 
         serializer.context['request'] = self.request

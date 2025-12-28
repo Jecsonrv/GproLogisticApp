@@ -183,25 +183,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             resetForm();
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch (error) {
-            console.error("Error submitting payment:", error);
-            let errorMessage = isEditing ? "Error al actualizar pago" : "Error al registrar pago";
-
-            if (error.response?.data) {
-                const data = error.response.data;
-                if (data.error) errorMessage = data.error;
-                else if (data.detail) errorMessage = data.detail;
-                else if (typeof data === 'object') {
-                    // Extract first validation error
-                    const keys = Object.keys(data);
-                    if (keys.length > 0) {
-                        const firstError = data[keys[0]];
-                        if (Array.isArray(firstError)) errorMessage = firstError[0];
-                        else if (typeof firstError === 'string') errorMessage = firstError;
-                    }
-                }
-            }
-            toast.error(errorMessage);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -220,12 +203,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             toast.success("Pago aprobado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch (error) {
-            const errorMessage =
-                error.response?.data?.error ||
-                error.response?.data?.message ||
-                "Error al aprobar pago";
-            toast.error(errorMessage);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -245,12 +224,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             toast.success("Pago marcado como pagado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch (error) {
-            const errorMessage =
-                error.response?.data?.error ||
-                error.response?.data?.message ||
-                "Error al marcar como pagado";
-            toast.error(errorMessage);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -267,8 +242,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             toast.success("Pago eliminado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch (error) {
-            toast.error("Error al eliminar pago");
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 

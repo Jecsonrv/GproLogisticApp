@@ -230,9 +230,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         """Add a charge to a specific order"""
         order = self.get_object()
 
-        if order.status in ['cerrada', 'finalizada']:
+        if order.status == 'cerrada':
             return Response(
-                {'error': 'No se pueden agregar cargos a una orden cerrada o finalizada'},
+                {'error': 'No se pueden agregar cargos a una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -321,9 +321,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         """
         order = self.get_object()
 
-        if order.status in ['cerrada', 'finalizada']:
+        if order.status == 'cerrada':
             return Response(
-                {'error': 'Solo se pueden actualizar cargos en órdenes activas'},
+                {'error': 'No se pueden modificar cargos de una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

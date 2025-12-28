@@ -459,19 +459,14 @@ function ProviderPayments() {
 
             await axios.post("/transfers/transfers/", formDataToSend, {
                 headers: { "Content-Type": undefined },
-                _skipErrorToast: true,
             });
 
-            toast.success("Pago registrado exitosamente");
+            toast.success("Gasto registrado exitosamente");
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
-        } catch (error) {
-            const errorMsg =
-                error.response?.data?.message ||
-                Object.values(error.response?.data || {})[0]?.[0] ||
-                "Error al registrar pago";
-            toast.error(errorMsg);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         } finally {
             setIsSubmitting(false);
         }
@@ -504,7 +499,6 @@ function ProviderPayments() {
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
-                    _skipErrorToast: true,
                 }
             );
 
@@ -512,22 +506,8 @@ function ProviderPayments() {
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
-        } catch (error) {
-            const errorData = error.response?.data;
-            const errorMsg = errorData?.error || errorData?.message || "Error al actualizar gasto";
-            const errorDetail = errorData?.detail;
-
-            if (errorDetail) {
-                toast.error(
-                    <div>
-                        <p className="font-semibold">{errorMsg}</p>
-                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
-                    </div>,
-                    { duration: 5000 }
-                );
-            } else {
-                toast.error(errorMsg);
-            }
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         } finally {
             setIsSubmitting(false);
         }
@@ -538,35 +518,17 @@ function ProviderPayments() {
 
         try {
             if (deleteConfirm.type === 'credit-note') {
-                await axios.delete(`/transfers/provider-credit-notes/${deleteConfirm.id}/`, {
-                    _skipErrorToast: true
-                });
+                await axios.delete(`/transfers/provider-credit-notes/${deleteConfirm.id}/`);
                 toast.success("Nota de crédito eliminada correctamente");
                 fetchCreditNotes();
             } else {
-                await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`, {
-                    _skipErrorToast: true
-                });
+                await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`);
                 toast.success("Gasto eliminado correctamente");
                 fetchPayments();
             }
-            setDeleteConfirm({ open: false, id: null, type: null });
-        } catch (error) {
-            const errorData = error.response?.data;
-            const errorMsg = errorData?.error || "Error al eliminar";
-            const errorDetail = errorData?.detail;
-
-            if (errorDetail) {
-                toast.error(
-                    <div>
-                        <p className="font-semibold">{errorMsg}</p>
-                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
-                    </div>,
-                    { duration: 5000 }
-                );
-            } else {
-                toast.error(errorMsg);
-            }
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
             setDeleteConfirm({ open: false, id: null, type: null });
         }
     };
