@@ -314,6 +314,17 @@ const InvoiceItemsEditor = ({
                     )}
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Ver PDF de la factura */}
+                    {invoice.pdf_file && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(invoice.pdf_file, "_blank")}
+                        >
+                            <FileText className="h-4 w-4 mr-1" />
+                            Ver PDF
+                        </Button>
+                    )}
                     {isEditable && !hasNoItems && !showAddItems && (
                         <Button
                             variant="outline"
@@ -948,6 +959,9 @@ const InvoiceItemsEditor = ({
                                         Método
                                     </th>
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Banco
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
                                         Referencia
                                     </th>
                                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
@@ -965,7 +979,15 @@ const InvoiceItemsEditor = ({
                                             {formatDateSafe(payment.payment_date)}
                                         </td>
                                         <td className="px-3 py-2 text-slate-700 text-sm capitalize">
-                                            {payment.payment_method?.replace("_", " ") || "—"}
+                                            {payment.payment_method === 'transferencia' ? 'Transferencia' :
+                                             payment.payment_method === 'efectivo' ? 'Efectivo' :
+                                             payment.payment_method === 'cheque' ? 'Cheque' :
+                                             payment.payment_method === 'deposito' ? 'Depósito' :
+                                             payment.payment_method === 'tarjeta' ? 'Tarjeta' :
+                                             payment.payment_method || "—"}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-700 text-sm">
+                                            {payment.bank_name || "—"}
                                         </td>
                                         <td className="px-3 py-2 text-slate-600 text-sm font-mono">
                                             {payment.reference_number || "—"}

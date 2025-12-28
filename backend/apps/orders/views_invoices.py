@@ -9,6 +9,7 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from .models import Invoice, InvoicePayment, ServiceOrder, CreditNote
+from apps.catalogs.models import Bank
 from .serializers import InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
 from .serializers_new import InvoiceDetailSerializer, InvoiceCreateSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
@@ -1125,25 +1126,30 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if amount > inv.balance:
                 raise ValueError(f'El monto excede el saldo pendiente (${inv.balance})')
 
+            # Get bank if provided
+            bank_id = request.data.get('bank')
+            bank = None
+            if bank_id:
+                try:
+                    bank = Bank.objects.get(pk=bank_id)
+                except Bank.DoesNotExist:
+                    pass
+
             payment = InvoicePayment.objects.create(
                 invoice=inv,
                 amount=amount,
                 payment_date=request.data.get('payment_date'),
                 payment_method=request.data.get('payment_method', 'transferencia'),
                 reference_number=request.data.get('reference', ''),
+                bank=bank,
                 notes=request.data.get('notes', ''),
                 receipt_file=request.FILES.get('receipt_file'),
                 created_by=request.user
             )
 
-            # Update invoice balance
-            inv.paid_amount += amount
-            inv.balance = inv.total_amount - inv.paid_amount
-
-            if inv.balance <= 0:
-                inv.status = 'pagada'
-
-            inv.save()
+            # El modelo InvoicePayment.save() ya actualiza paid_amount de la factura
+            # Refrescar la instancia para obtener el balance actualizado
+            inv.refresh_from_db()
 
             return payment, inv.balance
 

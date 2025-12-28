@@ -172,6 +172,7 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
 class InvoicePaymentSerializer(serializers.ModelSerializer):
     """Serializer for invoice payments"""
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    bank_name = serializers.CharField(source='bank.name', read_only=True, allow_null=True)
 
     class Meta:
         model = InvoicePayment

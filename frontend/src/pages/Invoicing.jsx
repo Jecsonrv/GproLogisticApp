@@ -194,6 +194,7 @@ const Invoicing = () => {
     const [invoices, setInvoices] = useState([]);
     const [creditNotes, setCreditNotes] = useState([]);
     const [clients, setClients] = useState([]);
+    const [banks, setBanks] = useState([]);
     const [allServiceOrders, setAllServiceOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -251,6 +252,7 @@ const Invoicing = () => {
         amount: "",
         payment_date: getTodayDate(),
         payment_method: "transferencia",
+        bank: "",
         reference: "",
         notes: "",
         receipt_file: null,
@@ -299,6 +301,7 @@ const Invoicing = () => {
         fetchSummary();
         fetchClients();
         fetchAllServiceOrders();
+        fetchBanks();
     }, []);
 
     const fetchInvoices = async () => {
@@ -337,6 +340,15 @@ const Invoicing = () => {
             setClients(response.data);
         } catch (error) {
             console.error("Error loading clients");
+        }
+    };
+
+    const fetchBanks = async () => {
+        try {
+            const response = await api.get("/catalogs/banks/");
+            setBanks(response.data);
+        } catch (error) {
+            console.error("Error loading banks");
         }
     };
 
@@ -681,6 +693,9 @@ const Invoicing = () => {
             formData.append("amount", paymentForm.amount);
             formData.append("payment_date", paymentForm.payment_date);
             formData.append("payment_method", paymentForm.payment_method);
+            if (paymentForm.bank) {
+                formData.append("bank", paymentForm.bank);
+            }
             if (paymentForm.reference) {
                 formData.append("reference", paymentForm.reference);
             }
@@ -700,6 +715,16 @@ const Invoicing = () => {
             fetchInvoices();
             fetchSummary();
             setIsPaymentModalOpen(false);
+            // Reset form
+            setPaymentForm({
+                amount: "",
+                payment_date: getTodayDate(),
+                payment_method: "transferencia",
+                bank: "",
+                reference: "",
+                notes: "",
+                receipt_file: null,
+            });
         } catch (error) {
             toast.error(
                 error.response?.data?.error || "No se pudo registrar el pago."
@@ -1165,11 +1190,29 @@ const Invoicing = () => {
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-[160px] text-center",
+            className: "w-[180px] text-center",
             headerClassName: "text-center",
             sortable: false,
             render: (row) => (
-                <div className="grid grid-cols-4 gap-1 w-full max-w-[140px] mx-auto">
+                <div className="grid grid-cols-5 gap-1 w-full max-w-[160px] mx-auto">
+                    {/* Ver PDF */}
+                    <div className="flex justify-center">
+                        {row.pdf_file ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(row.pdf_file, "_blank");
+                                }}
+                                title="Ver PDF"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            >
+                                <FileText className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
+                    {/* Registrar Pago */}
                     <div className="flex justify-center">
                         {parseFloat(row.balance) > 0.01 && row.status !== "cancelled" ? (
                             <button
@@ -1186,6 +1229,7 @@ const Invoicing = () => {
                             <div className="w-7" />
                         )}
                     </div>
+                    {/* Ver Detalle */}
                     <div className="flex justify-center">
                         <button
                             onClick={(e) => {
@@ -1193,11 +1237,12 @@ const Invoicing = () => {
                                 handleViewInvoiceDetails(row.id);
                             }}
                             title="Ver Detalle"
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
                         >
                             <Eye className="w-4 h-4" />
                         </button>
                     </div>
+                    {/* Editar */}
                     <div className="flex justify-center">
                         <button
                             onClick={(e) => {
@@ -1210,6 +1255,7 @@ const Invoicing = () => {
                             <Edit2 className="w-4 h-4" />
                         </button>
                     </div>
+                    {/* Eliminar */}
                     <div className="flex justify-center">
                         <button
                             onClick={(e) => {
@@ -1675,7 +1721,7 @@ const Invoicing = () => {
                                 </div>
 
                                 <div>
-                                    <Label className="mb-1.5 block">Método de Pago</Label>
+                                    <Label className="mb-1.5 block">Método de Pago *</Label>
                                     <SelectERP
                                         value={paymentForm.payment_method}
                                         onChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
@@ -1699,6 +1745,24 @@ const Invoicing = () => {
                                         placeholder="Ej: TRANS-9988"
                                     />
                                 </div>
+
+                                {/* Banco - Solo para transferencia, cheque o depósito */}
+                                {['transferencia', 'cheque', 'deposito'].includes(paymentForm.payment_method) && (
+                                    <div className="md:col-span-2">
+                                        <Label className="mb-1.5 block">
+                                            Banco {['transferencia', 'cheque'].includes(paymentForm.payment_method) ? '*' : ''}
+                                        </Label>
+                                        <SelectERP
+                                            value={paymentForm.bank}
+                                            onChange={(val) => setPaymentForm({ ...paymentForm, bank: val || "" })}
+                                            options={banks}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            required={['transferencia', 'cheque'].includes(paymentForm.payment_method)}
+                                            clearable
+                                        />
+                                    </div>
+                                )}
 
                                 <div className="md:col-span-2">
                                     <Label className="mb-1.5 block">Observaciones</Label>

@@ -417,20 +417,22 @@ class ServiceOrderCreateSerializer(serializers.ModelSerializer):
 class InvoicePaymentSerializer(serializers.ModelSerializer):
     """Serializer para pagos/abonos de facturas"""
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True, allow_null=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    bank_name = serializers.CharField(source='bank.name', read_only=True, allow_null=True)
 
     class Meta:
         model = InvoicePayment
         fields = [
             'id', 'invoice', 'payment_date', 'amount',
             'payment_method', 'payment_method_display',
-            'reference_number', 'bank', 'notes', 'receipt_file',
-            'created_by', 'created_by_username',
+            'reference_number', 'bank', 'bank_name', 'notes', 'receipt_file',
+            'created_by', 'created_by_username', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at',
-            'created_by_username', 'payment_method_display'
+            'created_by_username', 'created_by_name', 'payment_method_display', 'bank_name'
         ]
 
     def create(self, validated_data):
