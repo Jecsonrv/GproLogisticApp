@@ -67,6 +67,14 @@ class TransferViewSet(viewsets.ModelViewSet):
         new_status = request.data.get('status')
         new_amount = request.data.get('amount')
 
+        # 0. Validar orden cerrada
+        if transfer.service_order and transfer.service_order.status == 'cerrada':
+            return {
+                'error': 'La orden de servicio está cerrada.',
+                'detail': 'No se pueden modificar gastos de una orden cerrada.',
+                'code': 'ORDER_CLOSED'
+            }
+
         # 1. Validar factura con DTE emitido
         if transfer.invoice and transfer.invoice.is_dte_issued:
             # Solo permitir editar campos no financieros
@@ -448,6 +456,20 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validar que la orden de servicio no esté cerrada
+        if transfer.service_order and transfer.service_order.status == 'cerrada':
+            return Response(
+                {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar que la orden de servicio no esté cerrada
+        if transfer.service_order and transfer.service_order.status == 'cerrada':
+            return Response(
+                {'error': 'No se pueden registrar pagos en una orden de servicio cerrada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Actualizar método de pago y banco en el transfer si es el primer pago
         if transfer.paid_amount == 0:
             payment_method = request.data.get('payment_method', 'transferencia')
@@ -514,6 +536,13 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validar que la orden de servicio no esté cerrada
+        if transfer.service_order and transfer.service_order.status == 'cerrada':
+            return Response(
+                {'error': 'No se pueden registrar notas de crédito en una orden de servicio cerrada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Validar datos requeridos
         amount = request.data.get('amount')
         note_number = request.data.get('note_number')
