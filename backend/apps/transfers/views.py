@@ -791,6 +791,15 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Validar que ninguna orden de servicio asociada esté cerrada
+        closed_orders = transfers.filter(service_order__status='cerrada')
+        if closed_orders.exists():
+            closed_ids = ", ".join([str(t.id) for t in closed_orders])
+            return Response(
+                {'error': f'No se pueden pagar facturas de órdenes cerradas. Facturas: {closed_ids}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Validar que haya saldo suficiente
         total_balance = sum(t.balance for t in transfers)
         if total_amount > total_balance:
