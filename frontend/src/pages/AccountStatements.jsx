@@ -295,6 +295,7 @@ function AccountStatements() {
         open: false,
         id: null,
     });
+    const [deletePaymentConfirm, setDeletePaymentConfirm] = useState(null); // {id, amount}
 
     // Payment form
     const [paymentForm, setPaymentForm] = useState({
@@ -536,10 +537,8 @@ function AccountStatements() {
             if (isDetailModalOpen && selectedInvoice) {
                 fetchInvoiceDetails(selectedInvoice.id);
             }
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "Error al registrar pago"
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         } finally {
             setIsSubmitting(false);
         }
@@ -582,11 +581,8 @@ function AccountStatements() {
             if (isDetailModalOpen && selectedInvoice) {
                 fetchInvoiceDetails(selectedInvoice.id);
             }
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error ||
-                    "Error al registrar nota de crédito"
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         } finally {
             setIsSubmitting(false);
         }
@@ -616,15 +612,35 @@ function AccountStatements() {
         try {
             await axios.delete(`/orders/invoices/${deleteConfirm.id}/`);
             toast.success("Factura eliminada correctamente");
-            setDeleteConfirm({ open: false, id: null });
             if (selectedClient) {
                 fetchInvoices(selectedClient.id);
                 fetchStatement(selectedClient.id);
             }
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "Error al eliminar factura"
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setDeleteConfirm({ open: false, id: null });
+        }
+    };
+
+    const handleDeletePayment = async (paymentId) => {
+        try {
+            setIsSubmitting(true);
+            await axios.delete(`/orders/invoice-payments/${paymentId}/`);
+            toast.success("Pago eliminado correctamente");
+            if (selectedClient) {
+                fetchInvoices(selectedClient.id);
+                fetchStatement(selectedClient.id);
+            }
+            // Actualizar el detalle si está abierto
+            if (isDetailModalOpen && selectedInvoice) {
+                fetchInvoiceDetails(selectedInvoice.id);
+            }
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setIsSubmitting(false);
+            setDeletePaymentConfirm(null);
         }
     };
 
@@ -2478,11 +2494,12 @@ function AccountStatements() {
                                                     <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-24">
                                                         Comprobante
                                                     </th>
+                                                    <th className="px-3 py-2 w-12"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {selectedInvoice.payments.map((payment) => (
-                                                    <tr key={payment.id} className="hover:bg-slate-50">
+                                                    <tr key={payment.id} className="hover:bg-slate-50 group">
                                                         <td className="px-3 py-2 text-slate-700 text-sm">
                                                             {formatDateSafe(payment.payment_date)}
                                                         </td>
@@ -2521,6 +2538,15 @@ function AccountStatements() {
                                                             ) : (
                                                                 <span className="text-slate-300 text-xs">—</span>
                                                             )}
+                                                        </td>
+                                                        <td className="px-3 py-2 text-center">
+                                                            <button
+                                                                onClick={() => setDeletePaymentConfirm({ id: payment.id, amount: payment.amount })}
+                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                                title="Eliminar pago"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -2572,6 +2598,18 @@ function AccountStatements() {
                 cancelText="Cancelar"
                 variant="danger"
                 onConfirm={handleDeleteInvoice}
+            />
+
+            {/* Confirm Delete Payment Dialog */}
+            <ConfirmDialog
+                open={!!deletePaymentConfirm}
+                onClose={() => setDeletePaymentConfirm(null)}
+                title="¿Eliminar pago?"
+                description={`Se eliminará el pago de ${formatCurrency(deletePaymentConfirm?.amount || 0)}. El saldo de la factura será recalculado automáticamente.`}
+                confirmText="Eliminar Pago"
+                cancelText="Cancelar"
+                variant="danger"
+                onConfirm={() => handleDeletePayment(deletePaymentConfirm?.id)}
             />
         </div>
     );

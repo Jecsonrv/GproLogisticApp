@@ -602,11 +602,8 @@ const Invoicing = () => {
             if (isDetailModalOpen && selectedInvoice) {
                 handleViewInvoiceDetails(selectedInvoice.id);
             }
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error ||
-                    "No se pudo procesar la nota de crédito."
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         } finally {
             setIsSubmitting(false);
         }
@@ -674,11 +671,8 @@ const Invoicing = () => {
             fetchInvoices();
             fetchSummary();
             setIsEditModalOpen(false);
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "No se pudo actualizar la factura."
-            );
-            console.error(error);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -725,10 +719,8 @@ const Invoicing = () => {
                 notes: "",
                 receipt_file: null,
             });
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "No se pudo registrar el pago."
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -798,11 +790,8 @@ const Invoicing = () => {
             fetchAllServiceOrders();
             setIsGenerateModalOpen(false);
             resetGenerateForm();
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "No se pudo registrar la factura."
-            );
-            console.error(error);
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
         }
     };
 
@@ -882,13 +871,12 @@ const Invoicing = () => {
         try {
             await api.delete(`/orders/invoices/${deleteConfirm.id}/`);
             toast.success("La factura ha sido eliminada.");
-            setDeleteConfirm({ open: false, id: null });
             fetchInvoices();
             fetchSummary();
-        } catch (error) {
-            toast.error(
-                error.response?.data?.error || "No se pudo eliminar la factura."
-            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setDeleteConfirm({ open: false, id: null });
         }
     };
 
@@ -898,12 +886,13 @@ const Invoicing = () => {
         try {
             await api.delete(`/orders/credit-notes/${deleteConfirm.id}/`);
             toast.success("La nota de crédito ha sido eliminada.");
-            setDeleteConfirm({ open: false, id: null, type: null });
             fetchCreditNotes();
             fetchInvoices();
             fetchSummary();
-        } catch (error) {
-            toast.error("No se pudo eliminar la nota de crédito.");
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setDeleteConfirm({ open: false, id: null, type: null });
         }
     };
 

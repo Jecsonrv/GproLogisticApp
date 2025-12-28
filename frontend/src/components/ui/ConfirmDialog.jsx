@@ -67,7 +67,7 @@ const ConfirmDialog = ({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-200"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-200"
             onClick={onClose}
             style={{ margin: 0 }}
         >

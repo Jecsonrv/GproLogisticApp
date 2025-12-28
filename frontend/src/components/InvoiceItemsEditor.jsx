@@ -63,6 +63,7 @@ const InvoiceItemsEditor = ({
     const [selectedItemsToAdd, setSelectedItemsToAdd] = useState([]);
     const [confirmRemove, setConfirmRemove] = useState(null); // {id, type, description}
     const [showDtePrompt, setShowDtePrompt] = useState(false);
+    const [confirmDeletePayment, setConfirmDeletePayment] = useState(null); // {id, amount}
 
     const isEditable = invoice?.is_editable && !invoice?.is_dte_issued;
 
@@ -272,6 +273,20 @@ const InvoiceItemsEditor = ({
             toast.error("Error al cargar historial");
         } finally {
             setLoadingHistory(false);
+        }
+    };
+
+    const handleDeletePayment = async (paymentId) => {
+        try {
+            setSaving(true);
+            await axios.delete(`/orders/invoice-payments/${paymentId}/`);
+            toast.success("Pago eliminado correctamente");
+            if (onUpdate) onUpdate();
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setSaving(false);
+            setConfirmDeletePayment(null);
         }
     };
 
@@ -970,11 +985,12 @@ const InvoiceItemsEditor = ({
                                     <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-24">
                                         Comprobante
                                     </th>
+                                    <th className="px-3 py-2 w-12"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {invoice.payments.map((payment) => (
-                                    <tr key={payment.id} className="hover:bg-slate-50">
+                                    <tr key={payment.id} className="hover:bg-slate-50 group">
                                         <td className="px-3 py-2 text-slate-700 text-sm">
                                             {formatDateSafe(payment.payment_date)}
                                         </td>
@@ -1013,6 +1029,15 @@ const InvoiceItemsEditor = ({
                                             ) : (
                                                 <span className="text-slate-300 text-xs">—</span>
                                             )}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            <button
+                                                onClick={() => setConfirmDeletePayment({ id: payment.id, amount: payment.amount })}
+                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                title="Eliminar pago"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -1120,6 +1145,18 @@ const InvoiceItemsEditor = ({
                 }
                 cancelText="Cancelar"
                 variant="warning"
+            />
+
+            {/* Confirm Delete Payment Dialog */}
+            <ConfirmDialog
+                open={!!confirmDeletePayment}
+                onClose={() => setConfirmDeletePayment(null)}
+                onConfirm={() => handleDeletePayment(confirmDeletePayment?.id)}
+                title="¿Eliminar pago?"
+                description={`Se eliminará el pago de ${formatCurrency(confirmDeletePayment?.amount || 0)}. El saldo de la factura será recalculado automáticamente.`}
+                confirmText="Eliminar Pago"
+                cancelText="Cancelar"
+                variant="danger"
             />
         </div>
     );
