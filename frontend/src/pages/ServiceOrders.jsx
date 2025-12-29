@@ -168,6 +168,7 @@ const ServiceOrders = () => {
     // Data state
     const [orders, setOrders] = useState([]);
     const [clients, setClients] = useState([]);
+    const [subClients, setSubClients] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [providers, setProviders] = useState([]);
 
@@ -215,6 +216,24 @@ const ServiceOrders = () => {
         fetchCatalogs();
     }, []);
 
+    // Filtrar subclientes según el cliente seleccionado
+    const availableSubClients = useMemo(() => {
+        if (!formData.client) return [];
+        return subClients.filter(sc => sc.parent_client === formData.client);
+    }, [formData.client, subClients]);
+
+    // Limpiar subcliente cuando el cliente cambia
+    useEffect(() => {
+        if (formData.sub_client && formData.client) {
+            const subClientBelongsToClient = subClients.find(
+                sc => sc.id === formData.sub_client && sc.parent_client === formData.client
+            );
+            if (!subClientBelongsToClient) {
+                setFormData(prev => ({ ...prev, sub_client: null }));
+            }
+        }
+    }, [formData.client, formData.sub_client, subClients]);
+
     const fetchOrders = async () => {
         try {
             setLoading(true);
@@ -229,13 +248,15 @@ const ServiceOrders = () => {
 
     const fetchCatalogs = async () => {
         try {
-            const [clientsRes, typesRes, providersRes, categoriesRes] = await Promise.all([
+            const [clientsRes, subClientsRes, typesRes, providersRes, categoriesRes] = await Promise.all([
                 axios.get("/clients/active/"),
+                axios.get("/catalogs/sub-clients/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/provider-categories/"),
             ]);
             setClients(clientsRes.data);
+            setSubClients(subClientsRes.data);
             setShipmentTypes(typesRes.data);
 
             // Filtrar proveedores para mostrar solo Naviera y Agencia de Carga
@@ -269,11 +290,7 @@ const ServiceOrders = () => {
             setIsCreateModalOpen(false);
             resetForm();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.duca?.[0] ||
-                error.response?.data?.message ||
-                "No se pudo procesar la orden. Verifique los datos.";
-            toast.error(errorMsg);
+            // El interceptor ya maneja el error
         }
     };
 
@@ -866,7 +883,7 @@ const ServiceOrders = () => {
                                 <Label className="mb-1.5 block">Cliente</Label>
                                 <SelectERP
                                     value={formData.client}
-                                    onChange={(val) => setFormData({ ...formData, client: val })}
+                                    onChange={(val) => setFormData({ ...formData, client: val, sub_client: null })}
                                     options={clients}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -875,6 +892,26 @@ const ServiceOrders = () => {
                                     required
                                 />
                             </div>
+
+                            {/* Subcliente (solo si el cliente tiene subclientes) */}
+                            {formData.client && availableSubClients.length > 0 && (
+                                <div className="col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Subcliente
+                                        <span className="text-slate-500 text-xs ml-2">(Opcional)</span>
+                                    </Label>
+                                    <SelectERP
+                                        value={formData.sub_client}
+                                        onChange={(val) => setFormData({ ...formData, sub_client: val })}
+                                        options={availableSubClients}
+                                        getOptionLabel={(opt) => opt.name}
+                                        getOptionValue={(opt) => opt.id}
+                                        searchable
+                                        clearable
+                                        placeholder="Selecciona un subcliente..."
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 

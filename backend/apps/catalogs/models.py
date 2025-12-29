@@ -103,6 +103,8 @@ class SubClient(models.Model):
         ordering = ['name']
 
     def __str__(self):
+        if self.parent_client:
+            return f"{self.name} ({self.parent_client.name})"
         return self.name
 
 

@@ -96,6 +96,12 @@ class SubClientSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'parent_client_name']
 
+    def validate_parent_client(self, value):
+        """Validar que se proporcione un cliente padre"""
+        if not value:
+            raise serializers.ValidationError("Debes seleccionar un cliente principal para el subcliente.")
+        return value
+
 
 class ServiceSerializer(serializers.ModelSerializer):
     """Serializer para Servicios"""

@@ -56,6 +56,7 @@ function Catalogs() {
     const [banks, setBanks] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [subClients, setSubClients] = useState([]);
+    const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -73,18 +74,20 @@ function Catalogs() {
     const fetchAllCatalogs = async () => {
         setLoading(true);
         try {
-            const [provCat, prov, bnk, ship, sub] = await Promise.all([
+            const [provCat, prov, bnk, ship, sub, cli] = await Promise.all([
                 axios.get("/catalogs/provider-categories/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/banks/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/sub-clients/"),
+                axios.get("/clients/"),
             ]);
             setProviderCategories(provCat.data);
             setProviders(prov.data);
             setBanks(bnk.data);
             setShipmentTypes(ship.data);
             setSubClients(sub.data);
+            setClients(cli.data);
         } catch {
             toast.error("Error al cargar catálogos");
         } finally {
@@ -129,7 +132,7 @@ function Catalogs() {
                 description: "",
                 is_active: true,
             },
-            subClients: { name: "", is_active: true },
+            subClients: { name: "", parent_client: "", is_active: true },
         };
         return defaults[catalog] || {};
     };
@@ -332,7 +335,16 @@ function Catalogs() {
                 actionsColumn,
             ],
             subClients: [
-                { accessor: "name", header: "Nombre" },
+                { accessor: "name", header: "Subcliente" },
+                {
+                    accessor: "parent_client_name",
+                    header: "Cliente Principal",
+                    cell: (row) => (
+                        <span className="text-sm text-slate-600">
+                            {row.parent_client_name || "—"}
+                        </span>
+                    ),
+                },
                 {
                     accessor: "is_active",
                     header: "Estado",
@@ -619,21 +631,43 @@ function Catalogs() {
 
                             case "subClients":
                                 return (
-                                    <div className="col-span-12">
-                                        <Label className="mb-1.5 block">
-                                            Nombre *
-                                        </Label>
-                                        <Input
-                                            value={formData.name || ""}
-                                            onChange={(e) =>
-                                                setFormData({
-                                                    ...formData,
-                                                    name: e.target.value,
-                                                })
-                                            }
-                                            required
-                                        />
-                                    </div>
+                                    <>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Cliente Principal *
+                                            </Label>
+                                            <SelectERP
+                                                value={formData.parent_client || ""}
+                                                onChange={(value) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        parent_client: value,
+                                                    })
+                                                }
+                                                options={clients.map((c) => ({
+                                                    id: c.id,
+                                                    name: c.name,
+                                                }))}
+                                                placeholder="Selecciona un cliente..."
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Nombre del Subcliente *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                            />
+                                        </div>
+                                    </>
                                 );
 
                             default:
