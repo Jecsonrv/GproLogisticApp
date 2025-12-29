@@ -40,24 +40,24 @@ import useAuthStore from "../stores/authStore";
 import { cn } from "../lib/utils";
 
 // ============================================
-// KPI CARD - CORPORATE STYLE
+// KPI CARD - CORPORATE STYLE (Optimizado Mobile First)
 // ============================================
 const KPICard = ({ label, value, icon: Icon }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
                 <p
-                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
                     title={label}
                 >
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -370,11 +370,11 @@ function Users() {
 
     if (loading) {
         return (
-            <div className="space-y-6 animate-pulse mt-2">
+            <div className="space-y-4 sm:space-y-6 animate-pulse mt-1 sm:mt-2">
                 {/* KPIs Skeleton */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                     {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-24 rounded-xl" />
+                        <Skeleton key={i} className="h-16 sm:h-20 lg:h-24 rounded-lg sm:rounded-xl" />
                     ))}
                 </div>
 
@@ -396,9 +396,9 @@ function Users() {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            {/* Bloque Superior: KPIs Corporativos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+            {/* Bloque Superior: KPIs Responsive */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total Usuarios"
                     value={users.length}
@@ -418,63 +418,67 @@ function Users() {
 
             {/* Bloque Operativo: Tabla + Herramientas */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
-                {/* Barra de Herramientas Unificada */}
-                <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                    {/* Izquierda: Buscador */}
-                    <div className="flex items-center gap-3 flex-1 w-full lg:max-w-lg">
+                {/* Barra de Herramientas Unificada - Mobile Optimizada */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col gap-3 sm:gap-4 bg-slate-50/30">
+                    {/* Búsqueda y Acciones - Layout Mobile First */}
+                    <div className="flex items-center gap-2 sm:gap-3 w-full">
+                        {/* Buscador */}
                         <div className="relative flex-1 group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                             <input
                                 type="text"
                                 placeholder="Buscar usuario por nombre, email..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
                         {searchTerm && (
                             <button
                                 onClick={() => setSearchTerm("")}
-                                className="flex items-center gap-2 text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
+                                className="flex items-center justify-center p-1.5 text-red-600 hover:text-red-700 transition-colors"
                             >
-                                <XCircle className="w-4 h-4" />
+                                <XCircle className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                         )}
                     </div>
 
-                    {/* Derecha: Contador y Botón */}
-                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-                        <div className="text-sm text-slate-500 hidden md:block">
+                    {/* Botones de acción - Layout responsive */}
+                    <div className="flex items-center justify-between gap-2 sm:gap-3">
+                        <div className="text-xs sm:text-sm text-slate-500">
                             <span className="font-semibold text-slate-900">
                                 {filteredUsers.length}
                             </span>{" "}
-                            usuarios
+                            <span className="hidden xs:inline">usuarios</span>
+                            <span className="xs:hidden">usr.</span>
                         </div>
-                        <div className="h-6 w-px bg-slate-200 hidden lg:block" />
 
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => fetchUsers()}
-                            disabled={loading}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            <RefreshCw
-                                className={cn(
-                                    "w-3.5 h-3.5 mr-2",
-                                    loading && "animate-spin"
-                                )}
-                            />
-                            Actualizar
-                        </Button>
-                        <Button
-                            size="sm"
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            <Plus className="w-3.5 h-3.5 mr-2" />
-                            Nuevo Usuario
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchUsers()}
+                                disabled={loading}
+                                className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-8 sm:h-9 px-2 sm:px-3 transition-all active:scale-95"
+                            >
+                                <RefreshCw
+                                    className={cn(
+                                        "w-3.5 h-3.5 sm:mr-2",
+                                        loading && "animate-spin"
+                                    )}
+                                />
+                                <span className="hidden sm:inline">Actualizar</span>
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={() => setIsCreateModalOpen(true)}
+                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-8 sm:h-9 px-2 sm:px-4 transition-all active:scale-95 text-xs sm:text-sm"
+                            >
+                                <Plus className="w-3.5 h-3.5 sm:mr-2" />
+                                <span className="hidden xs:inline">Nuevo Usuario</span>
+                                <span className="xs:hidden">Nuevo</span>
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
@@ -496,10 +500,10 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleCreate} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <form onSubmit={handleCreate} className="space-y-3 sm:space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
-                                <Label>Usuario *</Label>
+                                <Label className="text-sm">Usuario *</Label>
                                 <Input
                                     value={formData.username}
                                     onChange={(e) =>
@@ -509,10 +513,11 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                             <div>
-                                <Label>Email *</Label>
+                                <Label className="text-sm">Email *</Label>
                                 <Input
                                     type="email"
                                     value={formData.email}
@@ -523,13 +528,14 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
-                                <Label>Nombre *</Label>
+                                <Label className="text-sm">Nombre *</Label>
                                 <Input
                                     value={formData.first_name}
                                     onChange={(e) =>
@@ -539,10 +545,11 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                             <div>
-                                <Label>Apellido *</Label>
+                                <Label className="text-sm">Apellido *</Label>
                                 <Input
                                     value={formData.last_name}
                                     onChange={(e) =>
@@ -552,13 +559,14 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
-                                <Label>Contraseña *</Label>
+                                <Label className="text-sm">Contraseña *</Label>
                                 <div className="relative">
                                     <Input
                                         type={
@@ -572,13 +580,14 @@ function Users() {
                                             })
                                         }
                                         required
+                                        className="text-sm pr-10"
                                     />
                                     <button
                                         type="button"
                                         onClick={() =>
                                             setShowPassword(!showPassword)
                                         }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
                                     >
                                         {showPassword ? (
                                             <EyeOff className="h-4 w-4" />
@@ -589,7 +598,7 @@ function Users() {
                                 </div>
                             </div>
                             <div>
-                                <Label>Confirmar Contraseña *</Label>
+                                <Label className="text-sm">Confirmar Contraseña *</Label>
                                 <div className="relative">
                                     <Input
                                         type={
@@ -604,13 +613,14 @@ function Users() {
                                             })
                                         }
                                         required
+                                        className="text-sm pr-10"
                                     />
                                     <button
                                         type="button"
                                         onClick={() =>
                                             setShowPassword(!showPassword)
                                         }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
                                     >
                                         {showPassword ? (
                                             <EyeOff className="h-4 w-4" />
@@ -622,7 +632,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <SelectERP
                                     label="Rol"
@@ -673,13 +683,13 @@ function Users() {
                                     setIsCreateModalOpen(false);
                                     resetForm();
                                 }}
-                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
                             >
                                 Cancelar
                             </Button>
                             <Button
                                 type="submit"
-                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                className="bg-slate-900 hover:bg-slate-800 text-white w-full sm:w-auto"
                             >
                                 Crear Usuario
                             </Button>
@@ -694,18 +704,18 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Editar Usuario</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleEdit} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <form onSubmit={handleEdit} className="space-y-3 sm:space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
-                                <Label>Usuario</Label>
+                                <Label className="text-sm">Usuario</Label>
                                 <Input
                                     value={formData.username}
                                     disabled
-                                    className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                                    className="bg-slate-50 text-slate-500 cursor-not-allowed text-sm"
                                 />
                             </div>
                             <div>
-                                <Label>Email *</Label>
+                                <Label className="text-sm">Email *</Label>
                                 <Input
                                     type="email"
                                     value={formData.email}
@@ -716,13 +726,14 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
-                                <Label>Nombre *</Label>
+                                <Label className="text-sm">Nombre *</Label>
                                 <Input
                                     value={formData.first_name}
                                     onChange={(e) =>
@@ -732,10 +743,11 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                             <div>
-                                <Label>Apellido *</Label>
+                                <Label className="text-sm">Apellido *</Label>
                                 <Input
                                     value={formData.last_name}
                                     onChange={(e) =>
@@ -745,11 +757,12 @@ function Users() {
                                         })
                                     }
                                     required
+                                    className="text-sm"
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <SelectERP
                                     label="Rol"
@@ -800,13 +813,13 @@ function Users() {
                                     setIsEditModalOpen(false);
                                     resetForm();
                                 }}
-                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
                             >
                                 Cancelar
                             </Button>
                             <Button
                                 type="submit"
-                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                className="bg-slate-900 hover:bg-slate-800 text-white w-full sm:w-auto"
                             >
                                 Actualizar
                             </Button>
@@ -824,9 +837,9 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Cambiar Contraseña</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleChangePassword} className="space-y-4">
+                    <form onSubmit={handleChangePassword} className="space-y-3 sm:space-y-4">
                         <div>
-                            <Label>Nueva Contraseña *</Label>
+                            <Label className="text-sm">Nueva Contraseña *</Label>
                             <Input
                                 type="password"
                                 value={passwordData.new_password}
@@ -838,10 +851,11 @@ function Users() {
                                 }
                                 required
                                 minLength={6}
+                                className="text-sm"
                             />
                         </div>
                         <div>
-                            <Label>Confirmar Contraseña *</Label>
+                            <Label className="text-sm">Confirmar Contraseña *</Label>
                             <Input
                                 type="password"
                                 value={passwordData.confirm_password}
@@ -853,6 +867,7 @@ function Users() {
                                 }
                                 required
                                 minLength={6}
+                                className="text-sm"
                             />
                         </div>
 
@@ -867,13 +882,13 @@ function Users() {
                                         confirm_password: "",
                                     });
                                 }}
-                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
                             >
                                 Cancelar
                             </Button>
                             <Button
                                 type="submit"
-                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                className="bg-slate-900 hover:bg-slate-800 text-white w-full sm:w-auto"
                             >
                                 Cambiar Contraseña
                             </Button>

@@ -67,64 +67,64 @@ const ConfirmDialog = ({
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 transition-opacity duration-200"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-3 sm:p-4 transition-opacity duration-200"
             onClick={onClose}
             style={{ margin: 0 }}
         >
-            {/* Dialog Container */}
+            {/* Dialog Container - Responsive */}
             <div
                 className="relative w-full max-w-md transform transition-all duration-200 ease-out"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div
-                    className={`bg-white rounded-xl shadow-2xl border ${config.borderColor}`}
+                    className={`bg-white rounded-lg sm:rounded-xl shadow-2xl border ${config.borderColor}`}
                 >
-                    {/* Header con diseño profesional */}
-                    <div className="relative px-6 pt-6 pb-5">
+                    {/* Header con diseño profesional - Mobile Optimized */}
+                    <div className="relative px-4 sm:px-6 pt-4 sm:pt-6 pb-4 sm:pb-5">
                         {/* Botón cerrar - Más discreto */}
                         <button
                             onClick={onClose}
-                            className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1.5 transition-all duration-200"
+                            className="absolute right-3 sm:right-4 top-3 sm:top-4 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1.5 transition-all duration-200"
                             aria-label="Cerrar"
                         >
                             <X className="h-4 w-4" />
                         </button>
 
-                        {/* Icono y contenido */}
-                        <div className="flex items-start gap-4 pr-8">
+                        {/* Icono y contenido - Responsive */}
+                        <div className="flex items-start gap-3 sm:gap-4 pr-8 sm:pr-8">
                             {/* Icono con diseño moderno */}
                             <div
-                                className={`flex-shrink-0 ${config.iconBg} rounded-lg p-3 shadow-sm`}
+                                className={`flex-shrink-0 ${config.iconBg} rounded-lg p-2.5 sm:p-3 shadow-sm`}
                             >
                                 <IconComponent
-                                    className={`h-6 w-6 ${config.iconColor}`}
+                                    className={`h-5 w-5 sm:h-6 sm:w-6 ${config.iconColor}`}
                                     strokeWidth={2}
                                 />
                             </div>
 
                             {/* Contenido */}
-                            <div className="flex-1 pt-0.5">
-                                <h3 className="text-lg font-semibold text-slate-900 leading-6">
+                            <div className="flex-1 pt-0.5 min-w-0">
+                                <h3 className="text-base sm:text-lg font-semibold text-slate-900 leading-tight sm:leading-6">
                                     {title}
                                 </h3>
-                                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                                <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
                                     {description}
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Footer con botones mejorados */}
-                    <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50/50 border-t border-slate-100">
+                    {/* Footer con botones mejorados - Mobile First */}
+                    <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-slate-50/50 border-t border-slate-100">
                         <button
                             onClick={onClose}
-                            className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200"
+                            className="w-full sm:w-auto px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200"
                         >
                             {cancelText}
                         </button>
                         <button
                             onClick={handleConfirm}
-                            className={`px-4 py-2.5 text-sm font-medium text-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 ${config.buttonBg}`}
+                            className={`w-full sm:w-auto px-4 py-2 sm:py-2.5 text-sm font-medium text-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 ${config.buttonBg}`}
                         >
                             {confirmText}
                         </button>

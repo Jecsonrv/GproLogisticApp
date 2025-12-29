@@ -46,24 +46,24 @@ import toast from "react-hot-toast";
 import { formatCurrency, cn } from "../lib/utils";
 
 // ============================================
-// KPI CARD - CORPORATE STYLE (Aligned with ProviderPayments)
+// KPI CARD - CORPORATE STYLE (Optimizado Mobile First)
 // ============================================
 const KPICard = ({ label, value, icon: Icon }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
                 <p
-                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
                     title={label}
                 >
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -581,9 +581,9 @@ const Services = () => {
     ];
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            {/* Bloque Superior: KPIs Corporativos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+            {/* Bloque Superior: KPIs Responsive */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total Servicios"
                     value={services.length}
@@ -666,13 +666,13 @@ const Services = () => {
                         </div>
 
                         <div className="relative flex-1 max-w-md group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                            <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                             <input
                                 type="text"
                                 placeholder="Buscar en el catálogo..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                             />
                         </div>
 

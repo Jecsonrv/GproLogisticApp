@@ -387,11 +387,11 @@ function Catalogs() {
     const renderForm = () => {
         return (
             <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 sm:mb-4 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                     Información General
                 </h4>
-                <div className="grid grid-cols-12 gap-4">
+                <div className="grid grid-cols-12 gap-3 sm:gap-4">
                     {(() => {
                         switch (currentCatalog) {
                             case "providerCategories":
@@ -725,68 +725,72 @@ function Catalogs() {
         <div className="space-y-6 animate-in fade-in duration-500 mt-2">
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-                {/* Tabs Navigation con estilo corporativo */}
-                <div className="flex items-center justify-between gap-4 mb-6">
-                    <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+                {/* Tabs Navigation con estilo corporativo y responsive */}
+                <div className="flex items-center justify-between gap-4 mb-6 overflow-x-auto">
+                    <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg min-w-max">
                         <button
                             onClick={() => setActiveTab("providerCategories")}
                             className={cn(
-                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
                                 activeTab === "providerCategories"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            <Tags className="h-4 w-4" />
-                            Categorías
+                            <Tags className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Categorías</span>
+                            <span className="sm:hidden">Categ.</span>
                         </button>
                         <button
                             onClick={() => setActiveTab("providers")}
                             className={cn(
-                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
                                 activeTab === "providers"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            <Building2 className="h-4 w-4" />
-                            Proveedores
+                            <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Proveedores</span>
+                            <span className="sm:hidden">Proveed.</span>
                         </button>
                         <button
                             onClick={() => setActiveTab("banks")}
                             className={cn(
-                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
                                 activeTab === "banks"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            <Landmark className="h-4 w-4" />
+                            <Landmark className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             Bancos
                         </button>
                         <button
                             onClick={() => setActiveTab("shipmentTypes")}
                             className={cn(
-                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
                                 activeTab === "shipmentTypes"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            <Ship className="h-4 w-4" />
-                            Embarques
+                            <Ship className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Embarques</span>
+                            <span className="sm:hidden">Embar.</span>
                         </button>
                         <button
                             onClick={() => setActiveTab("subClients")}
                             className={cn(
-                                "px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center gap-2",
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
                                 activeTab === "subClients"
                                     ? "bg-white text-slate-900 shadow-sm"
                                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                             )}
                         >
-                            <UserCircle className="h-4 w-4" />
-                            Subclientes
+                            <UserCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Subclientes</span>
+                            <span className="sm:hidden">Subcli.</span>
                         </button>
                     </div>
                 </div>
@@ -801,12 +805,13 @@ function Catalogs() {
                 ].map((tab) => (
                     <TabsContent value={tab} key={tab}>
                         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col pb-4">
-                            {/* Barra de Herramientas Unificada */}
-                            <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row items-center justify-between gap-4 bg-slate-50/30">
-                                {/* Izquierda: Buscador */}
-                                <div className="flex items-center gap-3 flex-1 w-full lg:max-w-lg">
+                            {/* Barra de Herramientas Unificada - Optimizada para Mobile */}
+                            <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col gap-3 sm:gap-4 bg-slate-50/30">
+                                {/* Búsqueda y Acciones - Layout Mobile First */}
+                                <div className="flex items-center gap-2 sm:gap-3 w-full">
+                                    {/* Buscador */}
                                     <div className="relative flex-1 group">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                                        <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                                         <input
                                             type="text"
                                             placeholder={`Buscar ${
@@ -825,60 +830,65 @@ function Catalogs() {
                                             onChange={(e) =>
                                                 setSearchTerm(e.target.value)
                                             }
-                                            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                            className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                                         />
                                     </div>
                                     {searchTerm && (
                                         <button
                                             onClick={() => setSearchTerm("")}
-                                            className="flex items-center gap-2 text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
+                                            className="flex items-center justify-center p-1.5 text-red-600 hover:text-red-700 transition-colors"
                                         >
-                                            <XCircle className="w-4 h-4" />
+                                            <XCircle className="w-4 h-4 sm:w-5 sm:h-5" />
                                         </button>
                                     )}
                                 </div>
 
-                                {/* Derecha: Contador y Botón */}
-                                <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-                                    <div className="text-sm text-slate-500 hidden md:block">
+                                {/* Botones de acción - Layout responsive */}
+                                <div className="flex items-center justify-between gap-2 sm:gap-3">
+                                    <div className="text-xs sm:text-sm text-slate-500">
                                         <span className="font-semibold text-slate-900">
                                             {getFilteredData(tab).length}
                                         </span>{" "}
-                                        registros
+                                        <span className="hidden xs:inline">registros</span>
+                                        <span className="xs:hidden">reg.</span>
                                     </div>
-                                    <div className="h-6 w-px bg-slate-200 hidden lg:block" />
 
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => fetchAllCatalogs()}
-                                        disabled={loading}
-                                        className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
-                                    >
-                                        <RefreshCw
-                                            className={cn(
-                                                "w-3.5 h-3.5 mr-2",
-                                                loading && "animate-spin"
-                                            )}
-                                        />
-                                        Actualizar
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={() => openModal(tab)}
-                                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
-                                    >
-                                        <Plus className="w-3.5 h-3.5 mr-2" />
-                                        {tab === "providerCategories" &&
-                                            "Nueva Categoría"}
-                                        {tab === "providers" &&
-                                            "Nuevo Proveedor"}
-                                        {tab === "banks" && "Nuevo Banco"}
-                                        {tab === "shipmentTypes" &&
-                                            "Nuevo Tipo"}
-                                        {tab === "subClients" &&
-                                            "Nuevo Subcliente"}
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => fetchAllCatalogs()}
+                                            disabled={loading}
+                                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-8 sm:h-9 px-2 sm:px-3 transition-all active:scale-95"
+                                        >
+                                            <RefreshCw
+                                                className={cn(
+                                                    "w-3.5 h-3.5 sm:mr-2",
+                                                    loading && "animate-spin"
+                                                )}
+                                            />
+                                            <span className="hidden sm:inline">Actualizar</span>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => openModal(tab)}
+                                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-8 sm:h-9 px-2 sm:px-4 transition-all active:scale-95 text-xs sm:text-sm"
+                                        >
+                                            <Plus className="w-3.5 h-3.5 sm:mr-2" />
+                                            <span className="hidden xs:inline">
+                                                {tab === "providerCategories" &&
+                                                    "Nueva Categoría"}
+                                                {tab === "providers" &&
+                                                    "Nuevo Proveedor"}
+                                                {tab === "banks" && "Nuevo Banco"}
+                                                {tab === "shipmentTypes" &&
+                                                    "Nuevo Tipo"}
+                                                {tab === "subClients" &&
+                                                    "Nuevo Subcliente"}
+                                            </span>
+                                            <span className="xs:hidden">Nuevo</span>
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -903,13 +913,13 @@ function Catalogs() {
                 size="lg"
             >
                 <form onSubmit={handleSubmit}>
-                    <div className="space-y-6 py-4">
+                    <div className="space-y-4 sm:space-y-6 py-3 sm:py-4">
                         {/* Campos del formulario */}
-                        <div className="space-y-4">{renderForm()}</div>
+                        <div className="space-y-3 sm:space-y-4">{renderForm()}</div>
 
                         {/* Separador */}
-                        <div className="border-t border-slate-200 pt-4">
-                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                        <div className="border-t border-slate-200 pt-3 sm:pt-4">
+                            <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
                                 <input
                                     type="checkbox"
                                     id="is_active"
@@ -924,18 +934,17 @@ function Catalogs() {
                                             is_active: e.target.checked,
                                         })
                                     }
-                                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 flex-shrink-0"
                                 />
-                                <div className="flex flex-col">
+                                <div className="flex flex-col min-w-0">
                                     <Label
                                         htmlFor="is_active"
-                                        className="font-medium text-slate-900 cursor-pointer"
+                                        className="font-medium text-sm sm:text-base text-slate-900 cursor-pointer"
                                     >
                                         Estado Activo
                                     </Label>
                                     <span className="text-xs text-slate-500">
-                                        El registro estará disponible para su
-                                        uso en el sistema
+                                        El registro estará disponible para su uso en el sistema
                                     </span>
                                 </div>
                             </div>
@@ -948,13 +957,13 @@ function Catalogs() {
                             type="button"
                             variant="ghost"
                             onClick={() => setIsModalOpen(false)}
-                            className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100"
+                            className="text-slate-500 font-semibold hover:text-slate-700 hover:bg-slate-100 w-full sm:w-auto"
                         >
                             Cancelar
                         </Button>
                         <Button
                             type="submit"
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 min-w-[120px] transition-all active:scale-95"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200 min-w-[120px] transition-all active:scale-95 w-full sm:w-auto"
                         >
                             {editingItem ? "Actualizar" : "Guardar"}
                         </Button>

@@ -40,7 +40,7 @@ export function DialogContent({ children, className, size = "md" }) {
     return (
         <div
             className={cn(
-                "w-full rounded-xl bg-white p-4 sm:p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto",
+                "w-full rounded-lg sm:rounded-xl bg-white p-3 sm:p-6 shadow-2xl border border-gray-100 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto",
                 sizes[size],
                 className
             )}
@@ -54,7 +54,7 @@ export function DialogHeader({ children, className }) {
     return (
         <div
             className={cn(
-                "flex flex-col space-y-1.5 text-center sm:text-left mb-4",
+                "flex flex-col space-y-1.5 text-center sm:text-left mb-3 sm:mb-4",
                 className
             )}
         >
@@ -67,7 +67,7 @@ export function DialogTitle({ children, className }) {
     return (
         <h3
             className={cn(
-                "text-xl font-semibold leading-none tracking-tight text-gray-900",
+                "text-lg sm:text-xl font-semibold leading-tight tracking-tight text-gray-900",
                 className
             )}
         >
@@ -88,7 +88,7 @@ export function DialogFooter({ children, className }) {
     return (
         <div
             className={cn(
-                "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 mt-6 pt-4 border-t border-gray-100",
+                "flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-0 sm:space-x-2 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-100",
                 className
             )}
         >

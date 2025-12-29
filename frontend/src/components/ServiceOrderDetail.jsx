@@ -515,18 +515,18 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 </div>
                             </div>
 
-                            <div className="mt-8 pt-6 border-t border-slate-100">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg font-semibold text-slate-900">
+                            <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-slate-100">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
+                                    <h3 className="text-base sm:text-lg font-semibold text-slate-900">
                                         Resumen Financiero
                                     </h3>
-                                    {/* Toggle Neto / Con IVA */}
-                                    <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                                    {/* Toggle Neto / Con IVA - Responsive */}
+                                    <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100 rounded-lg p-1 w-full sm:w-auto">
                                         <button
                                             onClick={() =>
                                                 setShowWithIva(false)
                                             }
-                                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                                                 !showWithIva
                                                     ? "bg-white text-slate-900 shadow-sm"
                                                     : "text-slate-600 hover:text-slate-900"
@@ -536,7 +536,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         </button>
                                         <button
                                             onClick={() => setShowWithIva(true)}
-                                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                                            className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                                                 showWithIva
                                                     ? "bg-white text-slate-900 shadow-sm"
                                                     : "text-slate-600 hover:text-slate-900"
@@ -546,15 +546,15 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                                    <div className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
+                                        <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">
                                             Servicios{" "}
                                             {showWithIva
                                                 ? "(con IVA)"
                                                 : "(Neto)"}
                                         </div>
-                                        <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
+                                        <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
                                                     ? (order.fiscal_summary?.services?.total_con_iva ?? order.total_services ?? 0)
@@ -562,14 +562,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="bg-white p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
-                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                    <div className="bg-white p-3 sm:p-4 rounded-lg border border-slate-200 hover:shadow-sm transition-shadow">
+                                        <div className="text-[10px] sm:text-xs font-medium text-slate-500 uppercase tracking-wide">
                                             Costos de la Orden{" "}
                                             {showWithIva
                                                 ? "(con IVA)"
                                                 : "(Neto)"}
                                         </div>
-                                        <div className="text-2xl font-bold text-slate-900 mt-1.5 tabular-nums">
+                                        <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
                                                     ? (order.fiscal_summary?.third_party?.total_con_iva ?? order.total_third_party ?? 0)
@@ -577,14 +577,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 hover:shadow-md transition-shadow">
-                                        <div className="text-xs font-medium text-slate-300 uppercase tracking-wide">
+                                    <div className="bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-800 hover:shadow-md transition-shadow">
+                                        <div className="text-[10px] sm:text-xs font-medium text-slate-300 uppercase tracking-wide">
                                             Total a Facturar{" "}
                                             {showWithIva
                                                 ? "(con IVA)"
                                                 : "(Neto)"}
                                         </div>
-                                        <div className="text-2xl font-bold text-white mt-1.5 tabular-nums">
+                                        <div className="text-xl sm:text-2xl font-bold text-white mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
                                                     ? (order.fiscal_summary?.consolidated?.total_con_iva ?? order.total_amount ?? 0)
@@ -595,7 +595,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 </div>
                                 {/* Desglose de IVA cuando se muestra Con IVA */}
                                 {showWithIva && order.fiscal_summary?.consolidated?.iva_total > 0 && (
-                                    <div className="mt-3 text-right text-sm text-slate-500">
+                                    <div className="mt-2 sm:mt-3 text-right text-xs sm:text-sm text-slate-500">
                                         IVA incluido: {formatCurrency(order.fiscal_summary.consolidated.iva_total)}
                                     </div>
                                 )}

@@ -46,24 +46,24 @@ import toast from "react-hot-toast";
 import { formatCurrency, cn, formatDateTime } from "../lib/utils";
 
 // ============================================
-// KPI CARD - CORPORATE STYLE (Aligned with ProviderPayments)
+// KPI CARD - CORPORATE STYLE (Optimizado Mobile First)
 // ============================================
 const KPICard = ({ label, value, icon: Icon }) => {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-4">
-            <div className="min-w-0">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
                 <p
-                    className="text-sm font-medium text-slate-500 mb-1 truncate"
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
                     title={label}
                 >
                     {label}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 tabular-nums tracking-tight">
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
                     {value}
                 </p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-6 h-6 text-slate-400" />}
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
             </div>
         </div>
     );
@@ -145,11 +145,11 @@ function Clients() {
 
     if (loading) {
         return (
-            <div className="space-y-6 animate-pulse mt-2">
+            <div className="space-y-4 sm:space-y-6 animate-pulse mt-1 sm:mt-2">
                 {/* KPIs Skeleton */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                     {[1, 2, 3, 4, 5].map((i) => (
-                        <Skeleton key={i} className="h-24 rounded-xl" />
+                        <Skeleton key={i} className="h-16 sm:h-20 lg:h-24 rounded-lg sm:rounded-xl" />
                     ))}
                 </div>
 
@@ -406,9 +406,9 @@ function Clients() {
     ];
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 mt-2">
-            {/* Bloque Superior (Estratégico): KPIs Compactos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+            {/* Bloque Superior (Estratégico): KPIs Responsive */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total Clientes"
                     value={stats.total}
@@ -474,8 +474,8 @@ function Clients() {
                     </div>
 
                     {/* Derecha: Botones de Acción */}
-                    <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
-                        <div className="text-sm text-slate-500 hidden md:block">
+                    <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto justify-end">
+                        <div className="text-xs sm:text-sm text-slate-500 hidden md:block">
                             <span className="font-semibold text-slate-900">
                                 {filteredClients.length}
                             </span>{" "}
@@ -488,15 +488,15 @@ function Clients() {
                             size="sm"
                             onClick={fetchClients}
                             disabled={loading}
-                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-9 px-3 transition-all active:scale-95 whitespace-nowrap"
+                            className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm h-8 sm:h-9 px-2 sm:px-3 transition-all active:scale-95"
                         >
                             <RefreshCw
                                 className={cn(
-                                    "w-3.5 h-3.5 mr-2",
+                                    "w-3.5 h-3.5 sm:mr-2",
                                     loading && "animate-spin"
                                 )}
                             />
-                            Actualizar
+                            <span className="hidden sm:inline">Actualizar</span>
                         </Button>
 
                         <ExportButton
@@ -514,10 +514,11 @@ function Clients() {
                         <Button
                             size="sm"
                             onClick={() => navigate("/clients/new")}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-9 px-4 transition-all active:scale-95 whitespace-nowrap"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-8 sm:h-9 px-2 sm:px-4 transition-all active:scale-95 text-xs sm:text-sm"
                         >
-                            <Plus className="w-3.5 h-3.5 mr-2" />
-                            Nuevo Cliente
+                            <Plus className="w-3.5 h-3.5 sm:mr-2" />
+                            <span className="hidden xs:inline">Nuevo Cliente</span>
+                            <span className="xs:hidden">Nuevo</span>
                         </Button>
                     </div>
                 </div>
