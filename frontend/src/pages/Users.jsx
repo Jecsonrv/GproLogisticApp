@@ -497,7 +497,7 @@ function Users() {
                         <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleCreate} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Usuario *</Label>
                                 <Input
@@ -527,7 +527,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Nombre *</Label>
                                 <Input
@@ -556,7 +556,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Contraseña *</Label>
                                 <div className="relative">
@@ -622,7 +622,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <SelectERP
                                     label="Rol"
@@ -695,7 +695,7 @@ function Users() {
                         <DialogTitle>Editar Usuario</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Usuario</Label>
                                 <Input
@@ -720,7 +720,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Nombre *</Label>
                                 <Input
@@ -749,7 +749,7 @@ function Users() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <SelectERP
                                     label="Rol"

@@ -31,7 +31,7 @@ function Login() {
         <div className="min-h-screen flex items-center justify-center bg-slate-50">
             {/* Login Form */}
             <div className="max-w-md w-full mx-4">
-                <div className="bg-white rounded-lg shadow-lg p-8 space-y-8">
+                <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8 space-y-8">
                     {/* Logo and Title */}
                     <div className="text-center">
                         <div className="mx-auto mb-6 flex items-center justify-center">

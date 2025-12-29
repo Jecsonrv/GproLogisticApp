@@ -4,6 +4,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+from reportlab.lib.utils import ImageReader
 import os
 
 def create_manual():
@@ -23,7 +24,7 @@ def create_manual():
     COLOR_INFO = colors.HexColor("#0284c7")         # Azul para información
 
     doc = SimpleDocTemplate(
-        "MANUAL_USUARIO_GPRO_MEJORADO.pdf",
+        "MANUAL_USUARIO_GPRO_FINAL.pdf",
         pagesize=LETTER,
         rightMargin=50,
         leftMargin=50,
@@ -157,29 +158,54 @@ def create_manual():
     story.append(Spacer(1, 60))
 
     # Intentar añadir logo si existe
-    logo_path = "frontend/public/logo.svg"
+    logo_path = "logo/logo.png"
     if os.path.exists(logo_path):
         try:
-            logo = Image(logo_path, width=2*inch, height=2*inch)
+            # Obtener dimensiones originales para mantener relación de aspecto
+            img_reader = ImageReader(logo_path)
+            iw, ih = img_reader.getSize()
+            aspect = ih / float(iw)
+            
+            # Definir ancho deseado (3 pulgadas) y calcular alto
+            desired_width = 3.0 * inch
+            desired_height = desired_width * aspect
+            
+            # Si el alto resultante es demasiado grande (> 2.5 pulgadas), limitar por alto
+            if desired_height > 2.5 * inch:
+                desired_height = 2.5 * inch
+                desired_width = desired_height / aspect
+
+            logo = Image(logo_path, width=desired_width, height=desired_height)
             logo.hAlign = 'CENTER'
             story.append(logo)
             story.append(Spacer(1, 20))
         except:
             pass  # Si falla, continuar sin logo
 
-    story.append(Paragraph("MANUAL DE USUARIO DEL SISTEMA", style_title))
+    story.append(Paragraph("MANUAL DE USUARIO", style_title))
     story.append(Spacer(1, 10))
-    story.append(Paragraph("GPRO Logistic", style_subtitle))
+    story.append(Paragraph("Sistema de Gestión Logística GPRO", style_subtitle))
+    
+    # Línea decorativa
+    story.append(Spacer(1, 20))
+    story.append(Paragraph(
+        "_________________________________________________________________",
+        ParagraphStyle('Divider', parent=styles['Normal'], alignment=TA_CENTER, textColor=COLOR_ACCENT)
+    ))
     story.append(Spacer(1, 40))
 
     intro = """
-    Este manual está diseñado para guiarte paso a paso en el uso de todas las funciones del sistema,
-    desde la creación de órdenes de servicio hasta la facturación y el seguimiento de pagos.
+    Manual de usuario - GPRO Logistic App. 
     <br/><br/>
-    Consulta esta guía cada vez que tengas una duda. Encontrarás ejemplos claros y consejos prácticos
-    para aprovechar al máximo todas las herramientas disponibles.
+    Este documento ha sido diseñado para acompañarte en cada paso de tu operación diaria, 
+    garantizando el máximo aprovechamiento de las herramientas digitales que hemos puesto a tu disposición.
+    <br/><br/>
+    Desde la gestión de embarques hasta el control financiero, aquí encontrarás las respuestas 
+    para operar con eficiencia, seguridad y confianza.
     """
     story.append(Paragraph(intro, style_body))
+    
+    # Pie de página de portada
     story.append(PageBreak())
 
     # =========================================
@@ -333,16 +359,38 @@ def create_manual():
 
     story.append(Paragraph("Subclientes", style_h2))
     story.append(Paragraph(
-        "Los subclientes te permiten organizar diferentes divisiones o sucursales de un mismo cliente principal. "
-        "Son útiles cuando un cliente tiene múltiples puntos de facturación o centros de costo.",
+        "Los subclientes te permiten gestionar casos donde tu cliente directo tiene sus propios clientes. "
+        "Este es un caso común cuando trabajas con freight forwarders o agentes de carga.",
         style_body
     ))
 
     story.append(Spacer(1, 8))
     story.append(Paragraph(
-        "Por ejemplo, si trabajas con una cadena de restaurantes, el cliente principal sería la empresa "
-        "matriz, y cada restaurante sería un subcliente.",
+        "<b>Ejemplo práctico:</b> Si PLG (tu cliente) es un freight forwarder, ellos tienen sus propios clientes. "
+        "En el sistema, PLG sería el Cliente Principal, y cada cliente de PLG sería un Subcliente. "
+        "De esta forma, puedes facturar a PLG pero identificar claramente para cuál de sus clientes se realizó el trámite.",
         style_body
+    ))
+
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Crear un Subcliente", style_h3))
+
+    subclient_steps = [
+        "Ve al módulo 'Catálogos' → pestaña 'Subclientes'",
+        "Haz clic en '+ Nuevo Subcliente'",
+        "Selecciona el Cliente Principal (ej: PLG - Freight Forwarder)",
+        "Ingresa el nombre del subcliente (ej: Cliente final de PLG)",
+        "Guarda el registro"
+    ]
+
+    for i, step in enumerate(subclient_steps, 1):
+        story.append(Paragraph(f"{i}. {step}", style_bullet))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "ℹ️ <b>Importante:</b> Todo subcliente debe estar asociado a un cliente principal. "
+        "El sistema no permitirá crear un subcliente sin seleccionar primero su cliente padre.",
+        style_tip
     ))
 
     story.append(Paragraph("Editar o Eliminar Clientes", style_h2))
@@ -373,15 +421,24 @@ def create_manual():
 
     os_steps = [
         "Haz clic en '+ Nueva Orden'",
-        "Selecciona el cliente y subcliente (si aplica)",
+        "Selecciona el cliente principal (ej: PLG - Freight Forwarder)",
+        "Si el cliente tiene subclientes, aparecerá automáticamente un campo para seleccionar el subcliente específico (opcional)",
         "Elige el tipo de embarque (Marítimo, Aéreo, Terrestre)",
         "Ingresa el número de DUCA y orden de compra",
-        "Opcionalmente añade proveedor y agente aduanero",
+        "Opcionalmente añade proveedor (naviera/agencia de carga)",
         "Guarda la orden"
     ]
 
     for i, step in enumerate(os_steps, 1):
         story.append(Paragraph(f"{i}. {step}", style_bullet))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "💡 <b>Consejo sobre Subclientes:</b> El campo de subcliente solo aparece si el cliente seleccionado "
+        "tiene subclientes registrados. Si cambias de cliente, el subcliente se limpiará automáticamente "
+        "para evitar inconsistencias.",
+        style_tip
+    ))
 
     story.append(Paragraph("Estados de una Orden", style_h2))
 
@@ -712,6 +769,31 @@ def create_manual():
         "Define las modalidades de transporte que manejas: Marítimo, Aéreo, Terrestre, u otros.",
         style_body
     ))
+
+    story.append(Paragraph("Subclientes", style_h2))
+    story.append(Paragraph(
+        "En la pestaña de Subclientes puedes ver y gestionar todos los subclientes registrados. "
+        "La tabla muestra tres columnas clave:",
+        style_body
+    ))
+
+    story.append(Spacer(1, 8))
+
+    subclient_cols = [
+        "<b>Subcliente:</b> Nombre del cliente final",
+        "<b>Cliente Principal:</b> El cliente padre (ej: el freight forwarder)",
+        "<b>Estado:</b> Si está activo o inactivo"
+    ]
+
+    for item in subclient_cols:
+        story.append(Paragraph(f"• {item}", style_bullet))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "Esta vista te permite identificar rápidamente qué subclientes pertenecen a cada cliente principal, "
+        "facilitando la organización cuando trabajas con múltiples freight forwarders.",
+        style_body
+    ))
     story.append(PageBreak())
 
     # 10. GESTIÓN DE USUARIOS
@@ -829,7 +911,7 @@ def create_manual():
     # =========================================
 
     doc.build(story)
-    print("Manual generado exitosamente: MANUAL_USUARIO_GPRO_MEJORADO.pdf")
+    print("Manual generado exitosamente: MANUAL_USUARIO_GPRO_FINAL.pdf")
 
 if __name__ == "__main__":
     create_manual()

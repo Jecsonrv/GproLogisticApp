@@ -141,8 +141,8 @@ function ServiceOrderDetailPage() {
                     </DialogHeader>
                     <form onSubmit={handleUpdateOrder} className="space-y-6">
                         {/* Client Info */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="col-span-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="sm:col-span-2">
                                 <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                                     <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs">
                                         1
@@ -171,8 +171,8 @@ function ServiceOrderDetailPage() {
                         <div className="border-t border-slate-100 my-4"></div>
 
                         {/* Shipment Info */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="col-span-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="sm:col-span-2">
                                 <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                                     <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs">
                                         2
@@ -213,7 +213,7 @@ function ServiceOrderDetailPage() {
                         </div>
 
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <Label className="mb-1.5 block text-xs font-medium text-slate-700">
                                         DUCA

@@ -760,8 +760,8 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
 
             {/* Lista de Documentos Agrupados - Tabla Unificada */}
             {Object.keys(groupedDocuments).length > 0 ? (
-                <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                    <table className="w-full text-left text-sm table-fixed">
+                <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left text-sm table-fixed min-w-[600px] sm:min-w-0">
                         <colgroup>
                             <col className="w-12" />
                             <col className="w-[40%]" />

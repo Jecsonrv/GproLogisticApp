@@ -558,7 +558,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                 </div>
 
                 {/* Resumen de totales */}
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                             Costos Directos
@@ -603,7 +603,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             : "Nuevo Pago a Proveedor"}
                     </h4>
                     <form onSubmit={handleAddPayment} className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {/* Tipo de Gasto */}
                             <div>
                                 <Label className="label-corporate label-required">
@@ -677,7 +677,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Proveedor */}
                             <div>
                                 <Label className="label-corporate">

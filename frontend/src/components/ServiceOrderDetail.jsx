@@ -306,13 +306,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-start">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-900">
+            <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                <div className="w-full md:w-auto">
+                    <h2 className="text-2xl font-bold text-slate-900 break-words">
                         OS: {order.order_number}
                     </h2>
-                    <div className="flex items-center space-x-3 mt-2">
-                        <div className="w-48">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-2">
+                        <div className="w-full sm:w-48">
                             <SelectERP
                                 value={order.status}
                                 onChange={handleStatusChange}
@@ -326,7 +326,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         {order.facturado && (
                             <Badge
                                 variant="success"
-                                className="bg-success-50/50 border-success-100 text-success-600 font-bold"
+                                className="bg-success-50/50 border-success-100 text-success-600 font-bold w-fit"
                             >
                                 <Check className="w-3.5 h-3.5" />
                                 FACTURADO
@@ -334,19 +334,19 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         )}
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <div className="text-right">
-                        <div className="text-sm text-slate-500">Total</div>
-                        <div className="text-3xl font-bold text-slate-900">
+                <div className="flex flex-col items-end gap-2 w-full md:w-auto">
+                    <div className="text-right w-full md:w-auto flex justify-between md:block items-center">
+                        <div className="text-sm text-slate-500 md:mb-1">Total</div>
+                        <div className="text-2xl sm:text-3xl font-bold text-slate-900">
                             {formatCurrency(order.total_amount || 0)}
                         </div>
                     </div>
                     {onEdit && ['pendiente', 'en_transito', 'en_puerto', 'en_almacen', 'finalizada'].includes(order.status) && (
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex flex-wrap justify-end gap-2 mt-1 w-full">
                             <Button
                                 size="sm"
                                 onClick={() => setShowBillingWizard(true)}
-                                className="bg-slate-900 hover:bg-slate-800 text-white"
+                                className="bg-slate-900 hover:bg-slate-800 text-white flex-1 sm:flex-none justify-center"
                             >
                                 <DollarSign className="w-4 h-4 mr-2" />
                                 Generar Factura
@@ -355,7 +355,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => onEdit(order)}
-                                className="border-slate-300 text-slate-700 hover:bg-slate-50"
+                                className="border-slate-300 text-slate-700 hover:bg-slate-50 flex-1 sm:flex-none justify-center"
                             >
                                 <Edit className="w-4 h-4 mr-2" />
                                 Editar Orden

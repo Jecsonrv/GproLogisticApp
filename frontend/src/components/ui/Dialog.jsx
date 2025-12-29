@@ -40,7 +40,7 @@ export function DialogContent({ children, className, size = "md" }) {
     return (
         <div
             className={cn(
-                "w-full rounded-xl bg-white p-6 shadow-2xl border border-gray-100",
+                "w-full rounded-xl bg-white p-4 sm:p-6 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto",
                 sizes[size],
                 className
             )}
