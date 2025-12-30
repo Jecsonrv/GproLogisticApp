@@ -211,7 +211,8 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
         return null;
     }
 
-    const isEditable = orderStatus === "abierta";
+    // La orden es editable si NO está cerrada
+    const isEditable = orderStatus !== "cerrada";
 
     return (
         <Card>
@@ -305,10 +306,11 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                         ivaType,
                                     } = calculateValues(expense, adjustment);
                                     const isBilled =
-                                        expense.is_billed || expense.invoice_id;
+                                        expense.is_billed || !!expense.invoice_id;
                                     const isAmountLocked =
                                         expense.amount_locked ||
                                         expense.paid_amount > 0;
+                                    const canEdit = isEditable && !isBilled;
 
                                     return (
                                         <tr
@@ -390,10 +392,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                                 );
                                                             }
                                                         }}
-                                                        disabled={
-                                                            !isEditable ||
-                                                            isBilled
-                                                        }
+                                                        disabled={!canEdit}
                                                         placeholder="0"
                                                     />
                                                 </div>
@@ -424,9 +423,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                                                             e.target.value
                                                         )
                                                     }
-                                                    disabled={
-                                                        !isEditable || isBilled
-                                                    }
+                                                    disabled={!canEdit}
                                                     className="h-8 w-full text-xs border border-slate-300 rounded px-1 py-1 bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
                                                 >
                                                     {IVA_TYPES.map((type) => (
