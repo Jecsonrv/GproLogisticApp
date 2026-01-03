@@ -33,6 +33,7 @@ import {
     Trash2,
     RefreshCw,
     XCircle,
+    MapPin,
 } from "lucide-react";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
@@ -57,6 +58,7 @@ function Catalogs() {
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [subClients, setSubClients] = useState([]);
     const [clients, setClients] = useState([]);
+    const [customs, setCustoms] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -74,13 +76,14 @@ function Catalogs() {
     const fetchAllCatalogs = async () => {
         setLoading(true);
         try {
-            const [provCat, prov, bnk, ship, sub, cli] = await Promise.all([
+            const [provCat, prov, bnk, ship, sub, cli, cust] = await Promise.all([
                 axios.get("/catalogs/provider-categories/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/banks/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/sub-clients/"),
                 axios.get("/clients/"),
+                axios.get("/catalogs/customs/"),
             ]);
             setProviderCategories(provCat.data);
             setProviders(prov.data);
@@ -88,6 +91,7 @@ function Catalogs() {
             setShipmentTypes(ship.data);
             setSubClients(sub.data);
             setClients(cli.data);
+            setCustoms(cust.data);
         } catch {
             toast.error("Error al cargar catálogos");
         } finally {
@@ -133,6 +137,12 @@ function Catalogs() {
                 is_active: true,
             },
             subClients: { name: "", parent_client: "", is_active: true },
+            customs: {
+                name: "",
+                code: "",
+                location: "",
+                is_active: true,
+            },
         };
         return defaults[catalog] || {};
     };
@@ -146,6 +156,7 @@ function Catalogs() {
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
                 subClients: "/catalogs/sub-clients/",
+                customs: "/catalogs/customs/",
             };
 
             const endpoint = endpoints[currentCatalog];
@@ -211,6 +222,7 @@ function Catalogs() {
                 banks: "/catalogs/banks/",
                 shipmentTypes: "/catalogs/shipment-types/",
                 subClients: "/catalogs/sub-clients/",
+                customs: "/catalogs/customs/",
             };
 
             await axios.delete(`${endpoints[catalog]}${id}/`);
@@ -356,6 +368,21 @@ function Catalogs() {
                 },
                 actionsColumn,
             ],
+            customs: [
+                { accessor: "name", header: "Nombre" },
+                { accessor: "code", header: "Código" },
+                { accessor: "location", header: "Ubicación" },
+                {
+                    accessor: "is_active",
+                    header: "Estado",
+                    cell: (row) => (
+                        <Badge variant={row.is_active ? "success" : "default"}>
+                            {row.is_active ? "Activo" : "Inactivo"}
+                        </Badge>
+                    ),
+                },
+                actionsColumn,
+            ],
         };
 
         return specific[catalog] || [];
@@ -368,6 +395,7 @@ function Catalogs() {
             banks,
             shipmentTypes,
             subClients,
+            customs,
         };
         return data[catalog] || [];
     };
@@ -670,6 +698,55 @@ function Catalogs() {
                                     </>
                                 );
 
+                            case "customs":
+                                return (
+                                    <>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Nombre *
+                                            </Label>
+                                            <Input
+                                                value={formData.name || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        name: e.target.value,
+                                                    })
+                                                }
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-span-12 md:col-span-6">
+                                            <Label className="mb-1.5 block">
+                                                Código
+                                            </Label>
+                                            <Input
+                                                value={formData.code || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        code: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <Label className="mb-1.5 block">
+                                                Ubicación
+                                            </Label>
+                                            <Input
+                                                value={formData.location || ""}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        location: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                );
+
                             default:
                                 return null;
                         }
@@ -686,6 +763,7 @@ function Catalogs() {
             banks: "Banco",
             shipmentTypes: "Tipo de Embarque",
             subClients: "Subcliente",
+            customs: "Aduana",
         };
         return `${editingItem ? "Editar" : "Nuevo"} ${
             titles[currentCatalog] || ""
@@ -792,6 +870,19 @@ function Catalogs() {
                             <span className="hidden sm:inline">Subclientes</span>
                             <span className="sm:hidden">Subcli.</span>
                         </button>
+                        <button
+                            onClick={() => setActiveTab("customs")}
+                            className={cn(
+                                "px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap",
+                                activeTab === "customs"
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                            )}
+                        >
+                            <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                            <span className="hidden sm:inline">Aduanas</span>
+                            <span className="sm:hidden">Aduan.</span>
+                        </button>
                     </div>
                 </div>
 
@@ -802,6 +893,7 @@ function Catalogs() {
                     "banks",
                     "shipmentTypes",
                     "subClients",
+                    "customs",
                 ].map((tab) => (
                     <TabsContent value={tab} key={tab}>
                         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col pb-4">
@@ -824,6 +916,8 @@ function Catalogs() {
                                                     ? "categorías"
                                                     : tab === "shipmentTypes"
                                                     ? "tipos de embarque"
+                                                    : tab === "customs"
+                                                    ? "aduanas"
                                                     : "subclientes"
                                             }...`}
                                             value={searchTerm}
@@ -885,6 +979,8 @@ function Catalogs() {
                                                     "Nuevo Tipo"}
                                                 {tab === "subClients" &&
                                                     "Nuevo Subcliente"}
+                                                {tab === "customs" &&
+                                                    "Nueva Aduana"}
                                             </span>
                                             <span className="xs:hidden">Nuevo</span>
                                         </Button>

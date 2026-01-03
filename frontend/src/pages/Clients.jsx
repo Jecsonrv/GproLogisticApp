@@ -16,6 +16,8 @@ import {
     CheckCircle,
     XCircle,
     Filter,
+    Globe,
+    Flag,
 } from "lucide-react";
 import {
     Button,
@@ -93,8 +95,14 @@ function Clients() {
         const granContribuyente = clients.filter(
             (c) => c.is_gran_contribuyente
         ).length;
+        const nacionales = clients.filter(
+            (c) => c.client_type === "nacional"
+        ).length;
+        const internacionales = clients.filter(
+            (c) => c.client_type === "internacional"
+        ).length;
 
-        return { total, active, withCredit, granContribuyente };
+        return { total, active, withCredit, granContribuyente, nacionales, internacionales };
     }, [clients]);
 
     // Fetch clients
@@ -271,11 +279,18 @@ function Clients() {
                         <Building2 className="w-4 h-4 text-slate-400" />
                     </div>
                     <div className="min-w-0">
-                        <div className="font-semibold text-slate-700 truncate text-sm">
-                            {row.name}
+                        <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-700 truncate text-sm">
+                                {row.name}
+                            </span>
+                            {row.client_type === "internacional" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium uppercase tracking-wide">
+                                    Int
+                                </span>
+                            )}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">
-                            NIT: {row.nit}
+                            {row.nit ? `NIT: ${row.nit}` : "Sin NIT"}
                         </div>
                     </div>
                 </div>
@@ -408,21 +423,26 @@ function Clients() {
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
             {/* Bloque Superior (Estratégico): KPIs Responsive */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total Clientes"
                     value={stats.total}
                     icon={Building2}
                 />
                 <KPICard
+                    label="Nacionales"
+                    value={stats.nacionales}
+                    icon={Flag}
+                />
+                <KPICard
+                    label="Internacionales"
+                    value={stats.internacionales}
+                    icon={Globe}
+                />
+                <KPICard
                     label="Activos"
                     value={stats.active}
                     icon={CheckCircle}
-                />
-                <KPICard
-                    label="Inactivos"
-                    value={stats.total - stats.active}
-                    icon={XCircle}
                 />
                 <KPICard
                     label="Con Crédito"
@@ -630,6 +650,9 @@ function Clients() {
                                         </p>
                                     )}
                                 <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="secondary">
+                                        {selectedClient.client_type === "internacional" ? "Internacional" : "Nacional"}
+                                    </Badge>
                                     {selectedClient.is_active ? (
                                         <Badge variant="success">Activo</Badge>
                                     ) : (

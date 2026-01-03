@@ -19,6 +19,7 @@ import {
     FileMinus,
     Banknote,
     Trash2,
+    Lock as LockIcon,
 } from "lucide-react";
 import {
     Button,
@@ -345,7 +346,7 @@ const ProviderStatements = () => {
     const toggleSelectAll = (checked) => {
         if (checked && statement?.transfers) {
             const payableTransfers = statement.transfers
-                .filter(t => t.status !== "pagado" && t.balance > 0)
+                .filter(t => (t.status === "aprobado" || t.status === "parcial") && t.balance > 0)
                 .map(t => t.id);
             setSelectedTransferIds(payableTransfers);
         } else {
@@ -486,9 +487,12 @@ const ProviderStatements = () => {
                 proof_file: null,
             });
         } catch (error) {
-            toast.error(
-                error.response?.data?.error || "Error al registrar pago"
-            );
+            const errorData = error.response?.data;
+            const errorMsg = 
+                errorData?.transfer || 
+                errorData?.error || 
+                "Error al registrar pago";
+            toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
         }
@@ -625,7 +629,8 @@ const ProviderStatements = () => {
             className: "w-12",
             sortable: false,
             cell: (row) => {
-                const isPayable = row.status !== "pagado" && row.balance > 0;
+                // Solo permitir selección si está aprobado o parcial y tiene saldo
+                const isPayable = (row.status === "aprobado" || row.status === "parcial") && row.balance > 0;
                 return (
                     <div
                         className="flex items-center justify-center py-2"
@@ -759,18 +764,24 @@ const ProviderStatements = () => {
                 <div className="flex items-center justify-end gap-1">
                     {row.status !== "pagado" && (
                         <>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    openPaymentModal(row);
-                                }}
-                                className="text-gray-500 hover:text-amber-600"
-                                title="Registrar Pago"
-                            >
-                                <Banknote className="w-4 h-4" />
-                            </Button>
+                            {(row.status === "aprobado" || row.status === "parcial") ? (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openPaymentModal(row);
+                                    }}
+                                    className="text-gray-500 hover:text-amber-600"
+                                    title="Registrar Pago"
+                                >
+                                    <Banknote className="w-4 h-4" />
+                                </Button>
+                            ) : (
+                                <span className="p-2 text-slate-300 cursor-not-allowed" title="Requiere aprobación">
+                                    <LockIcon className="w-4 h-4" />
+                                </span>
+                            )}
                             <Button
                                 variant="ghost"
                                 size="sm"
@@ -847,11 +858,10 @@ const ProviderStatements = () => {
                 <SelectERP
                     value={selectedYear}
                     onChange={setSelectedYear}
-                    options={[
-                        { id: 2025, name: "2025" },
-                        { id: 2024, name: "2024" },
-                        { id: 2023, name: "2023" },
-                    ]}
+                    options={Array.from({ length: 5 }, (_, i) => {
+                        const year = new Date().getFullYear() - i;
+                        return { id: year, name: String(year) };
+                    })}
                     getOptionLabel={(o) => o.name}
                     getOptionValue={(o) => o.id}
                     size="sm"
@@ -1037,7 +1047,7 @@ const ProviderStatements = () => {
                                         <CardTitle>
                                             Historial de Movimientos ({selectedYear})
                                         </CardTitle>
-                                        {statement?.transfers && statement.transfers.some(t => t.status !== "pagado" && t.balance > 0) && (
+                                        {statement?.transfers && statement.transfers.some(t => (t.status === "aprobado" || t.status === "parcial") && t.balance > 0) && (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -1064,7 +1074,7 @@ const ProviderStatements = () => {
                                         columns={columns}
                                         data={statement?.transfers || []}
                                         loading={loadingStatement}
-                                        emptyMessage="No hay movimientos registrados para este año"
+                                        emptyMessage="No hay movimientos registrados en el período seleccionado"
                                     />
                                 </CardContent>
                             </Card>

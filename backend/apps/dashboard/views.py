@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
 from django.conf import settings
-from apps.orders.models import ServiceOrder, Invoice
+from apps.orders.models import ServiceOrder, Invoice, OrderCharge
 from apps.transfers.models import Transfer
 from apps.clients.models import Client
 from datetime import datetime, timedelta
@@ -70,19 +70,21 @@ class DashboardView(APIView):
 
         if is_annual_view:
             # === ANNUAL VIEW LOGIC ===
-            
+
             # Current Year Totals
             total_os_month = ServiceOrder.objects.filter(created_at__year=current_year).count()
-            billed_amount = Transfer.objects.filter(
-                transfer_type__in=['cargos', 'terceros'],
-                transaction_date__year=current_year
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
+
+            # INGRESOS: Usar Invoice.total_amount (facturas emitidas) como fuente de verdad
+            # Esto incluye servicios (OrderCharge) + gastos a terceros cobrados al cliente
+            billed_amount = Invoice.objects.filter(
+                issue_date__year=current_year
+            ).exclude(status='cancelled').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+
             operating_costs = Transfer.objects.filter(
                 transfer_type__in=['costos', 'propios'],
                 transaction_date__year=current_year
             ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
+
             admin_costs = Transfer.objects.filter(
                 transfer_type='admin',
                 transaction_date__year=current_year
@@ -91,10 +93,9 @@ class DashboardView(APIView):
             # Previous Year Totals (for Trend)
             prev_year = current_year - 1
             total_os_prev_month = ServiceOrder.objects.filter(created_at__year=prev_year).count()
-            billed_amount_prev = Transfer.objects.filter(
-                transfer_type__in=['cargos', 'terceros'],
-                transaction_date__year=prev_year
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            billed_amount_prev = Invoice.objects.filter(
+                issue_date__year=prev_year
+            ).exclude(status='cancelled').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
             operating_costs_prev = Transfer.objects.filter(
                 transfer_type__in=['costos', 'propios'],
                 transaction_date__year=prev_year
@@ -102,28 +103,28 @@ class DashboardView(APIView):
 
             # Generate 12-month breakdown for Charts
             for m in range(1, 13):
-                m_billed = Transfer.objects.filter(
-                    transfer_type__in=['cargos', 'terceros'],
-                    transaction_date__year=current_year,
-                    transaction_date__month=m
-                ).aggregate(Sum('amount'))['amount__sum'] or 0
-                
+                # Ingresos: desde facturas emitidas
+                m_billed = Invoice.objects.filter(
+                    issue_date__year=current_year,
+                    issue_date__month=m
+                ).exclude(status='cancelled').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+
                 m_costs = Transfer.objects.filter(
-                    transfer_type__in=['costos', 'propios', 'admin'], # Include admin in chart costs
+                    transfer_type__in=['costos', 'propios', 'admin'],  # Include admin in chart costs
                     transaction_date__year=current_year,
                     transaction_date__month=m
                 ).aggregate(Sum('amount'))['amount__sum'] or 0
-                
+
                 m_os = ServiceOrder.objects.filter(
                     created_at__year=current_year,
                     created_at__month=m
                 ).count()
 
-                month_name = datetime(current_year, m, 1).strftime('%b').capitalize() # Ene, Feb...
+                month_name = datetime(current_year, m, 1).strftime('%b').capitalize()  # Ene, Feb...
                 # Note: Locale depends on system, we might want fixed names but this works for now.
-                
+
                 if m_billed > 0 or m_costs > 0 or m_os > 0:
-                     monthly_breakdown.append({
+                    monthly_breakdown.append({
                         'name': month_name,
                         'month': m,
                         'ingresos': float(m_billed),
@@ -143,33 +144,33 @@ class DashboardView(APIView):
 
         else:
             # === MONTHLY VIEW LOGIC (Existing) ===
-            
+
             # Mes anterior relativo a la fecha seleccionada
             previous_month_date = reference_date - relativedelta(months=1)
             prev_month = previous_month_date.month
             prev_year = previous_month_date.year
 
             total_os_month = ServiceOrder.objects.filter(
-                created_at__year=current_year, 
+                created_at__year=current_year,
                 created_at__month=current_month
             ).count()
-            
+
             total_os_prev_month = ServiceOrder.objects.filter(
-                created_at__year=prev_year, 
+                created_at__year=prev_year,
                 created_at__month=prev_month
             ).count()
 
-            billed_amount = Transfer.objects.filter(
-                transfer_type__in=['cargos', 'terceros'],
-                transaction_date__year=current_year,
-                transaction_date__month=current_month
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            # INGRESOS: Usar Invoice.total_amount (facturas emitidas) como fuente de verdad
+            # Esto incluye servicios (OrderCharge) + gastos a terceros cobrados al cliente
+            billed_amount = Invoice.objects.filter(
+                issue_date__year=current_year,
+                issue_date__month=current_month
+            ).exclude(status='cancelled').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
-            billed_amount_prev = Transfer.objects.filter(
-                transfer_type__in=['cargos', 'terceros'],
-                transaction_date__year=prev_year,
-                transaction_date__month=prev_month
-            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            billed_amount_prev = Invoice.objects.filter(
+                issue_date__year=prev_year,
+                issue_date__month=prev_month
+            ).exclude(status='cancelled').aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
             operating_costs = Transfer.objects.filter(
                 transfer_type__in=['costos', 'propios'],
@@ -182,7 +183,7 @@ class DashboardView(APIView):
                 transaction_date__year=prev_year,
                 transaction_date__month=prev_month
             ).aggregate(Sum('amount'))['amount__sum'] or 0
-            
+
             admin_costs = Transfer.objects.filter(
                 transfer_type='admin',
                 transaction_date__year=current_year,
@@ -207,14 +208,18 @@ class DashboardView(APIView):
             )
 
         # Common logic (Trends, Top Clients aggregation, etc.)
-        
-        # Top 5 clientes (Queryset defined above)
+
+        # Top 5 clientes - Calcular desde Invoice (facturas emitidas, no canceladas)
+        # Esto da un monto más preciso de lo facturado por cliente
         top_clients = top_clients_qs.values(
             'client__id',
             'client__name'
         ).annotate(
             total_orders=Count('id'),
-            total_amount=Sum('transfers__amount', filter=Q(transfers__transfer_type__in=['cargos', 'terceros']))
+            total_amount=Sum(
+                'invoices__total_amount',
+                filter=~Q(invoices__status='cancelled')
+            )
         ).order_by('-total_amount')[:5]
 
         # Calcular tendencias (% cambio)
@@ -353,9 +358,10 @@ class DashboardView(APIView):
                     })
 
         # Órdenes recientes (últimas 10) - optimizado con annotate para evitar N+1
+        # Usamos Invoice.total_amount (facturas no canceladas) como fuente de verdad para montos
         recent_orders = ServiceOrder.objects.select_related('client').annotate(
             calculated_total=Coalesce(
-                Sum('transfers__amount', filter=Q(transfers__transfer_type__in=['cargos', 'terceros'])),
+                Sum('invoices__total_amount', filter=~Q(invoices__status='cancelled')),
                 0,
                 output_field=DecimalField()
             )

@@ -33,6 +33,7 @@ import {
     CardTitle,
     CardContent,
     Input,
+    Textarea,
     SelectERP,
     Badge,
     Label,
@@ -171,6 +172,7 @@ const ServiceOrders = () => {
     const [subClients, setSubClients] = useState([]);
     const [shipmentTypes, setShipmentTypes] = useState([]);
     const [providers, setProviders] = useState([]);
+    const [customs, setCustoms] = useState([]);
 
     // UI state
     const [loading, setLoading] = useState(true);
@@ -208,7 +210,9 @@ const ServiceOrders = () => {
         purchase_order: "",
         bl_reference: "",
         eta: "",
-        duca: "",
+        ducas: [""],
+        customs: "",
+        notes: "",
     });
 
     useEffect(() => {
@@ -248,24 +252,30 @@ const ServiceOrders = () => {
 
     const fetchCatalogs = async () => {
         try {
-            const [clientsRes, subClientsRes, typesRes, providersRes, categoriesRes] = await Promise.all([
+            const [clientsRes, subClientsRes, typesRes, providersRes, categoriesRes, customsRes] = await Promise.all([
                 axios.get("/clients/active/"),
                 axios.get("/catalogs/sub-clients/"),
                 axios.get("/catalogs/shipment-types/"),
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/provider-categories/"),
+                axios.get("/catalogs/customs/"),
             ]);
             setClients(clientsRes.data);
             setSubClients(subClientsRes.data);
             setShipmentTypes(typesRes.data);
+            setCustoms(customsRes.data);
 
-            // Filtrar proveedores para mostrar solo Naviera y Agencia de Carga
-            const navieraAgenciaCategories = categoriesRes.data.filter(
-                cat => cat.name === 'Naviera' || cat.name === 'Agencia de Carga'
+            // Filtrar proveedores: Naviera, Agencia de Carga y Aerolínea (Case Insensitive)
+            const allowedCategories = ['naviera', 'agencia de carga', 'aerolínea', 'aerolinea', 'transportista'];
+            
+            const validCategories = categoriesRes.data.filter(cat => 
+                allowedCategories.includes(cat.name.toLowerCase())
             );
-            const categoryIds = navieraAgenciaCategories.map(cat => cat.id);
+            
+            const validCategoryIds = validCategories.map(cat => cat.id);
+            
             const filteredProviders = providersRes.data.filter(
-                prov => prov.category && categoryIds.includes(prov.category)
+                prov => prov.category && validCategoryIds.includes(prov.category)
             );
 
             setProviders(filteredProviders);
@@ -277,13 +287,20 @@ const ServiceOrders = () => {
     const handleCreate = async (e) => {
         e.preventDefault();
         try {
+            // Convertir array de ducas a string separado por comas (filtrar vacíos)
+            const dataToSend = {
+                ...formData,
+                duca: formData.ducas.filter(d => d.trim()).join(", "),
+            };
+            delete dataToSend.ducas;
+
             if (selectedOrder) {
                 // Update logic
-                await axios.patch(`/orders/service-orders/${selectedOrder.id}/`, formData);
+                await axios.patch(`/orders/service-orders/${selectedOrder.id}/`, dataToSend);
                 toast.success("La orden de servicio ha sido actualizada correctamente.");
             } else {
                 // Create logic
-                await axios.post("/orders/service-orders/", formData);
+                await axios.post("/orders/service-orders/", dataToSend);
                 toast.success("La orden de servicio ha sido creada correctamente.");
             }
             fetchOrders();
@@ -304,7 +321,9 @@ const ServiceOrders = () => {
             purchase_order: order.purchase_order || "",
             bl_reference: order.bl_reference || "",
             eta: order.eta || "",
-            duca: order.duca || "",
+            ducas: order.duca ? order.duca.split(",").map(d => d.trim()) : [""],
+            customs: order.customs || "",
+            notes: order.notes || "",
         });
         setIsCreateModalOpen(true);
     };
@@ -318,7 +337,9 @@ const ServiceOrders = () => {
             purchase_order: "",
             bl_reference: "",
             eta: "",
-            duca: "",
+            ducas: [""],
+            customs: "",
+            notes: "",
         });
         setSelectedOrder(null);
     };
@@ -937,7 +958,7 @@ const ServiceOrders = () => {
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Naviera / Transportista</Label>
+                                <Label className="mb-1.5 block">Naviera / Aerolínea / Transportista</Label>
                                 <SelectERP
                                     value={formData.provider}
                                     onChange={(val) => setFormData({ ...formData, provider: val })}
@@ -948,19 +969,65 @@ const ServiceOrders = () => {
                                     clearable
                                 />
                             </div>
+                            <div>
+                                <Label className="mb-1.5 block">Aduana</Label>
+                                <SelectERP
+                                    value={formData.customs}
+                                    onChange={(val) => setFormData({ ...formData, customs: val })}
+                                    options={customs}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    clearable
+                                    placeholder="Selecciona una aduana..."
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <div className="p-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                            <div>
-                                <Label className="mb-1.5 block">DUCA</Label>
-                                <Input
-                                    value={formData.duca}
-                                    onChange={(e) => setFormData({ ...formData, duca: e.target.value })}
-                                    placeholder="Ej: 4-12345"
-                                    className="font-mono uppercase bg-white"
-                                />
+                            <div className="sm:col-span-2">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <Label>DUCA(s)</Label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, ducas: [...formData.ducas, ""] })}
+                                        className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Agregar DUCA
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {formData.ducas.map((duca, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                            <Input
+                                                value={duca}
+                                                onChange={(e) => {
+                                                    const newDucas = [...formData.ducas];
+                                                    newDucas[index] = e.target.value;
+                                                    setFormData({ ...formData, ducas: newDucas });
+                                                }}
+                                                placeholder={`DUCA ${index + 1} - Ej: 4-12345`}
+                                                className="font-mono uppercase bg-white flex-1"
+                                            />
+                                            {formData.ducas.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newDucas = formData.ducas.filter((_, i) => i !== index);
+                                                        setFormData({ ...formData, ducas: newDucas });
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                    title="Eliminar DUCA"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                             <div>
                                 <Label className="mb-1.5 block">BL / Guía</Label>
@@ -987,6 +1054,16 @@ const ServiceOrders = () => {
                                     onChange={(e) => setFormData({ ...formData, purchase_order: e.target.value })}
                                     placeholder="Ej: PO-998877"
                                     className="bg-white"
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <Label className="mb-1.5 block">Notas / Información Adicional</Label>
+                                <Textarea
+                                    value={formData.notes}
+                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                    placeholder="Observaciones, instrucciones especiales, información relevante..."
+                                    rows={3}
+                                    className="bg-white resize-none"
                                 />
                             </div>
                         </div>

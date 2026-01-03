@@ -91,6 +91,23 @@ class ShipmentType(models.Model):
     def __str__(self):
         return self.name
 
+
+class Customs(models.Model):
+    """Catálogo de Aduanas"""
+    name = models.CharField(max_length=255, unique=True, verbose_name="Nombre")
+    code = models.CharField(max_length=20, blank=True, verbose_name="Código")
+    location = models.CharField(max_length=255, blank=True, verbose_name="Ubicación")
+    is_active = models.BooleanField(default=True, verbose_name="Activo")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+
+    class Meta:
+        verbose_name = "Aduana"
+        verbose_name_plural = "Aduanas"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
 class SubClient(models.Model):
     name = models.CharField(max_length=255, verbose_name="Nombre")
     parent_client = models.ForeignKey('clients.Client', on_delete=models.CASCADE, related_name='subclients', null=True, blank=True, verbose_name="Cliente Principal")

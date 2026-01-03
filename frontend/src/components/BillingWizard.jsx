@@ -70,9 +70,13 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                 serviceOrder.client_payment_condition || "contado";
             const creditDays = serviceOrder.client_credit_days || 0;
 
+            // Determinar tipo de factura por defecto
+            // Si es internacional -> FEX, si no -> DTE (CCF/Factura)
+            const defaultInvoiceType = serviceOrder.client_type === 'internacional' ? "FEX" : "DTE";
+
             setFormData({
                 invoice_number: "",
-                invoice_type: "DTE",
+                invoice_type: defaultInvoiceType,
                 issue_date: today,
                 due_date: calculateDueDate(today, creditDays, paymentCond),
                 payment_condition: paymentCond,
@@ -135,12 +139,20 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             charges.forEach((charge) => {
                 if (selectedChargeIds.includes(charge.id)) {
                     const amount = parseFloat(charge.amount);
-                    const ivaAmount = parseFloat(charge.iva);
+                    let ivaAmount = parseFloat(charge.iva);
+
+                    // Si es Factura de Exportación (FEX) o Internacional (INTL), el IVA es 0
+                    const isExport = formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL';
+                    if (isExport) {
+                        ivaAmount = 0;
+                    }
 
                     // Separar servicios de gastos de terceros
                     if (charge.type === 'service') {
                         subtotalServicios += amount;
                         // Acumular base gravada solo si el servicio es gravado
+                        // NOTA: Si es FEX, el IVA será forzado a 0 arriba, pero mantenemos la base
+                        // para que si cambian a DTE se recalcule correctamente.
                         if (charge.iva_type === 'gravado') {
                             baseGravadaServicios += amount;
                         }
@@ -149,7 +161,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                     }
 
                     iva += ivaAmount;
-                    total += parseFloat(charge.total);
+                    
+                    // Recalcular total de línea considerando el IVA ajustado
+                    total += amount + ivaAmount;
                 }
             });
         }
@@ -338,7 +352,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-slate-100">
-                                                {charges.map((charge) => (
+                                                {charges.map((charge) => {
+                                                    // Ajuste visual dinámico según tipo de factura
+                                                    // Si es FEX/INTL, mostrar IVA como 0 aunque el cargo tenga IVA
+                                                    const isExport = formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL';
+                                                    const displayIva = isExport ? 0 : parseFloat(charge.iva);
+                                                    const displayTotal = parseFloat(charge.amount) + displayIva;
+
+                                                    return (
                                                     <tr
                                                         key={charge.id}
                                                         className={cn(
@@ -392,16 +413,16 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         </td>
                                                         <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
                                                             {formatCurrency(
-                                                                charge.iva
+                                                                displayIva
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-2.5 text-right tabular-nums font-bold text-slate-900">
                                                             {formatCurrency(
-                                                                charge.total
+                                                                displayTotal
                                                             )}
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                )})}
                                             </tbody>
                                             <tfoot className="bg-slate-50 border-t border-slate-200">
                                                 <tr>
@@ -475,9 +496,17 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                         </span>
                                     </div>
 
+                                    {/* IVA */}
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-slate-500">IVA 13%</span>
-                                        <span className="text-slate-700 tabular-nums">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-slate-500">IVA 13%</span>
+                                            {(formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL') && (
+                                                <Badge variant="outline" className="text-[9px] px-1 h-4 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                    EXENTO (EXPORTACIÓN)
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <span className={`tabular-nums ${selectedTotals.iva === 0 ? "text-slate-400" : "text-slate-700"}`}>
                                             {formatCurrency(selectedTotals.iva)}
                                         </span>
                                     </div>

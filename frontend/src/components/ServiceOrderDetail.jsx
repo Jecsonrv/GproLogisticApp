@@ -224,7 +224,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             unit_price: "",
             discount: "",
             notes: "",
-            iva_type: "gravado",
+            iva_type: order?.client_type === "internacional" ? "no_sujeto" : "gravado",
         });
     };
 
@@ -505,12 +505,30 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         </div>
                                         <div>
                                             <dt className="text-sm font-medium text-slate-500">
+                                                Aduana
+                                            </dt>
+                                            <dd className="mt-1 text-base text-slate-700">
+                                                {order.customs_name || "—"}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt className="text-sm font-medium text-slate-500">
                                                 Orden de Compra (PO)
                                             </dt>
                                             <dd className="mt-1 text-base text-slate-700">
                                                 {order.purchase_order || "—"}
                                             </dd>
                                         </div>
+                                        {order.notes && (
+                                            <div className="pt-3 border-t border-slate-100">
+                                                <dt className="text-sm font-medium text-slate-500">
+                                                    Notas
+                                                </dt>
+                                                <dd className="mt-1 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap">
+                                                    {order.notes}
+                                                </dd>
+                                            </div>
+                                        )}
                                     </dl>
                                 </div>
                             </div>
@@ -683,10 +701,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         }
 
                                                         // Determinar Tratamiento Fiscal (Prioridad: Personalizado > General)
-                                                        let defaultIvaType =
-                                                            "gravado";
+                                                        // SI ES INTERNACIONAL -> SIEMPRE DEFAULT A NO SUJETO
+                                                        let defaultIvaType = "gravado";
 
-                                                        if (
+                                                        if (order?.client_type === "internacional") {
+                                                            defaultIvaType = "no_sujeto";
+                                                        } else if (
                                                             customPrice &&
                                                             customPrice.iva_type
                                                         ) {
@@ -1515,6 +1535,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         <ExpenseCalculatorTab
                             orderId={orderId}
                             orderStatus={order.status}
+                            clientType={order.client_type}
                             onUpdate={() => {
                                 fetchOrderDetail();
                                 if (onUpdate) onUpdate();

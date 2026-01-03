@@ -3,7 +3,7 @@ Serializers para Catálogos (Proveedores, Aforadores, Servicios, etc.)
 """
 from rest_framework import serializers
 from .models import (
-    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, SubClient,
+    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, Customs, SubClient,
     Service, ClientServicePrice
 )
 from decimal import Decimal
@@ -75,6 +75,18 @@ class ShipmentTypeSerializer(serializers.ModelSerializer):
         model = ShipmentType
         fields = [
             'id', 'name', 'code', 'description',
+            'is_active', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class CustomsSerializer(serializers.ModelSerializer):
+    """Serializer para Aduanas"""
+
+    class Meta:
+        model = Customs
+        fields = [
+            'id', 'name', 'code', 'location',
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']

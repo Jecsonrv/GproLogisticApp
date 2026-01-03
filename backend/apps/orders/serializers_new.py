@@ -124,6 +124,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
     shipment_type_name = serializers.CharField(source='shipment_type.name', read_only=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
+    customs_name = serializers.CharField(source='customs.name', read_only=True, allow_null=True)
     customs_agent_name = serializers.SerializerMethodField()
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     
@@ -135,6 +136,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
     client_taxpayer_type = serializers.CharField(source='client.taxpayer_type', read_only=True)
     client_taxpayer_type_display = serializers.CharField(source='client.get_taxpayer_type_display', read_only=True)
     client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)  # Legacy
+    client_type = serializers.CharField(source='client.client_type', read_only=True)
     
     def get_customs_agent_name(self, obj):
         if obj.customs_agent:
@@ -171,12 +173,12 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'client', 'client_name',
             'client_payment_condition', 'client_credit_days', 'client_credit_limit',
-            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente',
+            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente', 'client_type',
             'sub_client', 'sub_client_name',
             'shipment_type', 'shipment_type_name',
             'provider', 'provider_name',
             'customs_agent', 'customs_agent_name',
-            'purchase_order', 'bl_reference', 'eta', 'duca',
+            'purchase_order', 'bl_reference', 'eta', 'duca', 'customs', 'customs_name', 'notes',
             'status', 'status_display', 'facturado', 'mes',
             'created_by', 'created_by_username',
             'closed_by', 'closed_by_username', 'closed_at',
@@ -192,7 +194,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             'closed_at', 'documents', 'charges',
             'client_name', 'sub_client_name', 'shipment_type_name',
             'client_payment_condition', 'client_credit_days', 'client_credit_limit',
-            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente',
+            'client_taxpayer_type', 'client_taxpayer_type_display', 'client_is_gran_contribuyente', 'client_type',
             'provider_name', 'customs_agent_name',
             'created_by_username', 'closed_by_username', 'status_display',
             'total_services', 'total_third_party', 'total_direct_costs', 'total_amount',

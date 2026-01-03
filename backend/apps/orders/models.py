@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from apps.clients.models import Client
-from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank
+from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank, Customs
 from apps.validators import validate_document_file
 from apps.core.models import SoftDeleteModel
 from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
@@ -25,6 +25,10 @@ class ServiceOrder(SoftDeleteModel):
     bl_reference = models.CharField(max_length=100, blank=True, verbose_name="BL/Referencia")
     eta = models.DateField(null=True, blank=True, verbose_name="ETA")
     duca = models.CharField(max_length=100, blank=True, verbose_name="DUCA")
+    customs = models.ForeignKey(Customs, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Aduana")
+
+    # Notas / Información adicional
+    notes = models.TextField(blank=True, verbose_name="Notas")
 
     # Estado y facturación
     STATUS_CHOICES = (
@@ -377,16 +381,6 @@ class OrderCharge(SoftDeleteModel):
                         raise ValidationError("No se pueden modificar cargos de una orden cerrada.")
                 elif cargo_facturado and not self.is_deleted:
                     raise ValidationError("No se puede modificar un cargo que ya ha sido facturado.")
-
-        # Sincronizar iva_type desde el servicio si es nuevo registro
-        if not self.pk and self.service:
-            # Usar el iva_type del servicio si esta disponible
-            if hasattr(self.service, 'iva_type') and self.service.iva_type:
-                self.iva_type = self.service.iva_type
-            else:
-                # Compatibilidad: usar applies_iva para determinar el tipo
-                # CORREGIDO: Usar 'no_sujeto' en lugar de 'exento' (que no existe en IVA_TYPE_CHOICES)
-                self.iva_type = 'gravado' if self.service.applies_iva else 'no_sujeto'
 
         # Sincronizar estado de facturación
         if self.invoice:

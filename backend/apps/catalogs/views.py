@@ -3,12 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
-    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, SubClient,
+    ProviderCategory, Provider, CustomsAgent, Bank, ShipmentType, Customs, SubClient,
     Service, ClientServicePrice
 )
 from .serializers import (
     ProviderCategorySerializer, ProviderSerializer, CustomsAgentSerializer, BankSerializer,
-    ShipmentTypeSerializer, SubClientSerializer,
+    ShipmentTypeSerializer, CustomsSerializer, SubClientSerializer,
     ServiceSerializer, ClientServicePriceSerializer
 )
 from .permissions import IsAdminOrReadOnly
@@ -161,6 +161,21 @@ class ShipmentTypeViewSet(viewsets.ModelViewSet):
         if self.action == 'list' and self.request.query_params.get('is_active') is None:
             queryset = queryset.filter(is_active=True)
         return queryset.order_by('name')
+
+class CustomsViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestión de aduanas"""
+    queryset = Customs.objects.all()
+    serializer_class = CustomsSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    search_fields = ['name', 'code', 'location']
+    filterset_fields = ['is_active']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == 'list' and self.request.query_params.get('is_active') is None:
+            queryset = queryset.filter(is_active=True)
+        return queryset.order_by('name')
+
 
 class SubClientViewSet(viewsets.ModelViewSet):
     queryset = SubClient.objects.all()

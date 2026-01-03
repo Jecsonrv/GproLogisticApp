@@ -369,12 +369,21 @@ class TransferPayment(SoftDeleteModel):
         """Validacion de integridad del pago"""
         super().clean()
 
-        # Validar que el monto no exceda el balance pendiente (solo en creacion)
-        if not self.pk and self.transfer:
-            if self.amount > self.transfer.balance:
+        if self.transfer:
+            # Validar que el gasto esté aprobado antes de pagar
+            # Permitimos 'aprobado', 'parcial' (ya tiene pagos) o 'pagado' (ajustes)
+            # Bloqueamos 'pendiente' y 'provisionada'
+            if self.transfer.status not in ['aprobado', 'parcial', 'pagado']:
                 raise ValidationError({
-                    'amount': f'El monto del pago (${self.amount}) no puede exceder el saldo pendiente (${self.transfer.balance})'
+                    'transfer': f'No se puede registrar un pago para un gasto en estado "{self.transfer.get_status_display()}". Debe estar APROBADO.'
                 })
+
+            # Validar que el monto no exceda el balance pendiente (solo en creacion)
+            if not self.pk:
+                if self.amount > self.transfer.balance:
+                    raise ValidationError({
+                        'amount': f'El monto del pago (${self.amount}) no puede exceder el saldo pendiente (${self.transfer.balance})'
+                    })
 
     def save(self, *args, **kwargs):
         from django.db import transaction

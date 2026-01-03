@@ -47,7 +47,7 @@ class ClientListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = [
-            'id', 'name', 'legal_name', 'nit', 'iva_registration',
+            'id', 'client_type', 'name', 'legal_name', 'nit', 'iva_registration',
             'address', 'phone', 'secondary_phone', 'email', 'contact_person',
             'payment_condition', 'credit_days', 'credit_limit', 'credit_available',
             'taxpayer_type', 'taxpayer_type_display', 'taxpayer_type_short',

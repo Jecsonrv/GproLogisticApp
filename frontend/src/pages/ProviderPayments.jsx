@@ -730,6 +730,11 @@ function ProviderPayments() {
         e.preventDefault();
         if (isSubmitting || !selectedPayment) return;
 
+        if (!(payFormData.invoice_file instanceof File)) {
+            toast.error("Debe adjuntar el comprobante de pago");
+            return;
+        }
+
         try {
             setIsSubmitting(true);
             const formDataToSend = new FormData();
@@ -760,11 +765,20 @@ function ProviderPayments() {
             setIsPayModalOpen(false);
             fetchPayments();
         } catch (error) {
+             const errorData = error.response?.data;
              const errorMsg =
-                error.response?.data?.error ||
-                error.response?.data?.message ||
+                errorData?.transfer || // Priorizar mensaje de validación de modelo
+                errorData?.error ||
+                errorData?.message ||
                 "Error al registrar pago";
-            toast.error(errorMsg);
+            
+            // Si es un objeto de errores (validación de formulario), mostrar el primero
+            if (typeof errorData === 'object' && !errorData.transfer && !errorData.error) {
+                 const firstError = Object.values(errorData)[0];
+                 toast.error(Array.isArray(firstError) ? firstError[0] : errorMsg);
+            } else {
+                 toast.error(errorMsg);
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -1105,7 +1119,7 @@ function ProviderPayments() {
             cell: (row) => (
                 <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
                     <div className="flex justify-center">
-                        {row.status !== "pagado" && (
+                        {(row.status === "aprobado" || row.status === "parcial") ? (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1116,7 +1130,14 @@ function ProviderPayments() {
                             >
                                 <Banknote className="w-4 h-4" />
                             </button>
-                        )}
+                        ) : row.status === "pendiente" ? (
+                            <span 
+                                className="p-1.5 text-slate-300 cursor-not-allowed"
+                                title="Requiere Aprobación"
+                            >
+                                <LockIcon className="w-4 h-4" />
+                            </span>
+                        ) : null}
                     </div>
                     <div className="flex justify-center">
                         <button
@@ -2036,11 +2057,11 @@ function ProviderPayments() {
                                 </div>
 
                                 <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block">Comprobante de Pago (Opcional)</Label>
+                                    <Label className="mb-1.5 block" required>Comprobante de Pago</Label>
                                     <FileUpload
                                         accept=".pdf,.jpg,.jpeg,.png"
                                         onFileChange={(file) => setPayFormData({ ...payFormData, invoice_file: file })}
-                                        helperText="Adjuntar comprobante de transferencia o cheque"
+                                        helperText="Adjuntar comprobante de transferencia o cheque (requerido)"
                                     />
                                 </div>
                             </div>

@@ -1,12 +1,9 @@
-"""
-Signals para auto-registro de eventos en OrderHistory
-Captura automáticamente todos los cambios relevantes
-"""
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from .models import ServiceOrder, OrderCharge, OrderDocument, OrderHistory
+from .models import ServiceOrder, OrderCharge, OrderDocument, OrderHistory, InvoicePayment
 from ..transfers.models import Transfer
+from apps.users.models import Notification
 
 User = get_user_model()
 
@@ -31,6 +28,7 @@ def log_service_order_events(sender, instance, created, **kwargs):
                 'client': instance.client.name if instance.client else None
             }
         )
+        
     else:
         # 1. Detectar Soft Delete
         if instance.is_deleted and not getattr(instance, '_was_deleted', False):
@@ -66,6 +64,30 @@ def log_service_order_events(sender, instance, created, **kwargs):
                     'new_status': instance.status
                 }
             )
+            
+            # NOTIFICAR CAMBIO DE ESTADO
+            # Notificar al creador si no es quien hizo el cambio
+            if instance.created_by and instance.created_by != user:
+                Notification.create_notification(
+                    user=instance.created_by,
+                    title=f"Cambio de Estado OS {instance.order_number}",
+                    message=f"La orden cambió a: {instance.get_status_display()}",
+                    notification_type='info',
+                    category='order',
+                    related_object=instance
+                )
+            
+            # Notificar al aforador si existe
+            if instance.customs_agent and instance.customs_agent != user and instance.customs_agent != instance.created_by:
+                Notification.create_notification(
+                    user=instance.customs_agent,
+                    title=f"Actualización OS {instance.order_number}",
+                    message=f"Estado actualizado a: {instance.get_status_display()}",
+                    notification_type='info',
+                    category='order',
+                    related_object=instance
+                )
+
         else:
             # Actualización general (si no fue borrado ni cambio de estado)
             if not instance.is_deleted:
@@ -87,9 +109,11 @@ def capture_previous_status(sender, instance, **kwargs):
         try:
             previous = ServiceOrder.objects.get(pk=instance.pk)
             instance._previous_status = previous.status
+            instance._previous_customs_agent = previous.customs_agent
             instance._was_deleted = previous.is_deleted # Para detectar transición a deleted
         except ServiceOrder.DoesNotExist:
             instance._previous_status = None
+            instance._previous_customs_agent = None
             instance._was_deleted = False
 
 
@@ -285,3 +309,24 @@ def log_document_deletion(sender, instance, **kwargs):
             'description': instance.description or ''
         }
     )
+
+@receiver(post_save, sender=InvoicePayment)
+def notify_payment_received(sender, instance, created, **kwargs):
+    """
+    Notificar cuando se recibe un pago de cliente
+    """
+    if created and instance.amount > 0:
+        # Notificar al creador de la factura (si existe y no es quien registró el pago)
+        invoice_creator = instance.invoice.created_by
+        payment_registrar = getattr(instance, 'created_by', None)
+        os_number = instance.invoice.service_order.order_number
+        
+        if invoice_creator and invoice_creator != payment_registrar:
+            Notification.create_notification(
+                user=invoice_creator,
+                title="Pago Recibido",
+                message=f"Se registró un pago de ${instance.amount} para la factura {instance.invoice.invoice_number} (OS: {os_number})",
+                notification_type='success',
+                category='payment',
+                related_object=instance.invoice
+            )

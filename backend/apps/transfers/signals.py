@@ -1,11 +1,25 @@
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from .models import Transfer, BatchPayment, ProviderCreditNote, CreditNoteApplication
 from apps.orders.models import OrderDocument
+from apps.users.models import Notification
 import os
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(pre_save, sender=Transfer)
+def capture_transfer_previous_status(sender, instance, **kwargs):
+    """
+    Capturar el estado anterior antes de guardar para detectar cambios
+    """
+    if instance.pk:
+        try:
+            previous = Transfer.objects.get(pk=instance.pk)
+            instance._previous_status = previous.status
+        except Transfer.DoesNotExist:
+            instance._previous_status = None
 
 
 @receiver(post_save, sender=Transfer)
@@ -14,6 +28,41 @@ def sync_transfer_document(sender, instance, created, **kwargs):
     Sincroniza el comprobante del pago a proveedor con los documentos de la OS.
     Crea o actualiza un OrderDocument cuando hay un invoice_file.
     """
+    # === NOTIFICACIONES ===
+    # Si se crea un nuevo gasto PENDIENTE, notificar a los administradores
+    if created and instance.status == 'pendiente':
+        os_info = f" (OS: {instance.service_order.order_number})" if instance.service_order else ""
+        Notification.notify_all_admins(
+            title="Nuevo Gasto por Aprobar",
+            message=f"Se ha registrado un gasto de ${instance.amount} para {instance.provider.name if instance.provider else 'Proveedor'}{os_info}. Requiere aprobación.",
+            notification_type='warning',
+            category='payment',
+            related_object=instance
+        )
+
+    # Si cambió a APROBADO o PAGADO, notificar al creador
+    if not created and hasattr(instance, '_previous_status') and instance._previous_status != instance.status:
+        if instance.created_by:
+            os_info = f" en OS {instance.service_order.order_number}" if instance.service_order else ""
+            if instance.status == 'aprobado':
+                Notification.create_notification(
+                    user=instance.created_by,
+                    title="Pago Aprobado",
+                    message=f"Tu solicitud de pago para {instance.provider.name if instance.provider else 'Proveedor'}{os_info} ha sido aprobado.",
+                    notification_type='success',
+                    category='payment',
+                    related_object=instance
+                )
+            elif instance.status == 'pagado':
+                Notification.create_notification(
+                    user=instance.created_by,
+                    title="Pago Realizado",
+                    message=f"El pago a {instance.provider.name if instance.provider else 'Proveedor'}{os_info} por ${instance.amount} ya fue realizado.",
+                    notification_type='success',
+                    category='payment',
+                    related_object=instance
+                )
+
     # Solo procesar si tiene service_order y invoice_file
     if not instance.service_order or not instance.invoice_file:
         return
@@ -271,4 +320,3 @@ def delete_application_document(sender, instance, **kwargs):
         ).delete()
     except Exception as e:
         logger.error(f"Error al eliminar documento de aplicación de NC: {e}")
-

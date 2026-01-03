@@ -25,7 +25,7 @@ import { formatCurrency } from "../lib/utils";
  * - El Monto Base (costo) NO es editable (viene del pago a proveedor)
  * - Solo se permite editar: Margen de Utilidad y Tipo de IVA
  */
-const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
+const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) => {
     const [expenses, setExpenses] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -83,10 +83,20 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
                 // Inicializar ajustes con valores guardados en el transfer
                 const initialAdjustments = {};
                 billableExpenses.forEach((exp) => {
-                    // Determinar tipo de IVA: usar customer_iva_type si existe, sino derivar de applies_iva
-                    let ivaType = exp.customer_iva_type || "no_sujeto";
-                    if (!exp.customer_iva_type && exp.customer_applies_iva) {
-                        ivaType = "gravado";
+                    // Determinar tipo de IVA: 
+                    // 1. Si ya tiene customer_iva_type guardado, usarlo.
+                    // 2. Si es cliente internacional, default a 'no_sujeto'.
+                    // 3. Si no, derivar de applies_iva (legacy) o default a 'no_sujeto'
+                    let ivaType = exp.customer_iva_type;
+                    
+                    if (!ivaType) {
+                        if (clientType === 'internacional') {
+                            ivaType = 'no_sujeto';
+                        } else if (exp.customer_applies_iva) {
+                            ivaType = 'gravado';
+                        } else {
+                            ivaType = 'no_sujeto';
+                        }
                     }
 
                     initialAdjustments[exp.id] = {
@@ -149,7 +159,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, onUpdate }) => {
         expenses.forEach((exp) => {
             resetAdjustments[exp.id] = {
                 markup_percentage: 0,
-                iva_type: "no_sujeto",
+                iva_type: clientType === "internacional" ? "no_sujeto" : "no_sujeto", // Default seguro
                 amount_locked: exp.amount_locked || false,
                 is_billed: !!exp.invoice_id,
             };

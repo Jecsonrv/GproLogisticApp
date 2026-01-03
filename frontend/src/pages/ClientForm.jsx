@@ -15,6 +15,8 @@ import {
     CheckCircle,
     Info,
     FileText,
+    Globe,
+    Flag,
 } from "lucide-react";
 import {
     Card,
@@ -47,6 +49,9 @@ function ClientForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState({
+        // Tipo de cliente
+        client_type: "nacional",
+
         // Información básica
         name: "",
         legal_name: "",
@@ -193,6 +198,74 @@ function ClientForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Tipo de Cliente - Nacional/Internacional */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-slate-100 rounded-lg">
+                                <Globe className="h-5 w-5 text-slate-600" />
+                            </div>
+                            <div>
+                                <CardTitle>Tipo de Cliente</CardTitle>
+                                <CardDescription>
+                                    Clasificación según origen del cliente
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                {
+                                    value: "nacional",
+                                    label: "Nacional",
+                                    description: "Cliente local con NIT salvadoreño",
+                                },
+                                {
+                                    value: "internacional",
+                                    label: "Internacional",
+                                    description: "Cliente extranjero",
+                                },
+                            ].map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleChange("client_type", option.value)}
+                                    className={cn(
+                                        "p-3 rounded-sm border text-left transition-all outline-none",
+                                        formData.client_type === option.value
+                                            ? "border-slate-900 bg-white shadow-sm ring-1 ring-slate-900"
+                                            : "border-slate-200 bg-white hover:border-slate-300 focus:border-slate-400"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div
+                                            className={cn(
+                                                "w-4 h-4 rounded-full border flex items-center justify-center",
+                                                formData.client_type === option.value
+                                                    ? "border-slate-900"
+                                                    : "border-slate-300"
+                                            )}
+                                        >
+                                            {formData.client_type === option.value && (
+                                                <div className="w-2 h-2 rounded-full bg-slate-900" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                {option.label}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {option.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* Información Básica */}
                 <Card>
                     <CardHeader>

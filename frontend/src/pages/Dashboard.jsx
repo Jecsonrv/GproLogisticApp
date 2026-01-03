@@ -84,13 +84,18 @@ function Dashboard() {
             setLoading(true);
             setError(null);
 
-            const response = await api.get("/dashboard/", {
-                params: {
-                    month: selectedMonth,
-                    year: selectedYear
-                }
-            });
+            const [response, alertsResponse] = await Promise.all([
+                api.get("/dashboard/", {
+                    params: {
+                        month: selectedMonth,
+                        year: selectedYear
+                    }
+                }),
+                api.get("/dashboard/alerts/")
+            ]);
+            
             const data = response.data;
+            const alertsData = alertsResponse.data; // Now returns a flat list
 
             // Establecer estadísticas reales - sin fallbacks ficticios
             setStats({
@@ -135,7 +140,7 @@ function Dashboard() {
             setTopClients(mappedTopClients);
 
             // Alertas reales del sistema
-            setAlerts(data.alerts || []);
+            setAlerts(alertsData || []);
 
             // Construir chartData solo con datos reales disponibles
             const chartDataPoints = [];

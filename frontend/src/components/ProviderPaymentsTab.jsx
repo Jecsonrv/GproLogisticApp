@@ -224,8 +224,13 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             toast.success("Pago marcado como pagado exitosamente");
             fetchPayments();
             if (onUpdate) onUpdate();
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
+        } catch (error) {
+            const errorData = error.response?.data;
+            const errorMsg = 
+                errorData?.transfer || 
+                errorData?.error || 
+                "Error al registrar pago";
+            toast.error(errorMsg);
         }
     };
 

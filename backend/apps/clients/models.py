@@ -2,6 +2,19 @@ from django.db import models
 from django.core.validators import EmailValidator
 
 class Client(models.Model):
+    # Tipo de cliente (Nacional/Internacional)
+    CLIENT_TYPE_CHOICES = (
+        ('nacional', 'Nacional'),
+        ('internacional', 'Internacional'),
+    )
+    client_type = models.CharField(
+        max_length=20,
+        choices=CLIENT_TYPE_CHOICES,
+        default='nacional',
+        verbose_name="Tipo de Cliente",
+        help_text="Nacional: Cliente local de El Salvador. Internacional: Cliente extranjero."
+    )
+
     name = models.CharField(max_length=255, verbose_name="Nombre / Razón Social")
     legal_name = models.CharField(max_length=255, blank=True, verbose_name="Nombre Jurídico Completo")
     nit = models.CharField(max_length=50, unique=True, blank=True, null=True, verbose_name="NIT")

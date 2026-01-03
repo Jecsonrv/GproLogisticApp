@@ -79,6 +79,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
     client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
     client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
+    client_type = serializers.CharField(source='client.client_type', read_only=True)
     
     # Información de costos
     total_transfers = serializers.SerializerMethodField()

@@ -682,6 +682,11 @@ const Invoicing = () => {
             return;
         }
 
+        if (!paymentForm.receipt_file) {
+            toast.error("Debe adjuntar el comprobante de pago");
+            return;
+        }
+
         try {
             const formData = new FormData();
             formData.append("amount", paymentForm.amount);
@@ -1298,7 +1303,7 @@ const Invoicing = () => {
                     icon={CheckCircle}
                 />
                 <KPICard
-                    label="Cartera vencida"
+                    label="Saldos Vencidos"
                     value={formatCurrency(summary.total_overdue)}
                     subtext={`${summary.overdue_count || 0} facturas`}
                     icon={AlertTriangle}
@@ -1763,11 +1768,11 @@ const Invoicing = () => {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <Label className="mb-1.5 block">Comprobante de Pago (Opcional)</Label>
+                                    <Label className="mb-1.5 block" required>Comprobante de Pago</Label>
                                     <FileUpload
                                         accept=".pdf,.jpg,.jpeg,.png"
                                         onFileChange={(file) => setPaymentForm({ ...paymentForm, receipt_file: file })}
-                                        helperText="PDF o imagen del comprobante de transferencia/depósito"
+                                        helperText="PDF o imagen del comprobante de transferencia/depósito (requerido)"
                                     />
                                 </div>
                             </div>
