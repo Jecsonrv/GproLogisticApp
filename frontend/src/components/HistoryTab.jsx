@@ -1,241 +1,224 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-    const EVENT_CONFIG = useMemo(
-        () => ({
-            created: {
-                icon: Play,
-                label: "OS Creada",
-                color: "text-emerald-700",
-                bgColor: "bg-white",
-                borderColor: "border-slate-200",
-                category: "status",
-            },
-            updated: {
-                icon: Edit,
-                label: "OS Actualizada",
-                color: "text-blue-700",
-                bgColor: "bg-white",
-                borderColor: "border-slate-200",
-                category: "status",
-            },
-            const STATUS_LABELS = {
-                pendiente: "Pendiente",
-                en_transito: "En Tránsito",
-                en_puerto: "En Puerto",
-                en_almacen: "En Almacenadora",
-                finalizada: "Finalizada",
-                cerrada: "Cerrada",
-                cancelada: "Cancelada",
-                abierta: "Abierta", // Legacy
-            };
+import {
+    Play,
+    Edit,
+    RefreshCw,
+    Upload,
+    Trash2,
+    DollarSign,
+    XCircle,
+    CheckCircle,
+    FileText,
+    Pause,
+    Clock,
+    User,
+    AlertCircle,
+    History,
+    ChevronRight,
+    ChevronDown,
+} from "lucide-react";
+import axios from "../lib/axios";
+import { formatDate, cn } from "../lib/utils";
+import { Button, EmptyState } from "./ui";
 
-            const EVENT_CONFIG = useMemo(
-                () => ({
-                    created: {
-                        icon: Play,
-                        label: "OS Creada",
-                        color: "text-emerald-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "status",
-                    },
-                    updated: {
-                        icon: Edit,
-                        label: "OS Actualizada",
-                        color: "text-blue-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "status",
-                    },
-                    status_changed: {
-                        icon: RefreshCw,
-                        label: "Cambio de Estado",
-                        color: "text-violet-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "status",
-                    },
-                    document_uploaded: {
-                        icon: Upload,
-                        label: "Documento Subido",
-                        color: "text-indigo-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "documents",
-                    },
-                    document_deleted: {
-                        icon: Trash2,
-                        label: "Documento Eliminado",
-                        color: "text-rose-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "documents",
-                    },
-                    charge_added: {
-                        icon: DollarSign,
-                        label: "Cargo Agregado",
-                        color: "text-emerald-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "charges",
-                    },
-                    charge_deleted: {
-                        icon: XCircle,
-                        label: "Cargo Eliminado",
-                        color: "text-rose-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "charges",
-                    },
-                    payment_added: {
-                        icon: DollarSign,
-                        label: "Pago Registrado",
-                        color: "text-orange-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "payments",
-                    },
-                    payment_updated: {
-                        icon: Edit,
-                        label: "Pago Actualizado",
-                        color: "text-amber-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "payments",
-                    },
-                    payment_approved: {
-                        icon: CheckCircle,
-                        label: "Pago Aprobado",
-                        color: "text-teal-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "payments",
-                    },
-                    payment_paid: {
-                        icon: CheckCircle,
-                        label: "Pago Ejecutado",
-                        color: "text-emerald-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "payments",
-                    },
-                    payment_deleted: {
-                        icon: Trash2,
-                        label: "Pago Eliminado",
-                        color: "text-red-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "payments",
-                    },
-                    invoice_generated: {
-                        icon: FileText,
-                        label: "Factura Generada",
-                        color: "text-blue-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "invoices",
-                    },
-                    invoice_payment: {
-                        icon: DollarSign,
-                        label: "Pago de Factura",
-                        color: "text-green-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "invoices",
-                    },
-                    closed: {
-                        icon: Pause,
-                        label: "OS Cerrada",
-                        color: "text-slate-700",
-                        bgColor: "bg-slate-50",
-                        borderColor: "border-slate-300",
-                        category: "status",
-                    },
-                    reopened: {
-                        icon: RefreshCw,
-                        label: "OS Reabierta",
-                        color: "text-amber-700",
-                        bgColor: "bg-white",
-                        borderColor: "border-slate-200",
-                        category: "status",
-                    },
-                }),
-                []
+const STATUS_LABELS = {
+    pendiente: "Pendiente",
+    en_transito: "En Tránsito",
+    en_puerto: "En Puerto",
+    en_almacen: "En Almacenadora",
+    finalizada: "Finalizada",
+    cerrada: "Cerrada",
+    cancelada: "Cancelada",
+    abierta: "Abierta", // Legacy
+};
+
+const EVENT_CONFIG = {
+    created: {
+        icon: Play,
+        label: "OS Creada",
+        color: "text-emerald-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "status",
+    },
+    updated: {
+        icon: Edit,
+        label: "OS Actualizada",
+        color: "text-blue-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "status",
+    },
+    status_changed: {
+        icon: RefreshCw,
+        label: "Cambio de Estado",
+        color: "text-violet-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "status",
+    },
+    document_uploaded: {
+        icon: Upload,
+        label: "Documento Subido",
+        color: "text-indigo-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "documents",
+    },
+    document_deleted: {
+        icon: Trash2,
+        label: "Documento Eliminado",
+        color: "text-rose-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "documents",
+    },
+    charge_added: {
+        icon: DollarSign,
+        label: "Cargo Agregado",
+        color: "text-emerald-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "charges",
+    },
+    charge_deleted: {
+        icon: XCircle,
+        label: "Cargo Eliminado",
+        color: "text-rose-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "charges",
+    },
+    payment_added: {
+        icon: DollarSign,
+        label: "Pago Registrado",
+        color: "text-orange-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "payments",
+    },
+    payment_updated: {
+        icon: Edit,
+        label: "Pago Actualizado",
+        color: "text-amber-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "payments",
+    },
+    payment_approved: {
+        icon: CheckCircle,
+        label: "Pago Aprobado",
+        color: "text-teal-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "payments",
+    },
+    payment_paid: {
+        icon: CheckCircle,
+        label: "Pago Ejecutado",
+        color: "text-emerald-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "payments",
+    },
+    payment_deleted: {
+        icon: Trash2,
+        label: "Pago Eliminado",
+        color: "text-red-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "payments",
+    },
+    invoice_generated: {
+        icon: FileText,
+        label: "Factura Generada",
+        color: "text-blue-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "invoices",
+    },
+    invoice_payment: {
+        icon: DollarSign,
+        label: "Pago de Factura",
+        color: "text-green-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "invoices",
+    },
+    closed: {
+        icon: Pause,
+        label: "OS Cerrada",
+        color: "text-slate-700",
+        bgColor: "bg-slate-50",
+        borderColor: "border-slate-300",
+        category: "status",
+    },
+    reopened: {
+        icon: RefreshCw,
+        label: "OS Reabierta",
+        color: "text-amber-700",
+        bgColor: "bg-white",
+        borderColor: "border-slate-200",
+        category: "status",
+    },
+};
+
+const METADATA_LABELS = {
+    order_number: "N° Orden",
+    duca: "DUCA",
+    client: "Cliente",
+    previous_status: "Estado Anterior",
+    new_status: "Nuevo Estado",
+    service: "Servicio",
+    quantity: "Cantidad",
+    unit_price: "Precio Unit.",
+    total: "Total",
+    provider: "Proveedor",
+    amount: "Monto",
+    transfer_type: "Tipo",
+    status: "Estado",
+    document_type: "Tipo Doc.",
+    file_name: "Archivo",
+    description: "Descripción",
+};
+
+const FILTER_OPTIONS = [
+    { value: "all", label: "Todos", icon: History },
+    { value: "status", label: "Estados", icon: RefreshCw },
+    { value: "payments", label: "Pagos", icon: DollarSign },
+    { value: "charges", label: "Cargos", icon: DollarSign },
+    { value: "documents", label: "Documentos", icon: FileText },
+];
+
+const HistoryTab = ({ orderId }) => {
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filterType, setFilterType] = useState("all");
+    const [expandedEvents, setExpandedEvents] = useState({});
+
+    const fetchHistory = useCallback(async () => {
+        if (!orderId) return;
+        try {
+            setLoading(true);
+            const response = await axios.get(
+                `/orders/service-orders/${orderId}/history/`
             );
-            category: "payments",
-        },
-        payment_approved: {
-            icon: CheckCircle,
-            label: "Pago Aprobado",
-            color: "text-teal-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "payments",
-        },
-        payment_paid: {
-            icon: CheckCircle,
-            label: "Pago Ejecutado",
-            color: "text-emerald-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "payments",
-        },
-        payment_deleted: {
-            icon: Trash2,
-            label: "Pago Eliminado",
-            color: "text-red-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "payments",
-        },
-        document_uploaded: {
-            icon: Upload,
-            label: "Documento Subido",
-            color: "text-blue-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "documents",
-        },
-        document_deleted: {
-            icon: Trash2,
-            label: "Documento Eliminado",
-            color: "text-red-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "documents",
-        },
-        invoice_generated: {
-            icon: FileText,
-            label: "Factura Generada",
-            color: "text-indigo-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "invoices",
-        },
-        invoice_payment: {
-            icon: DollarSign,
-            label: "Pago de Factura",
-            color: "text-green-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "invoices",
-        },
-        closed: {
-            icon: Pause,
-            label: "OS Cerrada",
-            color: "text-slate-700",
-            bgColor: "bg-slate-50",
-            borderColor: "border-slate-300",
-            category: "status",
-        },
-        reopened: {
-            icon: RefreshCw,
-            label: "OS Reabierta",
-            color: "text-amber-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "status",
-        },
-    };
+            const events = response.data?.history || response.data || [];
+            const sortedEvents = [...events].sort(
+                (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            setHistory(sortedEvents);
+        } catch (error) {
+            console.error("Error fetching history:", error);
+            setHistory([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [orderId]);
+
+    useEffect(() => {
+        fetchHistory();
+    }, [fetchHistory]);
 
     const getEventConfig = useCallback(
         (eventType) => {
@@ -250,27 +233,8 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
                 }
             );
         },
-        [EVENT_CONFIG]
+        []
     );
-
-    const METADATA_LABELS = {
-        order_number: "N° Orden",
-        duca: "DUCA",
-        client: "Cliente",
-        previous_status: "Estado Anterior",
-        new_status: "Nuevo Estado",
-        service: "Servicio",
-        quantity: "Cantidad",
-        unit_price: "Precio Unit.",
-        total: "Total",
-        provider: "Proveedor",
-        amount: "Monto",
-        transfer_type: "Tipo",
-        status: "Estado",
-        document_type: "Tipo Doc.",
-        file_name: "Archivo",
-        description: "Descripción",
-    };
 
     const formatMetadataKey = (key) => {
         return (
@@ -413,14 +377,6 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
         });
         return counts;
     }, [history, getEventConfig]);
-
-    const FILTER_OPTIONS = [
-        { value: "all", label: "Todos", icon: History },
-        { value: "status", label: "Estados", icon: RefreshCw },
-        { value: "payments", label: "Pagos", icon: DollarSign },
-        { value: "charges", label: "Cargos", icon: DollarSign },
-        { value: "documents", label: "Documentos", icon: FileText },
-    ];
 
     if (loading) {
         return (

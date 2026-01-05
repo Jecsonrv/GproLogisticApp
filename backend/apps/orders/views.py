@@ -924,6 +924,24 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             'documents': documents
         })
 
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """
+        Endpoint para obtener el historial de eventos de una orden de servicio.
+        Retorna todos los eventos ordenados por created_at descendente.
+        """
+        from .serializers_new import OrderHistorySerializer
+
+        order = self.get_object()
+        history_entries = order.history.select_related('user').order_by('-created_at')
+        serializer = OrderHistorySerializer(history_entries, many=True)
+
+        return Response({
+            'order_number': order.order_number,
+            'total_events': history_entries.count(),
+            'history': serializer.data
+        })
+
 class OrderDocumentViewSet(viewsets.ModelViewSet):
     queryset = OrderDocument.objects.all()
     serializer_class = OrderDocumentSerializer

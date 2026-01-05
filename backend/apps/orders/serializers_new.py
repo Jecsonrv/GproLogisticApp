@@ -696,12 +696,13 @@ class OrderHistorySerializer(serializers.ModelSerializer):
     event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
     user_name = serializers.CharField(source='user.get_full_name', read_only=True, allow_null=True)
     user_username = serializers.CharField(source='user.username', read_only=True, allow_null=True)
-    
+    timestamp = serializers.DateTimeField(source='created_at', read_only=True)
+
     class Meta:
         model = OrderHistory
         fields = [
             'id', 'service_order', 'event_type', 'event_type_display',
             'description', 'user', 'user_name', 'user_username',
-            'created_at', 'metadata'
+            'created_at', 'timestamp', 'metadata'
         ]
-        read_only_fields = ['id', 'created_at', 'event_type_display', 'user_name', 'user_username']
+        read_only_fields = ['id', 'created_at', 'timestamp', 'event_type_display', 'user_name', 'user_username']
