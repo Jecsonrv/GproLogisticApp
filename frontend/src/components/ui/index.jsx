@@ -24,6 +24,7 @@ export { Badge, StatusBadge, badgeVariants } from "./Badge";
 
 // Buttons
 export { Button, buttonVariants } from "./Button";
+export { default as ExportButton } from "./ExportButton";
 
 // Cards
 export {

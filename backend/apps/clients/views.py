@@ -264,6 +264,10 @@ class ClientViewSet(viewsets.ModelViewSet):
         client = self.get_object()
         year = request.query_params.get('year', datetime.now().year)
         
+        # Debug: verificar parámetros
+        print(f"DEBUG: Cliente: {client.name} (ID: {client.id})")
+        print(f"DEBUG: Año filtrado: {year}")
+        
         # Filtros adicionales
         status_filter = request.query_params.get('status')
         date_from = request.query_params.get('dateFrom')
@@ -305,18 +309,26 @@ class ClientViewSet(viewsets.ModelViewSet):
                 Q(service_order__order_number__icontains=search_query)
             )
 
+        # Debug: verificar cantidad de facturas
+        print(f"DEBUG: Total de facturas encontradas: {invoices.count()}")
+        if invoices.exists():
+            print(f"DEBUG: Primera factura: {invoices.first().invoice_number}")
+            print(f"DEBUG: Total factura: {invoices.first().total_amount}")
+            print(f"DEBUG: Total servicios: {invoices.first().total_services}")
+            print(f"DEBUG: Total terceros: {invoices.first().total_third_party}")
+
         # Crear workbook
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Estado de Cuenta"
 
-        # Estilos
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        # Estilos (usando un azul más oscuro - #0F2E4D)
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=10)
-        title_font = Font(size=16, bold=True, color="1F4E79")
-        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
         label_font = Font(bold=True, color="404040", size=10)
-        currency_format = '#,##0.00'
+        currency_format = '"$"#,##0.00'
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -327,11 +339,11 @@ class ClientViewSet(viewsets.ModelViewSet):
         # === ENCABEZADO ===
         ws['A1'] = "ESTADO DE CUENTA"
         ws['A1'].font = title_font
-        ws.merge_cells('A1:H1')
+        ws.merge_cells('A1:L1')
 
         ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
         ws['A2'].font = Font(size=11, color="666666")
-        ws.merge_cells('A2:H2')
+        ws.merge_cells('A2:L2')
 
         ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         ws['A3'].font = Font(size=9, italic=True, color="999999")
@@ -339,7 +351,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         # === INFORMACIÓN DEL CLIENTE ===
         ws['A5'] = "INFORMACIÓN DEL CLIENTE"
         ws['A5'].font = subtitle_font
-        ws.merge_cells('A5:H5')
+        ws.merge_cells('A5:L5')
 
         # Datos del cliente
         client_data = [
@@ -363,11 +375,11 @@ class ClientViewSet(viewsets.ModelViewSet):
         # === TABLA DE FACTURAS ===
         start_row = 14
         ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
-        ws.merge_cells(f'A{start_row}:H{start_row}')
+        ws.merge_cells(f'A{start_row}:L{start_row}')
 
-        # Headers de la tabla
-        headers = ['No. Factura', 'Orden de Servicio', 'Fecha Emisión', 'Vencimiento',
-                   'Total', 'Pagado', 'Saldo', 'Estado']
+        # Headers de la tabla (añadimos DUCA, BL, Total Servicios, Total Gastos)
+        headers = ['No. Factura', 'Orden de Servicio', 'DUCA', 'BL', 'Fecha Emisión', 'Vencimiento',
+                   'Total Servicios', 'Total Gastos', 'Total Factura', 'Pagado', 'Saldo', 'Estado']
         header_row = start_row + 1
 
         for col_num, header in enumerate(headers, 1):
@@ -388,7 +400,7 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         # Datos de facturas
         data_row = header_row + 1
-        totals = {'total': 0, 'paid': 0, 'balance': 0}
+        totals = {'total_services': 0, 'total_third_party': 0, 'total': 0, 'paid': 0, 'balance': 0}
         today = datetime.now().date()
 
         for invoice in invoices:
@@ -396,27 +408,58 @@ class ClientViewSet(viewsets.ModelViewSet):
             if invoice.due_date and invoice.balance > 0 and today > invoice.due_date:
                 days_overdue = f' ({(today - invoice.due_date).days}d)'
 
+            # Columna 1: No. Factura
             ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
+            
+            # Columna 2: Orden de Servicio
             ws.cell(row=data_row, column=2, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
-            ws.cell(row=data_row, column=3, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
-            ws.cell(row=data_row, column=4, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
+            
+            # Columna 3: DUCA (desde la orden de servicio)
+            duca_value = invoice.service_order.duca if invoice.service_order and invoice.service_order.duca else ''
+            ws.cell(row=data_row, column=3, value=duca_value).border = thin_border
+            
+            # Columna 4: BL (desde la orden de servicio)
+            bl_value = invoice.service_order.bl_reference if invoice.service_order and invoice.service_order.bl_reference else ''
+            ws.cell(row=data_row, column=4, value=bl_value).border = thin_border
+            
+            # Columna 5: Fecha Emisión
+            ws.cell(row=data_row, column=5, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            
+            # Columna 6: Vencimiento
+            ws.cell(row=data_row, column=6, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
 
-            total_cell = ws.cell(row=data_row, column=5, value=float(invoice.total_amount))
+            # Columna 7: Total Servicios
+            total_services_cell = ws.cell(row=data_row, column=7, value=float(invoice.total_services))
+            total_services_cell.number_format = currency_format
+            total_services_cell.border = thin_border
+
+            # Columna 8: Total Gastos a Terceros
+            total_third_party_cell = ws.cell(row=data_row, column=8, value=float(invoice.total_third_party))
+            total_third_party_cell.number_format = currency_format
+            total_third_party_cell.border = thin_border
+
+            # Columna 9: Total Factura
+            total_cell = ws.cell(row=data_row, column=9, value=float(invoice.total_amount))
             total_cell.number_format = currency_format
             total_cell.border = thin_border
 
-            paid_cell = ws.cell(row=data_row, column=6, value=float(invoice.paid_amount))
+            # Columna 10: Pagado
+            paid_cell = ws.cell(row=data_row, column=10, value=float(invoice.paid_amount))
             paid_cell.number_format = currency_format
             paid_cell.border = thin_border
 
-            balance_cell = ws.cell(row=data_row, column=7, value=float(invoice.balance))
+            # Columna 11: Saldo
+            balance_cell = ws.cell(row=data_row, column=11, value=float(invoice.balance))
             balance_cell.number_format = currency_format
             balance_cell.border = thin_border
 
+            # Columna 12: Estado
             status_text = status_display.get(invoice.status, invoice.status) + days_overdue
-            ws.cell(row=data_row, column=8, value=status_text).border = thin_border
+            ws.cell(row=data_row, column=12, value=status_text).border = thin_border
 
             # Sumar totales
+            totals['total_services'] += float(invoice.total_services)
+            totals['total_third_party'] += float(invoice.total_third_party)
             totals['total'] += float(invoice.total_amount)
             totals['paid'] += float(invoice.paid_amount)
             totals['balance'] += float(invoice.balance)
@@ -426,28 +469,43 @@ class ClientViewSet(viewsets.ModelViewSet):
         # Fila de totales
         ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
         ws.cell(row=data_row, column=1).border = thin_border
-        for col in range(2, 5):
+        for col in range(2, 7):
             ws.cell(row=data_row, column=col).border = thin_border
 
-        total_total = ws.cell(row=data_row, column=5, value=totals['total'])
+        # Total Servicios
+        total_services_sum = ws.cell(row=data_row, column=7, value=totals['total_services'])
+        total_services_sum.number_format = currency_format
+        total_services_sum.font = Font(bold=True)
+        total_services_sum.border = thin_border
+
+        # Total Gastos a Terceros
+        total_third_party_sum = ws.cell(row=data_row, column=8, value=totals['total_third_party'])
+        total_third_party_sum.number_format = currency_format
+        total_third_party_sum.font = Font(bold=True)
+        total_third_party_sum.border = thin_border
+
+        # Total Factura
+        total_total = ws.cell(row=data_row, column=9, value=totals['total'])
         total_total.number_format = currency_format
         total_total.font = Font(bold=True)
         total_total.border = thin_border
 
-        total_paid = ws.cell(row=data_row, column=6, value=totals['paid'])
+        # Total Pagado
+        total_paid = ws.cell(row=data_row, column=10, value=totals['paid'])
         total_paid.number_format = currency_format
         total_paid.font = Font(bold=True)
         total_paid.border = thin_border
 
-        total_balance = ws.cell(row=data_row, column=7, value=totals['balance'])
+        # Total Saldo
+        total_balance = ws.cell(row=data_row, column=11, value=totals['balance'])
         total_balance.number_format = currency_format
         total_balance.font = Font(bold=True)
         total_balance.border = thin_border
 
-        ws.cell(row=data_row, column=8).border = thin_border
+        ws.cell(row=data_row, column=12).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [18, 18, 14, 14, 14, 14, 14, 16]
+        column_widths = [18, 18, 16, 16, 14, 14, 16, 16, 16, 14, 14, 16]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -472,12 +530,12 @@ class ClientViewSet(viewsets.ModelViewSet):
         ws = wb.active
         ws.title = "Listado de Clientes"
 
-        # Estilos
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        # Estilos (usando un azul más oscuro - #0F2E4D)
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=10)
-        title_font = Font(size=16, bold=True, color="1F4E79")
-        subtitle_font = Font(size=12, bold=True, color="2F5496")
-        currency_format = '#,##0.00'
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
+        currency_format = '"$"#,##0.00'
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),

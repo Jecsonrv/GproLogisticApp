@@ -64,11 +64,13 @@ const Modal = ({
 
                 <div className="fixed inset-0 overflow-y-auto">
                     {/* Container - diferente alineación en móvil vs desktop */}
-                    <div className={`flex min-h-full ${
-                        mobileFullscreen
-                            ? 'items-stretch sm:items-center justify-center sm:p-4'
-                            : 'items-center justify-center p-4'
-                    }`}>
+                    <div
+                        className={`flex min-h-full ${
+                            mobileFullscreen
+                                ? "items-stretch sm:items-center justify-center sm:p-4"
+                                : "items-center justify-center p-4"
+                        }`}
+                    >
                         <Transition.Child
                             as={Fragment}
                             enter="ease-out duration-200"
@@ -80,17 +82,27 @@ const Modal = ({
                         >
                             {/* Panel - bordes mínimos estilo enterprise */}
                             <Dialog.Panel
-                                className={`${mobileClasses} ${sizeClasses[size]} transform overflow-hidden ${
+                                className={`${mobileClasses} ${
+                                    sizeClasses[size]
+                                } transform overflow-hidden ${
                                     mobileFullscreen
-                                        ? 'rounded-none sm:rounded-lg'
-                                        : 'rounded-lg'
-                                } bg-white text-left align-middle shadow-modal transition-all border-0 sm:border sm:border-slate-200 flex flex-col`}
+                                        ? "rounded-none sm:rounded-lg"
+                                        : "rounded-lg"
+                                } bg-white text-left align-middle shadow-modal transition-all border-0 sm:border sm:border-slate-200 flex flex-col focus:outline-none`}
                             >
                                 {/* Header - estilo corporativo con safe area */}
                                 {(title || showCloseButton) && (
-                                    <div className={`flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0 ${
-                                        mobileFullscreen ? 'pt-[max(0.75rem,env(safe-area-inset-top))]' : ''
-                                    } ${hideHeaderOnMobile ? 'hidden sm:flex' : ''}`}>
+                                    <div
+                                        className={`flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-200 bg-slate-50 flex-shrink-0 ${
+                                            mobileFullscreen
+                                                ? "pt-[max(0.75rem,env(safe-area-inset-top))]"
+                                                : ""
+                                        } ${
+                                            hideHeaderOnMobile
+                                                ? "hidden sm:flex"
+                                                : ""
+                                        }`}
+                                    >
                                         {title && (
                                             <Dialog.Title
                                                 as="h3"
@@ -123,19 +135,25 @@ const Modal = ({
                                 )}
 
                                 {/* Body - scroll interno con padding responsive */}
-                                <div className={`px-4 sm:px-5 py-4 sm:py-5 flex-1 overflow-y-auto ${
-                                    mobileFullscreen
-                                        ? 'max-h-[calc(100vh-8rem)] sm:max-h-[calc(90vh-180px)]'
-                                        : 'max-h-[calc(85vh-180px)]'
-                                }`}>
+                                <div
+                                    className={`px-4 sm:px-5 py-4 sm:py-5 flex-1 overflow-y-auto ${
+                                        mobileFullscreen
+                                            ? "max-h-[calc(100vh-8rem)] sm:max-h-[calc(90vh-180px)]"
+                                            : "max-h-[calc(85vh-180px)]"
+                                    }`}
+                                >
                                     {children}
                                 </div>
 
                                 {/* Footer - estilo corporativo con safe area */}
                                 {footer && (
-                                    <div className={`px-4 sm:px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 flex-shrink-0 ${
-                                        mobileFullscreen ? 'pb-[max(0.75rem,env(safe-area-inset-bottom))]' : ''
-                                    }`}>
+                                    <div
+                                        className={`px-4 sm:px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:justify-end gap-2 flex-shrink-0 ${
+                                            mobileFullscreen
+                                                ? "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                                                : ""
+                                        }`}
+                                    >
                                         {footer}
                                     </div>
                                 )}

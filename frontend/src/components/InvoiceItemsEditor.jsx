@@ -12,11 +12,16 @@ import {
     Banknote,
     FileText,
     ExternalLink,
+    FileMinus,
+    Calendar,
+    Hash,
+    TrendingDown,
 } from "lucide-react";
-import { Button, Input, Badge, ConfirmDialog, Modal, ModalFooter, PromptDialog } from "./ui";
+import { Button, Input, Badge, ConfirmDialog, Modal, ModalFooter } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate } from "../lib/utils";
+import useAuthStore from "../stores/authStore";
 
 // ============================================
 // HELPERS
@@ -49,6 +54,7 @@ const InvoiceItemsEditor = ({
     invoice,
     onUpdate,
     onDeleted,
+    onPaymentClick,
     className = "",
 }) => {
     const [editingItem, setEditingItem] = useState(null);
@@ -62,8 +68,8 @@ const InvoiceItemsEditor = ({
     const [loadingAvailable, setLoadingAvailable] = useState(false);
     const [selectedItemsToAdd, setSelectedItemsToAdd] = useState([]);
     const [confirmRemove, setConfirmRemove] = useState(null); // {id, type, description}
-    const [showDtePrompt, setShowDtePrompt] = useState(false);
     const [confirmDeletePayment, setConfirmDeletePayment] = useState(null); // {id, amount}
+    const currentUser = useAuthStore((state) => state.user);
 
     const isEditable = invoice?.is_editable && !invoice?.is_dte_issued;
 
@@ -129,9 +135,8 @@ const InvoiceItemsEditor = ({
             setSelectedItemsToAdd([]);
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error(
-                error.response?.data?.error || "Error al agregar items"
-            );
+            // El interceptor de axios ya muestra el error
+            console.error("Error adding items:", error);
         } finally {
             setSaving(false);
         }
@@ -145,12 +150,17 @@ const InvoiceItemsEditor = ({
                 unit_price: item.unit_price,
                 discount: item.discount,
                 applies_iva: item.applies_iva,
+                iva_type: item.iva_type,
+                margin_percentage: item.margin_percentage,
+                cost_amount: item.cost_amount,
             });
         } else {
             setEditForm({
                 amount: item.cost,
                 markup_percentage: item.markup_percentage,
                 applies_iva: item.applies_iva,
+                iva_type:
+                    item.iva_type || (item.applies_iva ? "gravado" : "exento"),
             });
         }
     };
@@ -165,18 +175,21 @@ const InvoiceItemsEditor = ({
 
         try {
             setSaving(true);
+            // Destructure to exclude applies_iva
+            // eslint-disable-next-line no-unused-vars
+            const { applies_iva, ...payload } = editForm;
+
             await axios.patch(`/orders/invoices/${invoice.id}/edit_charge/`, {
                 charge_id: editingItem.id,
-                ...editForm,
+                ...payload,
+                iva_type: editForm.iva_type,
             });
             toast.success("Cargo actualizado correctamente");
             handleCancelEdit();
             if (onUpdate) onUpdate();
         } catch (error) {
+            // El interceptor de axios ya muestra el error
             console.error("Error updating charge:", error);
-            toast.error(
-                error.response?.data?.error || "Error al actualizar cargo"
-            );
         } finally {
             setSaving(false);
         }
@@ -192,16 +205,15 @@ const InvoiceItemsEditor = ({
                 customer_markup_percentage: parseFloat(
                     editForm.markup_percentage || 0
                 ),
-                customer_applies_iva: editForm.applies_iva,
+                iva_type: editForm.iva_type,
+                customer_applies_iva: editForm.iva_type === "gravado", // Keep for compatibility
             });
             toast.success("Gasto actualizado correctamente");
             handleCancelEdit();
             if (onUpdate) onUpdate();
         } catch (error) {
+            // El interceptor de axios ya muestra el error
             console.error("Error updating expense:", error);
-            toast.error(
-                error.response?.data?.error || "Error al actualizar gasto"
-            );
         } finally {
             setSaving(false);
         }
@@ -230,34 +242,11 @@ const InvoiceItemsEditor = ({
                 if (onUpdate) onUpdate();
             }
         } catch (error) {
+            // El interceptor de axios ya muestra el error
             console.error("Error removing item:", error);
-            toast.error(error.response?.data?.error || "Error al remover item");
         } finally {
             setSaving(false);
             setConfirmRemove(null);
-        }
-    };
-
-    const handleMarkAsDTE = () => {
-        setShowDtePrompt(true);
-    };
-
-    const confirmMarkAsDTE = async (dteNumber) => {
-        try {
-            setSaving(true);
-            await axios.post(`/orders/invoices/${invoice.id}/mark_as_dte/`, {
-                dte_number: dteNumber,
-            });
-            toast.success("Factura marcada como DTE emitido");
-            if (onUpdate) onUpdate();
-        } catch (error) {
-            console.error("Error marking as DTE:", error);
-            toast.error(
-                error.response?.data?.error || "Error al marcar como DTE"
-            );
-        } finally {
-            setSaving(false);
-            setShowDtePrompt(false);
         }
     };
 
@@ -298,18 +287,6 @@ const InvoiceItemsEditor = ({
 
     return (
         <div className={`space-y-4 ${className}`}>
-            <PromptDialog
-                open={showDtePrompt}
-                onClose={() => setShowDtePrompt(false)}
-                onConfirm={confirmMarkAsDTE}
-                title="Marcar como DTE Emitido"
-                description="Ingrese el número de DTE o Documento Tributario Electrónico emitido. Una vez marcado, la factura no podrá ser editada."
-                label="Número de DTE"
-                placeholder="Ej: DTE-12345678"
-                confirmText="Confirmar Emisión"
-                cancelText="Cancelar"
-            />
-
             {/* Header con estado de editabilidad */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -334,7 +311,9 @@ const InvoiceItemsEditor = ({
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(invoice.pdf_file, "_blank")}
+                            onClick={() =>
+                                window.open(invoice.pdf_file, "_blank")
+                            }
                         >
                             <FileText className="h-4 w-4 mr-1" />
                             Ver PDF
@@ -348,17 +327,6 @@ const InvoiceItemsEditor = ({
                         >
                             <Plus className="h-4 w-4 mr-1" />
                             Agregar Items
-                        </Button>
-                    )}
-                    {isEditable && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleMarkAsDTE}
-                            disabled={saving}
-                        >
-                            <FileCheck className="h-4 w-4 mr-1" />
-                            Marcar como DTE Emitido
                         </Button>
                     )}
                     <Button
@@ -496,462 +464,798 @@ const InvoiceItemsEditor = ({
                 </div>
             )}
 
-            {/* Servicios */}
-            {billedCharges.length > 0 && (
+            {/* Análisis Detallado por Items */}
+            {(billedCharges.length > 0 || billedExpenses.length > 0) && (
                 <div>
                     <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                        Servicios ({billedCharges.length})
+                        Análisis por Items
                     </h5>
-                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
+                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50 shadow-sm">
                         <table className="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead className="bg-slate-50/80">
+                            <thead className="bg-white/50">
                                 <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                    <th className="px-3 py-2.5 text-left font-bold text-slate-600 uppercase text-[10px] tracking-wider">
                                         Servicio
                                     </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-16">
-                                        Cant.
+                                    <th className="px-3 py-2.5 text-center font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
+                                        Tipo
                                     </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-24">
+                                    <th className="px-3 py-2.5 text-center font-bold text-slate-600 uppercase text-[10px] tracking-wider w-16">
+                                        Cant
+                                    </th>
+                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                        Costo
+                                    </th>
+                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
                                         Precio
                                     </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-20">
-                                        Desc.
+                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                        Ganancia
                                     </th>
-                                    <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-16">
+                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-20">
+                                        Margen
+                                    </th>
+                                    <th className="px-3 py-2.5 text-center font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                        Tipo IVA
+                                    </th>
+                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
                                         IVA
                                     </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
-                                        Total
-                                    </th>
                                     {isEditable && (
-                                        <th className="px-3 py-2 w-20"></th>
+                                        <th className="px-3 py-2.5 w-20"></th>
                                     )}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {billedCharges.map((charge) => (
-                                    <tr
-                                        key={charge.id}
-                                        className="hover:bg-slate-50 group"
-                                    >
-                                        {editingItem?.id === charge.id &&
-                                        editingItem?.type === "charge" ? (
-                                            <>
-                                                <td className="px-3 py-2 text-left align-middle">
-                                                    <div className="font-medium text-slate-800 text-sm">
-                                                        {charge.service_name}
-                                                    </div>
-                                                    {charge.description && (
-                                                        <div className="text-[11px] text-slate-500 mt-0.5">
-                                                            {charge.description}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 align-middle text-right">
-                                                    <div className="flex justify-end">
-                                                        <Input
-                                                            type="number"
-                                                            min="1"
-                                                            step="1"
-                                                            className={`${editInputClass} w-16`}
-                                                            value={
-                                                                editForm.quantity
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                                {/* Servicios */}
+                                {billedCharges.map((charge) => {
+                                    const costAmount = parseFloat(
+                                        charge.cost_amount || 0
+                                    );
+                                    const subtotal = parseFloat(
+                                        charge.subtotal || 0
+                                    );
+                                    const profit = subtotal - costAmount;
+                                    const marginPercent =
+                                        costAmount > 0
+                                            ? (profit / costAmount) * 100
+                                            : 0;
+                                    const isThirdParty =
+                                        charge.is_third_party_service;
+                                    const isEditing =
+                                        editingItem?.id === charge.id &&
+                                        editingItem?.type === "charge";
+
+                                    return (
+                                        <tr
+                                            key={`charge-${charge.id}`}
+                                            className="hover:bg-slate-50"
+                                        >
+                                            {isEditing ? (
+                                                <>
+                                                    <td className="px-3 py-2 text-slate-700 align-middle">
+                                                        <div className="font-medium text-sm">
+                                                            {
+                                                                charge.service_name
                                                             }
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
-                                                                    setEditForm({
-                                                                        ...editForm,
-                                                                        quantity: val,
-                                                                    })
+                                                        </div>
+                                                        {charge.description && (
+                                                            <div className="text-[11px] text-slate-500 mt-0.5">
+                                                                {
+                                                                    charge.description
                                                                 }
-                                                            }}
-                                                        />
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 align-middle text-right">
-                                                    <div className="flex justify-end">
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center align-middle">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`text-[10px] px-1.5 py-0.5 font-medium ${
+                                                                isThirdParty
+                                                                    ? "bg-slate-100 text-slate-600 border-slate-300"
+                                                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                            }`}
+                                                        >
+                                                            {isThirdParty
+                                                                ? "Servicio Tercerizado"
+                                                                : "Servicio Propio"}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center align-middle">
+                                                        {charge.quantity}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600 align-middle">
+                                                        {costAmount > 0 ? (
+                                                            formatCurrency(
+                                                                costAmount
+                                                            )
+                                                        ) : (
+                                                            <span className="text-slate-300">
+                                                                -
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right align-middle">
                                                         <Input
                                                             type="number"
                                                             step="0.01"
-                                                            min="0.01"
                                                             className={`${editInputClass} w-24`}
                                                             value={
                                                                 editForm.unit_price
                                                             }
                                                             onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                if (val === '' || parseFloat(val) >= 0) {
-                                                                    setEditForm({
-                                                                        ...editForm,
-                                                                        unit_price: val,
-                                                                    })
+                                                                const val =
+                                                                    e.target
+                                                                        .value;
+                                                                if (
+                                                                    val ===
+                                                                        "" ||
+                                                                    parseFloat(
+                                                                        val
+                                                                    ) >= 0
+                                                                ) {
+                                                                    // Recalculate margin
+                                                                    const newPrice =
+                                                                        parseFloat(
+                                                                            val ||
+                                                                                0
+                                                                        );
+                                                                    let newMargin = 0;
+                                                                    if (
+                                                                        costAmount >
+                                                                        0
+                                                                    ) {
+                                                                        newMargin =
+                                                                            ((newPrice -
+                                                                                costAmount) /
+                                                                                costAmount) *
+                                                                            100;
+                                                                    }
+                                                                    setEditForm(
+                                                                        {
+                                                                            ...editForm,
+                                                                            unit_price:
+                                                                                val,
+                                                                            margin_percentage:
+                                                                                newMargin.toFixed(
+                                                                                    2
+                                                                                ),
+                                                                        }
+                                                                    );
                                                                 }
                                                             }}
                                                         />
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 align-middle text-right">
-                                                    <div className="flex justify-end">
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                max="100"
-                                                                step="0.01"
-                                                                className={`${editInputClass} w-20 pr-5`}
-                                                                value={
-                                                                    editForm.discount
-                                                                }
-                                                                onChange={(e) => {
-                                                                    const val = e.target.value;
-                                                                    if (
-                                                                        val === "" ||
-                                                                        (parseFloat(val) >= 0 && parseFloat(val) <= 100)
-                                                                    ) {
-                                                                        setEditForm({
-                                                                            ...editForm,
-                                                                            discount: val,
-                                                                        });
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <span className="absolute right-1.5 top-2.5 text-[10px] text-slate-400">%</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 text-center align-middle">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            editForm.applies_iva
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm({
-                                                                ...editForm,
-                                                                applies_iva:
-                                                                    e.target
-                                                                        .checked,
-                                                            })
-                                                        }
-                                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mx-auto"
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2 text-right text-slate-400 align-middle text-sm tabular-nums">
-                                                    —
-                                                </td>
-                                                <td className="px-3 py-2 align-middle">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button
-                                                            onClick={
-                                                                handleSaveCharge
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-400 align-middle">
+                                                        —
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right align-middle">
+                                                        {costAmount > 0 ? (
+                                                            <div className="flex justify-end">
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        className={`${editInputClass} w-20 pr-5`}
+                                                                        value={
+                                                                            editForm.margin_percentage
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) => {
+                                                                            const val =
+                                                                                e
+                                                                                    .target
+                                                                                    .value;
+                                                                            if (
+                                                                                val ===
+                                                                                    "" ||
+                                                                                parseFloat(
+                                                                                    val
+                                                                                ) >=
+                                                                                    -100
+                                                                            ) {
+                                                                                // Recalculate price
+                                                                                const margin =
+                                                                                    parseFloat(
+                                                                                        val ||
+                                                                                            0
+                                                                                    );
+                                                                                const newPrice =
+                                                                                    costAmount *
+                                                                                    (1 +
+                                                                                        margin /
+                                                                                            100);
+                                                                                setEditForm(
+                                                                                    {
+                                                                                        ...editForm,
+                                                                                        margin_percentage:
+                                                                                            val,
+                                                                                        unit_price:
+                                                                                            newPrice.toFixed(
+                                                                                                2
+                                                                                            ),
+                                                                                    }
+                                                                                );
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span className="absolute right-1.5 top-2.5 text-[10px] text-slate-400">
+                                                                        %
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-[11px]">
+                                                                N/A
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center align-middle">
+                                                        <select
+                                                            className={`${editInputClass} w-24 px-1 py-0 text-xs border border-slate-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                                                            value={
+                                                                editForm.iva_type
                                                             }
-                                                            disabled={saving}
-                                                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                                            title="Guardar"
-                                                        >
-                                                            <Check className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={
-                                                                handleCancelEdit
+                                                            onChange={(e) =>
+                                                                setEditForm({
+                                                                    ...editForm,
+                                                                    iva_type:
+                                                                        e.target
+                                                                            .value,
+                                                                })
                                                             }
-                                                            className="p-1.5 text-slate-400 hover:bg-slate-100 rounded transition-colors"
-                                                            title="Cancelar"
                                                         >
-                                                            <X className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <td className="px-3 py-2 text-left align-middle">
-                                                    <div className="font-medium text-slate-900 text-sm">
-                                                        {charge.service_name}
-                                                    </div>
-                                                    {charge.description && (
-                                                        <div className="text-[11px] text-slate-500 mt-0.5">
-                                                            {charge.description}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right tabular-nums text-slate-700 align-middle text-sm">
-                                                    {charge.quantity}
-                                                </td>
-                                                <td className="px-3 py-2 text-right tabular-nums text-slate-700 align-middle text-sm">
-                                                    {formatCurrency(
-                                                        charge.unit_price
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right tabular-nums text-slate-500 align-middle text-sm">
-                                                    {charge.discount > 0 ? `${charge.discount}%` : "-"}
-                                                </td>
-                                                <td className="px-3 py-2 text-center align-middle">
-                                                    {charge.applies_iva ? (
-                                                        <span className="text-emerald-600 font-bold text-xs">
-                                                            ✓
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-300 text-xs">
-                                                            -
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 align-middle text-sm">
-                                                    {formatCurrency(
-                                                        charge.total
-                                                    )}
-                                                </td>
-                                                {isEditable && (
+                                                            <option value="gravado">
+                                                                Gravado
+                                                            </option>
+                                                            <option value="exento">
+                                                                Exento
+                                                            </option>
+                                                            <option value="no_sujeto">
+                                                                No Sujeto
+                                                            </option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-400 align-middle">
+                                                        —
+                                                    </td>
                                                     <td className="px-3 py-2 align-middle">
-                                                        <div className="flex items-center justify-end gap-1 transition-opacity">
+                                                        <div className="flex items-center justify-end gap-1">
                                                             <button
-                                                                onClick={() =>
-                                                                    handleStartEdit(
-                                                                        charge,
-                                                                        "charge"
-                                                                    )
+                                                                onClick={
+                                                                    handleSaveCharge
                                                                 }
-                                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                                                title="Editar"
+                                                                disabled={
+                                                                    saving
+                                                                }
+                                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                                title="Guardar"
                                                             >
-                                                                <Edit2 className="h-3.5 w-3.5" />
+                                                                <Check className="h-4 w-4" />
                                                             </button>
                                                             <button
-                                                                onClick={() =>
-                                                                    setConfirmRemove(
-                                                                        {
-                                                                            id: charge.id,
-                                                                            type: "charge",
-                                                                            description:
-                                                                                charge.service_name,
-                                                                        }
-                                                                    )
+                                                                onClick={
+                                                                    handleCancelEdit
                                                                 }
-                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                                title="Quitar de factura"
+                                                                className="p-1.5 text-slate-400 hover:bg-slate-100 rounded transition-colors"
+                                                                title="Cancelar"
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                <X className="h-4 w-4" />
                                                             </button>
                                                         </div>
                                                     </td>
-                                                )}
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* Gastos */}
-            {billedExpenses.length > 0 && (
-                <div>
-                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                        Gastos ({billedExpenses.length})
-                    </h5>
-                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
-                        <table className="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead className="bg-slate-50/80">
-                                <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
-                                        Descripción
-                                    </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-32">
-                                        Costo
-                                    </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
-                                        Margen
-                                    </th>
-                                    <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-12">
-                                        IVA
-                                    </th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-32">
-                                        Total
-                                    </th>
-                                    {isEditable && (
-                                        <th className="px-3 py-2 w-20"></th>
-                                    )}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {billedExpenses.map((expense) => (
-                                    <tr
-                                        key={expense.id}
-                                        className="hover:bg-slate-50 group"
-                                    >
-                                        {editingItem?.id === expense.id &&
-                                        editingItem?.type === "expense" ? (
-                                            <>
-                                                <td className="px-3 py-2 text-left align-middle">
-                                                    <div className="font-medium text-slate-800 text-sm">
-                                                        {expense.description}
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-500 mt-0.5">
-                                                        {expense.provider_name}
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 align-middle text-right">
-                                                    <div className="flex justify-end">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.01"
-                                                            className={`${editInputClass} w-32 bg-slate-50 opacity-70 cursor-not-allowed`}
-                                                            value={editForm.amount}
-                                                            readOnly
-                                                            disabled
-                                                        />
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 align-middle text-right">
-                                                    <div className="flex justify-end">
-                                                        <div className="relative">
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.01"
-                                                                className={`${editInputClass} w-28 pr-6`}
-                                                                value={
-                                                                    editForm.markup_percentage
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="px-3 py-2 text-slate-700">
+                                                        <div className="font-medium text-sm">
+                                                            {
+                                                                charge.service_name
+                                                            }
+                                                        </div>
+                                                        {charge.description && (
+                                                            <div className="text-[11px] text-slate-500 mt-0.5">
+                                                                {
+                                                                    charge.description
                                                                 }
-                                                                onChange={(e) => {
-                                                                    const val = e.target.value;
-                                                                    if (val === '' || parseFloat(val) >= 0) {
-                                                                        setEditForm({
-                                                                            ...editForm,
-                                                                            markup_percentage: val,
-                                                                        });
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <span className="absolute right-2 top-2.5 text-xs text-slate-400">
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`text-[10px] px-1.5 py-0.5 font-medium ${
+                                                                isThirdParty
+                                                                    ? "bg-slate-100 text-slate-600 border-slate-300"
+                                                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                            }`}
+                                                        >
+                                                            {isThirdParty
+                                                                ? "Servicio Tercerizado"
+                                                                : "Servicio Propio"}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center tabular-nums text-slate-700">
+                                                        {charge.quantity}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                                        {costAmount > 0 ? (
+                                                            formatCurrency(
+                                                                costAmount
+                                                            )
+                                                        ) : (
+                                                            <span className="text-slate-300">
+                                                                -
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium">
+                                                        {formatCurrency(
+                                                            charge.unit_price
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums">
+                                                        {costAmount > 0 ? (
+                                                            <span
+                                                                className={
+                                                                    profit >= 0
+                                                                        ? "text-emerald-600 font-medium"
+                                                                        : "text-red-600 font-medium"
+                                                                }
+                                                            >
+                                                                {formatCurrency(
+                                                                    profit
+                                                                )}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-300">
+                                                                -
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums">
+                                                        {costAmount > 0 ? (
+                                                            <span
+                                                                className={`text-[11px] font-medium ${
+                                                                    marginPercent >=
+                                                                    0
+                                                                        ? "text-slate-700"
+                                                                        : "text-red-600"
+                                                                }`}
+                                                            >
+                                                                {marginPercent.toFixed(
+                                                                    1
+                                                                )}
                                                                 %
                                                             </span>
+                                                        ) : (
+                                                            <span className="text-slate-300 text-[11px]">
+                                                                N/A
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`text-[10px] px-1.5 py-0.5 font-medium ${
+                                                                charge.iva_type ===
+                                                                "gravado"
+                                                                    ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                                            }`}
+                                                        >
+                                                            {charge.iva_type ===
+                                                            "gravado"
+                                                                ? "Gravado 13%"
+                                                                : charge.iva_type ===
+                                                                  "exento"
+                                                                ? "Exento"
+                                                                : "No Sujeto"}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                                        {charge.iva_amount >
+                                                        0 ? (
+                                                            formatCurrency(
+                                                                charge.iva_amount
+                                                            )
+                                                        ) : (
+                                                            <span className="text-slate-300">
+                                                                -
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    {isEditable && (
+                                                        <td className="px-3 py-2">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleStartEdit(
+                                                                            charge,
+                                                                            "charge"
+                                                                        )
+                                                                    }
+                                                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                                    title="Editar"
+                                                                >
+                                                                    <Edit2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        setConfirmRemove(
+                                                                            {
+                                                                                id: charge.id,
+                                                                                type: "charge",
+                                                                                description:
+                                                                                    charge.service_name,
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                    title="Quitar de factura"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    )}
+                                                </>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+
+                                {/* Gastos */}
+                                {billedExpenses.map((expense) => {
+                                    const costAmount = parseFloat(
+                                        expense.amount || 0
+                                    );
+                                    const markupPercent = parseFloat(
+                                        expense.customer_markup_percentage || 0
+                                    );
+                                    const basePrice =
+                                        costAmount * (1 + markupPercent / 100);
+                                    const profit = basePrice - costAmount;
+                                    const marginPercent =
+                                        costAmount > 0
+                                            ? (profit / costAmount) * 100
+                                            : 0;
+                                    const isEditing =
+                                        editingItem?.id === expense.id &&
+                                        editingItem?.type === "expense";
+
+                                    // Calculated values for preview during edit
+                                    const editMarkup = parseFloat(
+                                        editForm.markup_percentage || 0
+                                    );
+                                    const editPrice =
+                                        costAmount * (1 + editMarkup / 100);
+                                    const editProfit = editPrice - costAmount;
+
+                                    return (
+                                        <tr
+                                            key={`expense-${expense.id}`}
+                                            className="hover:bg-slate-50"
+                                        >
+                                            {isEditing ? (
+                                                <>
+                                                    <td className="px-3 py-2 text-slate-700 align-middle">
+                                                        <div className="font-medium text-sm">
+                                                            {
+                                                                expense.description
+                                                            }
                                                         </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 text-center align-middle">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={
-                                                            editForm.applies_iva
-                                                        }
-                                                        onChange={(e) =>
-                                                            setEditForm({
-                                                                ...editForm,
-                                                                applies_iva:
-                                                                    e.target
-                                                                        .checked,
-                                                            })
-                                                        }
-                                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 mx-auto"
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2 text-right text-slate-400 align-middle text-sm tabular-nums">
-                                                    —
-                                                </td>
-                                                <td className="px-3 py-2 align-middle">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button
-                                                            onClick={
-                                                                handleSaveExpense
+                                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                                            {
+                                                                expense.provider_name
                                                             }
-                                                            disabled={saving}
-                                                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                                            title="Guardar"
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center align-middle">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="text-[10px] px-1.5 py-0.5 font-medium bg-orange-50 text-orange-700 border-orange-200"
                                                         >
-                                                            <Check className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={
-                                                                handleCancelEdit
+                                                            Cargo a Cliente
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center tabular-nums text-slate-700 align-middle">
+                                                        1
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600 align-middle">
+                                                        {formatCurrency(
+                                                            costAmount
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium align-middle">
+                                                        {formatCurrency(
+                                                            editPrice
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums align-middle">
+                                                        <span
+                                                            className={
+                                                                editProfit >= 0
+                                                                    ? "text-emerald-600 font-medium"
+                                                                    : "text-red-600 font-medium"
                                                             }
-                                                            className="p-1.5 text-slate-400 hover:bg-slate-100 rounded transition-colors"
-                                                            title="Cancelar"
                                                         >
-                                                            <X className="h-4 w-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <td className="px-3 py-2 text-left align-middle">
-                                                    <div className="font-medium text-slate-900 text-sm">
-                                                        {expense.description}
-                                                    </div>
-                                                    <div className="text-[11px] text-slate-500 mt-0.5">
-                                                        {expense.provider_name}
-                                                    </div>
-                                                </td>
-                                                <td className="px-3 py-2 text-right tabular-nums text-slate-700 align-middle text-sm">
-                                                    {formatCurrency(
-                                                        expense.cost
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right tabular-nums text-slate-700 align-middle text-sm">
-                                                    {expense.markup_percentage}%
-                                                </td>
-                                                <td className="px-3 py-2 text-center align-middle">
-                                                    {expense.applies_iva ? (
-                                                        <span className="text-emerald-600 font-bold text-xs">
-                                                            ✓
+                                                            {formatCurrency(
+                                                                editProfit
+                                                            )}
                                                         </span>
-                                                    ) : (
-                                                        <span className="text-slate-300 text-xs">
-                                                            -
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 align-middle text-sm">
-                                                    {formatCurrency(
-                                                        expense.total
-                                                    )}
-                                                </td>
-                                                {isEditable && (
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right align-middle">
+                                                        <div className="flex justify-end">
+                                                            <div className="relative">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    className={`${editInputClass} w-20 pr-5`}
+                                                                    value={
+                                                                        editForm.markup_percentage
+                                                                    }
+                                                                    onChange={(
+                                                                        e
+                                                                    ) =>
+                                                                        setEditForm(
+                                                                            {
+                                                                                ...editForm,
+                                                                                markup_percentage:
+                                                                                    e
+                                                                                        .target
+                                                                                        .value,
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                />
+                                                                <span className="absolute right-1.5 top-2.5 text-[10px] text-slate-400">
+                                                                    %
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center align-middle">
+                                                        <select
+                                                            className={`${editInputClass} w-24 px-1 py-0 text-xs border border-slate-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                                                            value={
+                                                                editForm.iva_type
+                                                            }
+                                                            onChange={(e) =>
+                                                                setEditForm({
+                                                                    ...editForm,
+                                                                    iva_type:
+                                                                        e.target
+                                                                            .value,
+                                                                })
+                                                            }
+                                                        >
+                                                            <option value="gravado">
+                                                                Gravado
+                                                            </option>
+                                                            <option value="exento">
+                                                                Exento
+                                                            </option>
+                                                            <option value="no_sujeto">
+                                                                No Sujeto
+                                                            </option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-400 align-middle">
+                                                        —
+                                                    </td>
                                                     <td className="px-3 py-2 align-middle">
-                                                        <div className="flex items-center justify-end gap-1 transition-opacity">
+                                                        <div className="flex items-center justify-end gap-1">
                                                             <button
-                                                                onClick={() =>
-                                                                    handleStartEdit(
-                                                                        expense,
-                                                                        "expense"
-                                                                    )
+                                                                onClick={
+                                                                    handleSaveExpense
                                                                 }
-                                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                                                title="Editar"
+                                                                disabled={
+                                                                    saving
+                                                                }
+                                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                                title="Guardar"
                                                             >
-                                                                <Edit2 className="h-3.5 w-3.5" />
+                                                                <Check className="h-4 w-4" />
                                                             </button>
                                                             <button
-                                                                onClick={() =>
-                                                                    setConfirmRemove(
-                                                                        {
-                                                                            id: expense.id,
-                                                                            type: "expense",
-                                                                            description:
-                                                                                expense.description,
-                                                                        }
-                                                                    )
+                                                                onClick={
+                                                                    handleCancelEdit
                                                                 }
-                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                                title="Quitar de factura"
+                                                                className="p-1.5 text-slate-400 hover:bg-slate-100 rounded transition-colors"
+                                                                title="Cancelar"
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                <X className="h-4 w-4" />
                                                             </button>
                                                         </div>
                                                     </td>
-                                                )}
-                                            </>
-                                        )}
-                                    </tr>
-                                ))}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className="px-3 py-2 text-slate-700">
+                                                        <div className="font-medium text-sm">
+                                                            {
+                                                                expense.description
+                                                            }
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                                            {
+                                                                expense.provider_name
+                                                            }
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="text-[10px] px-1.5 py-0.5 font-medium bg-orange-50 text-orange-700 border-orange-200"
+                                                        >
+                                                            Cargo a Cliente
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center tabular-nums text-slate-700">
+                                                        1
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                                        {formatCurrency(
+                                                            costAmount
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium">
+                                                        {formatCurrency(
+                                                            basePrice
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums">
+                                                        <span
+                                                            className={
+                                                                profit >= 0
+                                                                    ? "text-emerald-600 font-medium"
+                                                                    : "text-red-600 font-medium"
+                                                            }
+                                                        >
+                                                            {formatCurrency(
+                                                                profit
+                                                            )}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums">
+                                                        <span
+                                                            className={`text-[11px] font-medium ${
+                                                                marginPercent >=
+                                                                0
+                                                                    ? "text-slate-700"
+                                                                    : "text-red-600"
+                                                            }`}
+                                                        >
+                                                            {marginPercent.toFixed(
+                                                                1
+                                                            )}
+                                                            %
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-center">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`text-[10px] px-1.5 py-0.5 font-medium ${
+                                                                expense.customer_applies_iva
+                                                                    ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                                            }`}
+                                                        >
+                                                            {expense.customer_applies_iva
+                                                                ? "Gravado 13%"
+                                                                : "No Sujeto"}
+                                                        </Badge>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                                        {expense.customer_applies_iva &&
+                                                        basePrice > 0 ? (
+                                                            formatCurrency(
+                                                                basePrice * 0.13
+                                                            )
+                                                        ) : (
+                                                            <span className="text-slate-300">
+                                                                -
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    {isEditable && (
+                                                        <td className="px-3 py-2">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleStartEdit(
+                                                                            expense,
+                                                                            "expense"
+                                                                        )
+                                                                    }
+                                                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                                    title="Editar"
+                                                                >
+                                                                    <Edit2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() =>
+                                                                        setConfirmRemove(
+                                                                            {
+                                                                                id: expense.id,
+                                                                                type: "expense",
+                                                                                description:
+                                                                                    expense.description,
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                    title="Quitar de factura"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    )}
+                                                </>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
+                            <tfoot className="bg-slate-100 border-t-2 border-slate-300">
+                                <tr>
+                                    <td
+                                        colSpan={isEditable ? 8 : 7}
+                                        className="px-3 py-3 text-right font-semibold text-slate-700 text-sm"
+                                    >
+                                        Subtotal (sin IVA):
+                                    </td>
+                                    <td
+                                        colSpan={isEditable ? 3 : 2}
+                                        className="px-3 py-3 text-right font-semibold text-slate-800 tabular-nums text-sm"
+                                    >
+                                        {formatCurrency(
+                                            invoice.subtotal_amount || 0
+                                        )}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td
+                                        colSpan={isEditable ? 8 : 7}
+                                        className="px-3 py-2 text-right font-medium text-slate-700 text-sm"
+                                    >
+                                        IVA (13%):
+                                    </td>
+                                    <td
+                                        colSpan={isEditable ? 3 : 2}
+                                        className="px-3 py-2 text-right font-medium text-slate-700 tabular-nums text-sm"
+                                    >
+                                        {formatCurrency(
+                                            invoice.iva_amount || 0
+                                        )}
+                                    </td>
+                                </tr>
+                                <tr className="border-t border-slate-300">
+                                    <td
+                                        colSpan={isEditable ? 8 : 7}
+                                        className="px-3 py-3 text-right font-bold text-slate-800 text-sm uppercase tracking-wide"
+                                    >
+                                        Total a Pagar:
+                                    </td>
+                                    <td
+                                        colSpan={isEditable ? 3 : 2}
+                                        className="px-3 py-3 text-right font-bold text-slate-900 tabular-nums text-base"
+                                    >
+                                        {formatCurrency(
+                                            invoice.total_amount || 0
+                                        )}
+                                    </td>
+                                </tr>
+                            </tfoot>
                         </table>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-600 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Esta información es solo para uso interno y no se
+                        incluye en la factura.
                     </div>
                 </div>
             )}
@@ -990,17 +1294,37 @@ const InvoiceItemsEditor = ({
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {invoice.payments.map((payment) => (
-                                    <tr key={payment.id} className="hover:bg-slate-50 group">
+                                    <tr
+                                        key={payment.id}
+                                        className="hover:bg-slate-50 group cursor-pointer"
+                                        onClick={() => {
+                                            if (onPaymentClick) {
+                                                onPaymentClick(payment);
+                                            }
+                                        }}
+                                    >
                                         <td className="px-3 py-2 text-slate-700 text-sm">
-                                            {formatDateSafe(payment.payment_date)}
+                                            {formatDateSafe(
+                                                payment.payment_date
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-slate-700 text-sm capitalize">
-                                            {payment.payment_method === 'transferencia' ? 'Transferencia' :
-                                             payment.payment_method === 'efectivo' ? 'Efectivo' :
-                                             payment.payment_method === 'cheque' ? 'Cheque' :
-                                             payment.payment_method === 'deposito' ? 'Depósito' :
-                                             payment.payment_method === 'tarjeta' ? 'Tarjeta' :
-                                             payment.payment_method || "—"}
+                                            {payment.payment_method ===
+                                            "transferencia"
+                                                ? "Transferencia"
+                                                : payment.payment_method ===
+                                                  "efectivo"
+                                                ? "Efectivo"
+                                                : payment.payment_method ===
+                                                  "cheque"
+                                                ? "Cheque"
+                                                : payment.payment_method ===
+                                                  "deposito"
+                                                ? "Depósito"
+                                                : payment.payment_method ===
+                                                  "tarjeta"
+                                                ? "Tarjeta"
+                                                : payment.payment_method || "—"}
                                         </td>
                                         <td className="px-3 py-2 text-slate-700 text-sm">
                                             {payment.bank_name || "—"}
@@ -1019,7 +1343,13 @@ const InvoiceItemsEditor = ({
                                         <td className="px-3 py-2 text-center">
                                             {payment.receipt_file ? (
                                                 <button
-                                                    onClick={() => window.open(payment.receipt_file, "_blank")}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(
+                                                            payment.receipt_file,
+                                                            "_blank"
+                                                        );
+                                                    }}
                                                     className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
                                                     title="Ver comprobante"
                                                 >
@@ -1027,17 +1357,109 @@ const InvoiceItemsEditor = ({
                                                     <ExternalLink className="h-3 w-3" />
                                                 </button>
                                             ) : (
-                                                <span className="text-slate-300 text-xs">—</span>
+                                                <span className="text-slate-300 text-xs">
+                                                    —
+                                                </span>
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-center">
-                                            <button
-                                                onClick={() => setConfirmDeletePayment({ id: payment.id, amount: payment.amount })}
-                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                                title="Eliminar pago"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                            {currentUser?.role === "admin" && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setConfirmDeletePayment(
+                                                            {
+                                                                id: payment.id,
+                                                                amount: payment.amount,
+                                                            }
+                                                        );
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                    title="Eliminar pago"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Notas de Crédito Aplicadas */}
+            {invoice.credit_notes && invoice.credit_notes.length > 0 && (
+                <div>
+                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <FileMinus className="h-3.5 w-3.5" />
+                        Notas de Crédito Aplicadas (
+                        {invoice.credit_notes.length})
+                    </h5>
+                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
+                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead className="bg-slate-50/80">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Número NC
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Fecha
+                                    </th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
+                                        Motivo
+                                    </th>
+                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
+                                        Monto
+                                    </th>
+                                    <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-24">
+                                        Documento
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {invoice.credit_notes.map((nc) => (
+                                    <tr
+                                        key={nc.id}
+                                        className="hover:bg-slate-50"
+                                    >
+                                        <td className="px-3 py-2 text-slate-700 font-mono text-sm">
+                                            {nc.note_number}
+                                        </td>
+                                        <td className="px-3 py-2 text-slate-700 text-sm">
+                                            {formatDateSafe(nc.issue_date)}
+                                        </td>
+                                        <td
+                                            className="px-3 py-2 text-slate-700 text-sm max-w-[250px] truncate"
+                                            title={nc.reason}
+                                        >
+                                            {nc.reason}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700 text-sm">
+                                            -{formatCurrency(nc.amount)}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            {nc.pdf_file ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(
+                                                            nc.pdf_file,
+                                                            "_blank"
+                                                        );
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
+                                                    title="Ver documento NC"
+                                                >
+                                                    <FileText className="h-3.5 w-3.5" />
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </button>
+                                            ) : (
+                                                <span className="text-slate-300 text-xs">
+                                                    —
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -1153,7 +1575,9 @@ const InvoiceItemsEditor = ({
                 onClose={() => setConfirmDeletePayment(null)}
                 onConfirm={() => handleDeletePayment(confirmDeletePayment?.id)}
                 title="¿Eliminar pago?"
-                description={`Se eliminará el pago de ${formatCurrency(confirmDeletePayment?.amount || 0)}. El saldo de la factura será recalculado automáticamente.`}
+                description={`Se eliminará el pago de ${formatCurrency(
+                    confirmDeletePayment?.amount || 0
+                )}. El saldo de la factura será recalculado automáticamente.`}
                 confirmText="Eliminar Pago"
                 cancelText="Cancelar"
                 variant="danger"

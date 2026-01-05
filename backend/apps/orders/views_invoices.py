@@ -289,7 +289,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice = self.get_object()
 
         # Campos siempre permitidos
-        ALWAYS_EDITABLE = {'invoice_number', 'due_date', 'notes', 'pdf_file'}
+        ALWAYS_EDITABLE = {'invoice_number', 'dte_number', 'due_date', 'notes', 'pdf_file'}
 
         # Campos solo editables sin DTE
         DTE_RESTRICTED = {'invoice_type', 'issue_date'}
@@ -298,10 +298,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if invoice.is_dte_issued:
             restricted_fields = set(request.data.keys()) & DTE_RESTRICTED
             if restricted_fields:
-                # Remover campos restringidos silenciosamente
+                # Crear una copia mutable de request.data
+                data = request.data.copy()
+                # Remover campos restringidos
                 for field in restricted_fields:
-                    if field in request.data:
-                        del request.data[field]
+                    data.pop(field, None)
+                # Reemplazar request.data con la copia filtrada
+                request._full_data = data
 
         # Proceder con la actualización normal
         return super().partial_update(request, *args, **kwargs)
@@ -310,12 +313,47 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         """Delete invoice and unmark service order as invoiced"""
         invoice = self.get_object()
 
-        # Check if invoice has payments
+        # Check if invoice has payments (current)
         if invoice.paid_amount > 0:
             return Response(
                 {'error': 'No se puede eliminar una factura con pagos registrados. Elimine los pagos primero.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # AUDITORÍA #2: Verificar historial de pagos (incluyendo eliminados)
+        # para mantener trazabilidad financiera
+        from .models import InvoicePayment
+        payment_history = InvoicePayment.all_objects.filter(invoice=invoice)
+        if payment_history.exists():
+            deleted_payments = payment_history.filter(is_deleted=True)
+            if deleted_payments.exists():
+                return Response(
+                    {
+                        'error': 'Esta factura tiene historial de pagos eliminados. '
+                                'Para mantener la trazabilidad financiera, use la opción de anular factura en lugar de eliminar.',
+                        'code': 'PAYMENT_HISTORY_EXISTS',
+                        'deleted_payments_count': deleted_payments.count()
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Verificar si está emitido como DTE y ha pasado el periodo de gracia de 24 horas
+        if invoice.is_dte_issued:
+            if not invoice.can_delete_without_credit_note():
+                hours_remaining = invoice.get_hours_until_locked()
+                return Response(
+                    {
+                        'error': 'Esta factura tiene DTE emitido y ha pasado el plazo de 24 horas. '
+                                'Solo puede anularse mediante Nota de Crédito.',
+                        'code': 'DTE_LOCKED',
+                        'dte_issued_at': invoice.dte_issued_at.isoformat() if invoice.dte_issued_at else None
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            else:
+                # Permitir eliminación pero advertir que está en el periodo de gracia
+                hours_remaining = invoice.get_hours_until_locked()
+                # Continuar con la eliminación (se registrará en los logs)
 
         try:
             service_order = invoice.service_order
@@ -344,6 +382,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         """
         Marca una pre-factura como DTE emitido.
         Una vez marcada, solo se pueden hacer notas de crédito.
+        REQUIERE que se haya subido el PDF de la factura.
         """
         invoice = self.get_object()
         
@@ -353,10 +392,22 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validar que existe el PDF de la factura antes de marcar como emitido
+        if not invoice.pdf_file:
+            return Response(
+                {
+                    'error': 'No se puede marcar como DTE emitido sin haber subido el PDF de la factura.',
+                    'code': 'PDF_REQUIRED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         dte_number = request.data.get('dte_number', '')
         
         # Registrar en historial
         from .models import InvoiceEditHistory
+        from django.utils import timezone
+        
         InvoiceEditHistory.objects.create(
             invoice=invoice,
             edit_type='dte_marked',
@@ -367,6 +418,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         )
         
         invoice.is_dte_issued = True
+        invoice.dte_issued_at = timezone.now()  # Establecer timestamp de emisión
         invoice.dte_number = dte_number
         if dte_number:
             invoice.invoice_number = dte_number
@@ -377,6 +429,148 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'invoice_number': invoice.invoice_number,
             'dte_number': dte_number
         })
+
+    @action(detail=True, methods=['post'])
+    def void(self, request, pk=None):
+        """
+        AUDITORÍA #5: Anular una factura (void/cancel).
+
+        Este endpoint permite anular facturas que tienen pagos o historial,
+        a diferencia de destroy() que solo permite eliminar facturas limpias.
+
+        COMPORTAMIENTO:
+        - Marca la factura como status='cancelled'
+        - Establece balance=0 para liberar crédito del cliente
+        - NO elimina los pagos (se mantienen para auditoría)
+        - Registra el historial de anulación
+        - Libera los items (cargos y gastos) para que puedan refacturarse
+
+        REQUISITOS:
+        - Motivo de anulación obligatorio
+        - Usuario autenticado
+
+        NOTA: Los pagos ya realizados quedan registrados. Si el cliente
+        pagó en exceso, se debe gestionar como saldo a favor por fuera del sistema.
+        """
+        from django.utils import timezone
+        from .models import InvoiceEditHistory, OrderCharge
+        from apps.transfers.models import Transfer
+
+        invoice = self.get_object()
+
+        # Validar que no esté ya anulada
+        if invoice.status == 'cancelled':
+            return Response(
+                {'error': 'Esta factura ya está anulada.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar motivo de anulación
+        void_reason = request.data.get('reason', '').strip()
+        if not void_reason:
+            return Response(
+                {'error': 'Debe proporcionar un motivo para anular la factura.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            with transaction.atomic():
+                # Obtener lock sobre la factura
+                inv = Invoice.objects.select_for_update().get(pk=pk)
+
+                # Guardar valores anteriores para historial
+                previous_values = {
+                    'status': inv.status,
+                    'balance': str(inv.balance),
+                    'paid_amount': str(inv.paid_amount),
+                    'credited_amount': str(inv.credited_amount)
+                }
+
+                # 1. Liberar cargos (OrderCharge) vinculados a esta factura
+                released_charges = []
+                for charge in inv.charges.filter(is_deleted=False):
+                    released_charges.append({
+                        'id': charge.id,
+                        'service': charge.service.name,
+                        'total': str(charge.total)
+                    })
+                    charge.invoice = None
+                    charge.billing_status = 'disponible'
+                    charge.save(skip_order_validation=True)
+
+                # 2. Liberar gastos (Transfer) vinculados a esta factura
+                released_expenses = []
+                for transfer in inv.billed_transfers.filter(is_deleted=False):
+                    released_expenses.append({
+                        'id': transfer.id,
+                        'description': transfer.description[:50],
+                        'total': str(transfer.get_customer_total())
+                    })
+                    transfer.invoice = None
+                    transfer.billing_status = 'disponible'
+                    transfer.save()
+
+                # 3. Marcar factura como anulada
+                inv.status = 'cancelled'
+                inv.balance = Decimal('0.00')  # Liberar crédito
+
+                # Agregar campos de anulación si no existen
+                inv.notes = f"{inv.notes}\n\n--- ANULADA ---\nFecha: {timezone.now().strftime('%Y-%m-%d %H:%M')}\nMotivo: {void_reason}\nUsuario: {request.user.get_full_name() or request.user.username}"
+
+                inv.save()
+
+                # 4. Registrar en historial
+                InvoiceEditHistory.objects.create(
+                    invoice=inv,
+                    edit_type='dte_marked',  # Reutilizamos este tipo para anulación
+                    description=f'FACTURA ANULADA: {void_reason}',
+                    previous_values=previous_values,
+                    new_values={
+                        'status': 'cancelled',
+                        'balance': '0.00',
+                        'void_reason': void_reason,
+                        'released_charges': len(released_charges),
+                        'released_expenses': len(released_expenses)
+                    },
+                    user=request.user
+                )
+
+                # 5. Registrar en historial de la OS
+                from .models import OrderHistory
+                OrderHistory.objects.create(
+                    service_order=inv.service_order,
+                    event_type='updated',
+                    description=f'Factura {inv.invoice_number} ANULADA. Motivo: {void_reason}',
+                    user=request.user,
+                    metadata={
+                        'invoice_id': inv.id,
+                        'invoice_number': inv.invoice_number,
+                        'void_reason': void_reason,
+                        'released_items': {
+                            'charges': released_charges,
+                            'expenses': released_expenses
+                        }
+                    }
+                )
+
+            return Response({
+                'message': f'Factura {invoice.invoice_number} anulada correctamente.',
+                'invoice_id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'void_reason': void_reason,
+                'credit_released': True,
+                'items_released': {
+                    'charges': len(released_charges),
+                    'expenses': len(released_expenses)
+                },
+                'note': 'Los items liberados están disponibles para facturar nuevamente.'
+            })
+
+        except Exception as e:
+            return Response(
+                {'error': f'Error al anular la factura: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=True, methods=['patch'])
     def edit_expense(self, request, pk=None):
@@ -919,11 +1113,33 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Average collection time (for paid invoices)
         paid_invoices = queryset.filter(status='paid', due_date__isnull=False)
 
+        # Total Servicios y Gastos a Terceros desde los campos calculados de Invoice
+        # Estos campos se calculan automáticamente en el modelo Invoice.save()
+        aggregated_totals = queryset.aggregate(
+            total_services_sum=Sum('total_services'),
+            total_third_party_sum=Sum('total_third_party'),
+            total_credited_sum=Sum('credited_amount')
+        )
+
+        total_services = aggregated_totals['total_services_sum'] or Decimal('0')
+        total_third_party_expenses = aggregated_totals['total_third_party_sum'] or Decimal('0')
+        total_credited = aggregated_totals['total_credited_sum'] or Decimal('0')
+
+        # Contar notas de crédito
+        credit_notes_count = CreditNote.objects.filter(
+            invoice__in=queryset,
+            is_deleted=False
+        ).count()
+
         return Response({
             'total_invoiced': str(total_invoiced),
             'total_pending': str(total_pending),
             'total_collected': str(total_collected),
             'total_overdue': str(total_overdue),
+            'total_services': str(total_services),
+            'total_third_party_expenses': str(total_third_party_expenses),
+            'total_credited': str(total_credited),
+            'credit_notes_count': credit_notes_count,
             'pending_count': pending_count,
             'paid_count': paid_count,
             'partial_count': partial_count,
@@ -964,26 +1180,26 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         ws.title = "Cuentas por Cobrar"
 
         # Estilos profesionales - Diseño GPRO
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=10)
-        title_font = Font(size=16, bold=True, color="1F4E79")
-        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
         )
-        currency_format = '#,##0.00'
+        currency_format = '"$"#,##0.00'
 
         # === ENCABEZADO ===
         ws['A1'] = "CUENTAS POR COBRAR"
         ws['A1'].font = title_font
-        ws.merge_cells('A1:K1')
+        ws.merge_cells('A1:N1')
 
         ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
         ws['A2'].font = Font(size=11, color="666666")
-        ws.merge_cells('A2:K2')
+        ws.merge_cells('A2:N2')
 
         ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         ws['A3'].font = Font(size=9, italic=True, color="999999")
@@ -991,13 +1207,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # === TABLA DE DATOS ===
         start_row = 5
         ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
-        ws.merge_cells(f'A{start_row}:K{start_row}')
+        ws.merge_cells(f'A{start_row}:N{start_row}')
 
-        # Headers de la tabla
+        # Headers de la tabla (añadidos DUCA, BL, Total Servicios, Total Gastos)
         headers = [
-            'No. Factura', 'Cliente', 'Orden de Servicio', 'CCF',
-            'Fecha Emisión', 'Fecha Vencimiento', 'Total', 'Pagado',
-            'Saldo', 'Estado', 'Días Vencida'
+            'No. Factura', 'Cliente', 'Orden de Servicio', 'DUCA', 'BL', 'CCF',
+            'Fecha Emisión', 'Fecha Vencimiento', 'Total Servicios', 'Total Gastos',
+            'Total Factura', 'Pagado', 'Saldo', 'Estado'
         ]
         header_row = start_row + 1
 
@@ -1019,41 +1235,71 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         today = timezone.now().date()
         data_row = header_row + 1
-        totals = {'total': 0, 'paid': 0, 'balance': 0}
+        totals = {'total_services': 0, 'total_third_party': 0, 'total': 0, 'paid': 0, 'balance': 0}
 
         for invoice in queryset:
-            # Calculate days overdue
-            days_overdue = 0
-            if invoice.due_date and invoice.balance > 0 and today > invoice.due_date:
-                days_overdue = (today - invoice.due_date).days
-
+            # Columna 1: No. Factura
             ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
+            
+            # Columna 2: Cliente
             ws.cell(row=data_row, column=2, value=invoice.service_order.client.name if invoice.service_order else '').border = thin_border
+            
+            # Columna 3: Orden de Servicio
             ws.cell(row=data_row, column=3, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
-            ws.cell(row=data_row, column=4, value=invoice.ccf or '').border = thin_border
-            ws.cell(row=data_row, column=5, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
-            ws.cell(row=data_row, column=6, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
+            
+            # Columna 4: DUCA (desde la orden de servicio)
+            duca_value = invoice.service_order.duca if invoice.service_order and invoice.service_order.duca else ''
+            ws.cell(row=data_row, column=4, value=duca_value).border = thin_border
+            
+            # Columna 5: BL (desde la orden de servicio)
+            bl_value = invoice.service_order.bl_reference if invoice.service_order and invoice.service_order.bl_reference else ''
+            ws.cell(row=data_row, column=5, value=bl_value).border = thin_border
+            
+            # Columna 6: CCF
+            ws.cell(row=data_row, column=6, value=invoice.ccf or '').border = thin_border
+            
+            # Columna 7: Fecha Emisión
+            ws.cell(row=data_row, column=7, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            
+            # Columna 8: Fecha Vencimiento
+            ws.cell(row=data_row, column=8, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
 
-            # Monetary columns with format
-            total_cell = ws.cell(row=data_row, column=7, value=float(invoice.total_amount))
+            # Columna 9: Total Servicios
+            total_services_cell = ws.cell(row=data_row, column=9, value=float(invoice.total_services))
+            total_services_cell.number_format = currency_format
+            total_services_cell.border = thin_border
+            total_services_cell.alignment = Alignment(horizontal='right')
+
+            # Columna 10: Total Gastos a Terceros
+            total_third_party_cell = ws.cell(row=data_row, column=10, value=float(invoice.total_third_party))
+            total_third_party_cell.number_format = currency_format
+            total_third_party_cell.border = thin_border
+            total_third_party_cell.alignment = Alignment(horizontal='right')
+
+            # Columna 11: Total Factura
+            total_cell = ws.cell(row=data_row, column=11, value=float(invoice.total_amount))
             total_cell.number_format = currency_format
             total_cell.border = thin_border
             total_cell.alignment = Alignment(horizontal='right')
 
-            paid_cell = ws.cell(row=data_row, column=8, value=float(invoice.paid_amount))
+            # Columna 12: Pagado
+            paid_cell = ws.cell(row=data_row, column=12, value=float(invoice.paid_amount))
             paid_cell.number_format = currency_format
             paid_cell.border = thin_border
             paid_cell.alignment = Alignment(horizontal='right')
 
-            balance_cell = ws.cell(row=data_row, column=9, value=float(invoice.balance))
+            # Columna 13: Saldo
+            balance_cell = ws.cell(row=data_row, column=13, value=float(invoice.balance))
             balance_cell.number_format = currency_format
             balance_cell.border = thin_border
             balance_cell.alignment = Alignment(horizontal='right')
 
-            ws.cell(row=data_row, column=10, value=status_display.get(invoice.status, invoice.status)).border = thin_border
-            ws.cell(row=data_row, column=11, value=days_overdue if days_overdue > 0 else '').border = thin_border
+            # Columna 14: Estado
+            ws.cell(row=data_row, column=14, value=status_display.get(invoice.status, invoice.status)).border = thin_border
 
             # Sumar totales
+            totals['total_services'] += float(invoice.total_services)
+            totals['total_third_party'] += float(invoice.total_third_party)
             totals['total'] += float(invoice.total_amount)
             totals['paid'] += float(invoice.paid_amount)
             totals['balance'] += float(invoice.balance)
@@ -1063,32 +1309,48 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Fila de totales
         ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
         ws.cell(row=data_row, column=1).border = thin_border
-        for col in range(2, 7):
+        for col in range(2, 9):
             ws.cell(row=data_row, column=col).border = thin_border
 
-        total_total = ws.cell(row=data_row, column=7, value=totals['total'])
+        # Total Servicios
+        total_services_sum = ws.cell(row=data_row, column=9, value=totals['total_services'])
+        total_services_sum.number_format = currency_format
+        total_services_sum.font = Font(bold=True)
+        total_services_sum.border = thin_border
+        total_services_sum.alignment = Alignment(horizontal='right')
+
+        # Total Gastos a Terceros
+        total_third_party_sum = ws.cell(row=data_row, column=10, value=totals['total_third_party'])
+        total_third_party_sum.number_format = currency_format
+        total_third_party_sum.font = Font(bold=True)
+        total_third_party_sum.border = thin_border
+        total_third_party_sum.alignment = Alignment(horizontal='right')
+
+        # Total Factura
+        total_total = ws.cell(row=data_row, column=11, value=totals['total'])
         total_total.number_format = currency_format
         total_total.font = Font(bold=True)
         total_total.border = thin_border
         total_total.alignment = Alignment(horizontal='right')
 
-        total_paid = ws.cell(row=data_row, column=8, value=totals['paid'])
+        # Total Pagado
+        total_paid = ws.cell(row=data_row, column=12, value=totals['paid'])
         total_paid.number_format = currency_format
         total_paid.font = Font(bold=True)
         total_paid.border = thin_border
         total_paid.alignment = Alignment(horizontal='right')
 
-        total_balance = ws.cell(row=data_row, column=9, value=totals['balance'])
+        # Total Saldo
+        total_balance = ws.cell(row=data_row, column=13, value=totals['balance'])
         total_balance.number_format = currency_format
         total_balance.font = Font(bold=True)
         total_balance.border = thin_border
         total_balance.alignment = Alignment(horizontal='right')
 
-        for col in range(10, 12):
-            ws.cell(row=data_row, column=col).border = thin_border
+        ws.cell(row=data_row, column=14).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [18, 30, 18, 15, 14, 14, 14, 14, 14, 15, 12]
+        column_widths = [18, 30, 18, 16, 16, 15, 14, 14, 16, 16, 16, 14, 14, 15]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1102,7 +1364,30 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def add_payment(self, request, pk=None):
-        """Add a payment (abono) to an invoice with distributed lock"""
+        """
+        Add a payment (abono) to an invoice with distributed lock.
+        
+        Soporta dos modos:
+        1. Pago simple (modo legacy): Solo se especifica el monto total
+        2. Pago por items: Se especifica el desglose por cada item (item_allocations)
+        
+        Para pago por items, enviar:
+        {
+            "amount": 1000.00,  # Monto total del pago
+            "payment_date": "2025-01-04",
+            "payment_method": "transferencia",
+            "bank": 1,  # opcional
+            "reference": "REF-001",  # opcional
+            "notes": "Pago parcial",  # opcional
+            "item_allocations": [
+                {"item_type": "service", "item_id": 1, "amount": 500.00},
+                {"item_type": "expense", "item_id": 2, "amount": 500.00}
+            ]
+        }
+        """
+        from .models import PaymentItemAllocation, OrderCharge
+        from apps.transfers.models import Transfer
+        
         invoice = self.get_object()
 
         if invoice.balance <= 0:
@@ -1114,6 +1399,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         def process_payment():
             # Re-fetch invoice inside lock to ensure fresh data
             inv = Invoice.objects.select_for_update().get(pk=pk)
+            
+            # SEGURIDAD: No permitir pagos a facturas anuladas
+            if inv.status == 'cancelled':
+                raise ValueError('No se pueden registrar pagos a una factura ANULADA')
             
             # Re-validate balance inside lock
             if inv.balance <= 0:
@@ -1135,6 +1424,78 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 except Bank.DoesNotExist:
                     pass
 
+            # Obtener asignaciones por item si se proporcionaron
+            item_allocations_data = request.data.get('item_allocations', [])
+            
+            # Si viene como string JSON (de FormData), parsearlo
+            import json
+            if isinstance(item_allocations_data, str):
+                try:
+                    item_allocations_data = json.loads(item_allocations_data)
+                except json.JSONDecodeError:
+                    item_allocations_data = []
+            
+            # Validar que la suma de asignaciones sea igual al monto total (si hay asignaciones)
+            if item_allocations_data:
+                total_allocated = sum(
+                    Decimal(str(alloc.get('amount', 0))) 
+                    for alloc in item_allocations_data
+                )
+                if total_allocated != amount:
+                    raise ValueError(
+                        f'La suma de asignaciones (${total_allocated}) no coincide '
+                        f'con el monto del pago (${amount})'
+                    )
+                
+                # Validar que cada item exista y pertenezca a la factura
+                for alloc in item_allocations_data:
+                    item_type = alloc.get('item_type')
+                    item_id = alloc.get('item_id')
+                    alloc_amount = Decimal(str(alloc.get('amount', 0)))
+                    
+                    if alloc_amount <= 0:
+                        raise ValueError(f'El monto de asignación debe ser mayor a cero')
+                    
+                    if item_type == 'service':
+                        try:
+                            charge = OrderCharge.objects.get(id=item_id, invoice=inv)
+                            # Calcular pendiente del item
+                            item_paid = PaymentItemAllocation.objects.filter(
+                                charge=charge,
+                                payment__is_deleted=False,
+                                is_deleted=False
+                            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                            item_pending = charge.total - item_paid
+                            if alloc_amount > item_pending:
+                                raise ValueError(
+                                    f'El monto asignado al servicio "{charge.service.name}" '
+                                    f'(${alloc_amount}) excede su pendiente (${item_pending})'
+                                )
+                        except OrderCharge.DoesNotExist:
+                            raise ValueError(f'Servicio #{item_id} no encontrado en esta factura')
+                    
+                    elif item_type == 'expense':
+                        try:
+                            expense = Transfer.objects.get(id=item_id, invoice=inv)
+                            # Calcular pendiente del item
+                            item_paid = PaymentItemAllocation.objects.filter(
+                                expense=expense,
+                                payment__is_deleted=False,
+                                is_deleted=False
+                            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                            item_total = expense.get_customer_total()
+                            item_pending = item_total - item_paid
+                            if alloc_amount > item_pending:
+                                raise ValueError(
+                                    f'El monto asignado al gasto "{expense.description[:30]}" '
+                                    f'(${alloc_amount}) excede su pendiente (${item_pending})'
+                                )
+                        except Transfer.DoesNotExist:
+                            raise ValueError(f'Gasto #{item_id} no encontrado en esta factura')
+                    else:
+                        raise ValueError(f'Tipo de item inválido: {item_type}')
+
+            # Crear el pago
             payment = InvoicePayment.objects.create(
                 invoice=inv,
                 amount=amount,
@@ -1147,11 +1508,39 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 created_by=request.user
             )
 
+            # Crear asignaciones por item si se proporcionaron
+            allocations_created = []
+            if item_allocations_data:
+                for alloc in item_allocations_data:
+                    item_type = alloc.get('item_type')
+                    item_id = alloc.get('item_id')
+                    alloc_amount = Decimal(str(alloc.get('amount', 0)))
+                    alloc_notes = alloc.get('notes', '')
+                    
+                    allocation_data = {
+                        'payment': payment,
+                        'amount': alloc_amount,
+                        'notes': alloc_notes
+                    }
+                    
+                    if item_type == 'service':
+                        allocation_data['charge_id'] = item_id
+                    elif item_type == 'expense':
+                        allocation_data['expense_id'] = item_id
+                    
+                    allocation = PaymentItemAllocation.objects.create(**allocation_data)
+                    allocations_created.append({
+                        'id': allocation.id,
+                        'item_type': item_type,
+                        'item_id': item_id,
+                        'amount': str(alloc_amount)
+                    })
+
             # El modelo InvoicePayment.save() ya actualiza paid_amount de la factura
             # Refrescar la instancia para obtener el balance actualizado
             inv.refresh_from_db()
 
-            return payment, inv.balance
+            return payment, inv.balance, allocations_created
 
         try:
             # Apply distributed lock if Redis is available
@@ -1159,7 +1548,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 try:
                     with distributed_lock(f'invoice_payment_{pk}', timeout=30):
                         with transaction.atomic():
-                            payment, new_balance = process_payment()
+                            payment, new_balance, allocations = process_payment()
                 except LockAcquisitionError:
                     return Response(
                         {'error': 'Otro usuario está procesando esta factura. Intente nuevamente.'},
@@ -1167,18 +1556,102 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     )
             else:
                 with transaction.atomic():
-                    payment, new_balance = process_payment()
+                    payment, new_balance, allocations = process_payment()
 
-            return Response({
+            response_data = {
                 'message': 'Pago registrado exitosamente',
                 'payment_id': payment.id,
                 'new_balance': str(new_balance)
-            }, status=status.HTTP_201_CREATED)
+            }
+            
+            if allocations:
+                response_data['item_allocations'] = allocations
+                response_data['message'] = f'Pago registrado exitosamente con {len(allocations)} asignaciones por item'
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def payment_items(self, request, pk=None):
+        """
+        Obtener los items de una factura con su estado de pago.
+        Útil para el modal de registro de pagos por item.
+        
+        Retorna servicios y gastos con:
+        - Monto total del item
+        - Monto ya pagado
+        - Monto pendiente
+        """
+        from .models import PaymentItemAllocation, OrderCharge
+        from apps.transfers.models import Transfer
+        
+        invoice = self.get_object()
+        items = []
+        
+        # Obtener servicios (cargos)
+        charges = invoice.charges.filter(is_deleted=False).select_related('service')
+        for charge in charges:
+            paid = PaymentItemAllocation.objects.filter(
+                charge=charge,
+                payment__is_deleted=False,
+                is_deleted=False
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            
+            items.append({
+                'id': f'service_{charge.id}',
+                'item_type': 'service',
+                'item_id': charge.id,
+                'name': charge.service.name,
+                'description': charge.description or '',
+                'total': str(charge.total),
+                'paid': str(paid),
+                'pending': str(charge.total - paid),
+                'iva_type': charge.iva_type,
+            })
+        
+        # Obtener gastos (expenses/transfers)
+        transfers = invoice.billed_transfers.filter(is_deleted=False).select_related('provider')
+        for transfer in transfers:
+            total = transfer.get_customer_total()
+            paid = PaymentItemAllocation.objects.filter(
+                expense=transfer,
+                payment__is_deleted=False,
+                is_deleted=False
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            
+            items.append({
+                'id': f'expense_{transfer.id}',
+                'item_type': 'expense',
+                'item_id': transfer.id,
+                'name': transfer.description[:50] if transfer.description else 'Gasto',
+                'description': transfer.provider.name if transfer.provider else 'Sin proveedor',
+                'total': str(total),
+                'paid': str(paid),
+                'pending': str(total - paid),
+                'iva_type': getattr(transfer, 'customer_iva_type', 'gravado' if transfer.customer_applies_iva else 'exento'),
+            })
+        
+        # Calcular totales
+        total_invoice = sum(Decimal(item['total']) for item in items)
+        total_paid = sum(Decimal(item['paid']) for item in items)
+        total_pending = sum(Decimal(item['pending']) for item in items)
+        
+        return Response({
+            'invoice_id': invoice.id,
+            'invoice_number': invoice.invoice_number,
+            'balance': str(invoice.balance),
+            'items': items,
+            'summary': {
+                'total_items': len(items),
+                'total_invoice': str(total_invoice),
+                'total_paid_by_items': str(total_paid),
+                'total_pending_by_items': str(total_pending),
+            }
+        })
 
     @action(detail=True, methods=['post'])
     def add_credit_note(self, request, pk=None):
@@ -1301,6 +1774,114 @@ class InvoicePaymentViewSet(viewsets.ModelViewSet):
                 {'error': f'Error al eliminar el pago: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def export_excel(self, request):
+        """Exportar listado de pagos a Excel con formato profesional"""
+        from datetime import datetime
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Crear workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Pagos Recibidos"
+
+        # Estilos profesionales - Diseño GPRO
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        currency_format = '"$"#,##0.00'
+
+        # === ENCABEZADO ===
+        ws['A1'] = "REPORTE DE PAGOS RECIBIDOS"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:H1')
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:H2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === TABLA DE DATOS ===
+        start_row = 5
+        ws.cell(row=start_row, column=1, value="DETALLE DE PAGOS").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:H{start_row}')
+
+        # Headers de la tabla
+        headers = ['Fecha Pago', 'No. Factura', 'Cliente', 'Método Pago',
+                   'Referencia', 'Banco', 'Monto', 'Registrado Por']
+        header_row = start_row + 1
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=header_row, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
+        # Datos
+        data_row = header_row + 1
+        total_amount = 0
+
+        for payment in queryset:
+            ws.cell(row=data_row, column=1, value=payment.payment_date.strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=2, value=payment.invoice.invoice_number).border = thin_border
+            ws.cell(row=data_row, column=3, value=payment.invoice.service_order.client.name if payment.invoice.service_order.client else '').border = thin_border
+            ws.cell(row=data_row, column=4, value=payment.get_payment_method_display()).border = thin_border
+            ws.cell(row=data_row, column=5, value=payment.reference_number or '').border = thin_border
+            ws.cell(row=data_row, column=6, value=payment.bank.name if payment.bank else '').border = thin_border
+
+            # Columna Monto
+            amount_cell = ws.cell(row=data_row, column=7, value=float(payment.amount))
+            amount_cell.number_format = currency_format
+            amount_cell.border = thin_border
+            amount_cell.alignment = Alignment(horizontal='right')
+
+            ws.cell(row=data_row, column=8, value=payment.created_by.get_full_name() if payment.created_by else '').border = thin_border
+
+            total_amount += float(payment.amount)
+            data_row += 1
+
+        # Fila de totales
+        ws.cell(row=data_row, column=1, value="TOTAL").font = Font(bold=True)
+        ws.cell(row=data_row, column=1).border = thin_border
+        for col in range(2, 7):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        total_cell = ws.cell(row=data_row, column=7, value=total_amount)
+        total_cell.number_format = currency_format
+        total_cell.font = Font(bold=True)
+        total_cell.border = thin_border
+        total_cell.alignment = Alignment(horizontal='right')
+
+        ws.cell(row=data_row, column=8).border = thin_border
+
+        # Ajustar anchos de columna
+        column_widths = [14, 18, 30, 18, 20, 20, 15, 20]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
+        # Generar respuesta
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename=GPRO_Pagos_Recibidos_{datetime.now().strftime("%Y%m%d")}.xlsx'
+
+        wb.save(response)
+        return response
 
 
 class CreditNoteViewSet(viewsets.ModelViewSet):

@@ -207,10 +207,12 @@ const NCStatusBadge = ({ status }) => {
     const config = NC_STATUS_CONFIG[status] || NC_STATUS_CONFIG.pendiente;
     const Icon = config.icon;
     return (
-        <span className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm",
-            config.className
-        )}>
+        <span
+            className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm",
+                config.className
+            )}
+        >
             {Icon && <Icon className="w-3.5 h-3.5" />}
             {config.label}
         </span>
@@ -253,15 +255,14 @@ const TypeBadge = ({ type }) => {
 // ============================================
 // KPI CARD - REFINED & SPACIOUS
 // ============================================
-const KPICard = ({
-    label,
-    value,
-    icon: Icon,
-}) => {
+const KPICard = ({ label, value, icon: Icon }) => {
     return (
         <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
+                <p
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
+                    title={label}
+                >
                     {label}
                 </p>
                 <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
@@ -269,7 +270,9 @@ const KPICard = ({
                 </p>
             </div>
             <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
             </div>
         </div>
     );
@@ -280,7 +283,7 @@ const KPICard = ({
 // ============================================
 function ProviderPayments() {
     const navigate = useNavigate();
-    
+
     // Data state
     const [payments, setPayments] = useState([]);
     const [creditNotes, setCreditNotes] = useState([]);
@@ -361,14 +364,16 @@ function ProviderPayments() {
         payment_date: getTodayDate(),
     });
 
-    // Derived options
+    // Derived options - Excluir OS cerradas
     const serviceOrderOptions = useMemo(
         () => [
             { id: "", name: "Sin OS (Gasto Administrativo)" },
-            ...serviceOrders.map((os) => ({
-                id: String(os.id),
-                name: `${os.order_number} - ${os.client_name}`,
-            })),
+            ...serviceOrders
+                .filter((os) => os.status !== "cerrada")
+                .map((os) => ({
+                    id: String(os.id),
+                    name: `${os.order_number} - ${os.client_name}`,
+                })),
         ],
         [serviceOrders]
     );
@@ -410,7 +415,9 @@ function ProviderPayments() {
 
     const fetchCreditNotes = async () => {
         try {
-            const response = await axios.get("/transfers/provider-credit-notes/");
+            const response = await axios.get(
+                "/transfers/provider-credit-notes/"
+            );
             setCreditNotes(response.data || []);
         } catch {
             console.error("Error al cargar notas de crédito");
@@ -517,8 +524,10 @@ function ProviderPayments() {
         if (!deleteConfirm.id) return;
 
         try {
-            if (deleteConfirm.type === 'credit-note') {
-                await axios.delete(`/transfers/provider-credit-notes/${deleteConfirm.id}/`);
+            if (deleteConfirm.type === "credit-note") {
+                await axios.delete(
+                    `/transfers/provider-credit-notes/${deleteConfirm.id}/`
+                );
                 toast.success("Nota de crédito eliminada correctamente");
                 fetchCreditNotes();
             } else {
@@ -560,11 +569,13 @@ function ProviderPayments() {
         }
         try {
             const response = await axios.get("/transfers/transfers/", {
-                params: { provider: providerId }
+                params: { provider: providerId },
             });
             // Filtrar solo las que tienen saldo o están pendientes/aprobadas
-            const transfers = (response.data || []).filter(t =>
-                t.provider === parseInt(providerId) || t.provider?.id === parseInt(providerId)
+            const transfers = (response.data || []).filter(
+                (t) =>
+                    t.provider === parseInt(providerId) ||
+                    t.provider?.id === parseInt(providerId)
             );
             setProviderTransfers(transfers);
         } catch {
@@ -585,8 +596,10 @@ function ProviderPayments() {
             formData.append("issue_date", ncForm.issue_date);
             formData.append("received_date", ncForm.received_date);
             formData.append("reason", ncForm.reason);
-            if (ncForm.transfer) formData.append("original_transfer", ncForm.transfer);
-            if (ncForm.reason_detail) formData.append("reason_detail", ncForm.reason_detail);
+            if (ncForm.transfer)
+                formData.append("original_transfer", ncForm.transfer);
+            if (ncForm.reason_detail)
+                formData.append("reason_detail", ncForm.reason_detail);
             if (ncForm.pdf_file) formData.append("pdf_file", ncForm.pdf_file);
 
             await axios.post("/transfers/provider-credit-notes/", formData, {
@@ -600,7 +613,8 @@ function ProviderPayments() {
             fetchCreditNotes();
             fetchPayments(); // Refrescar pagos también
         } catch (error) {
-            const errorMsg = error.response?.data?.error ||
+            const errorMsg =
+                error.response?.data?.error ||
                 error.response?.data?.note_number?.[0] ||
                 "Error al registrar nota de crédito";
             toast.error(errorMsg);
@@ -611,7 +625,9 @@ function ProviderPayments() {
 
     const handleViewNCDetail = async (nc) => {
         try {
-            const response = await axios.get(`/transfers/provider-credit-notes/${nc.id}/`);
+            const response = await axios.get(
+                `/transfers/provider-credit-notes/${nc.id}/`
+            );
             setSelectedNC(response.data);
             setIsNCDetailModalOpen(true);
         } catch {
@@ -621,9 +637,12 @@ function ProviderPayments() {
 
     const fetchPendingTransfers = async (providerId) => {
         try {
-            const response = await axios.get(`/transfers/provider-credit-notes/pending_for_provider/`, {
-                params: { provider_id: providerId }
-            });
+            const response = await axios.get(
+                `/transfers/provider-credit-notes/pending_for_provider/`,
+                {
+                    params: { provider_id: providerId },
+                }
+            );
             setPendingTransfers(response.data.pending_transfers || []);
         } catch {
             setPendingTransfers([]);
@@ -641,11 +660,11 @@ function ProviderPayments() {
         if (!selectedNC || !selectedNC.id || applyFormData.length === 0) return;
 
         const applications = applyFormData
-            .filter(app => app.amount && parseFloat(app.amount) > 0)
-            .map(app => ({
+            .filter((app) => app.amount && parseFloat(app.amount) > 0)
+            .map((app) => ({
                 transfer_id: app.transfer_id,
                 amount: parseFloat(app.amount),
-                notes: app.notes || ""
+                notes: app.notes || "",
             }));
 
         if (applications.length === 0) {
@@ -655,11 +674,15 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
-            await axios.post(`/transfers/provider-credit-notes/${selectedNC.id}/apply/`, {
-                applications
-            }, {
-                _skipErrorToast: true
-            });
+            await axios.post(
+                `/transfers/provider-credit-notes/${selectedNC.id}/apply/`,
+                {
+                    applications,
+                },
+                {
+                    _skipErrorToast: true,
+                }
+            );
 
             toast.success("Nota de crédito aplicada correctamente");
             setIsApplyNCModalOpen(false);
@@ -669,7 +692,8 @@ function ProviderPayments() {
             fetchPayments();
         } catch (error) {
             const errorData = error.response?.data;
-            const errorMsg = errorData?.error || "Error al aplicar nota de crédito";
+            const errorMsg =
+                errorData?.error || "Error al aplicar nota de crédito";
             const errorDetail = Array.isArray(errorData?.detail)
                 ? errorData.detail.join(", ")
                 : errorData?.detail;
@@ -695,11 +719,15 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
-            await axios.post(`/transfers/provider-credit-notes/${selectedNC.id}/void/`, {
-                reason
-            }, {
-                _skipErrorToast: true
-            });
+            await axios.post(
+                `/transfers/provider-credit-notes/${selectedNC.id}/void/`,
+                {
+                    reason,
+                },
+                {
+                    _skipErrorToast: true,
+                }
+            );
 
             toast.success("Nota de crédito anulada correctamente");
             setIsNCDetailModalOpen(false);
@@ -707,7 +735,9 @@ function ProviderPayments() {
             fetchCreditNotes();
             fetchPayments();
         } catch (error) {
-            const errorMsg = error.response?.data?.error || "Error al anular nota de crédito";
+            const errorMsg =
+                error.response?.data?.error ||
+                "Error al anular nota de crédito";
             toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
@@ -738,46 +768,59 @@ function ProviderPayments() {
         try {
             setIsSubmitting(true);
             const formDataToSend = new FormData();
-            
+
             // Usar el saldo pendiente si existe, si no el monto total
-            const amountToPay = selectedPayment.balance || selectedPayment.amount;
+            const amountToPay =
+                selectedPayment.balance || selectedPayment.amount;
             formDataToSend.append("amount", amountToPay);
-            
+
             formDataToSend.append("payment_date", payFormData.payment_date);
-            if (payFormData.payment_method) formDataToSend.append("payment_method", payFormData.payment_method);
-            if (payFormData.bank) formDataToSend.append("bank", payFormData.bank);
-            if (payFormData.reference) formDataToSend.append("reference", payFormData.reference);
-            
+            if (payFormData.payment_method)
+                formDataToSend.append(
+                    "payment_method",
+                    payFormData.payment_method
+                );
+            if (payFormData.bank)
+                formDataToSend.append("bank", payFormData.bank);
+            if (payFormData.reference)
+                formDataToSend.append("reference", payFormData.reference);
+
             if (payFormData.invoice_file instanceof File) {
                 formDataToSend.append("proof_file", payFormData.invoice_file);
             }
 
             await axios.post(
-                `/transfers/transfers/${selectedPayment.id}/register_payment/`, 
+                `/transfers/transfers/${selectedPayment.id}/register_payment/`,
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
                     _skipErrorToast: true,
                 }
             );
-            
+
             toast.success("Pago registrado exitosamente");
             setIsPayModalOpen(false);
             fetchPayments();
         } catch (error) {
-             const errorData = error.response?.data;
-             const errorMsg =
+            const errorData = error.response?.data;
+            const errorMsg =
                 errorData?.transfer || // Priorizar mensaje de validación de modelo
                 errorData?.error ||
                 errorData?.message ||
                 "Error al registrar pago";
-            
+
             // Si es un objeto de errores (validación de formulario), mostrar el primero
-            if (typeof errorData === 'object' && !errorData.transfer && !errorData.error) {
-                 const firstError = Object.values(errorData)[0];
-                 toast.error(Array.isArray(firstError) ? firstError[0] : errorMsg);
+            if (
+                typeof errorData === "object" &&
+                !errorData.transfer &&
+                !errorData.error
+            ) {
+                const firstError = Object.values(errorData)[0];
+                toast.error(
+                    Array.isArray(firstError) ? firstError[0] : errorMsg
+                );
             } else {
-                 toast.error(errorMsg);
+                toast.error(errorMsg);
             }
         } finally {
             setIsSubmitting(false);
@@ -785,6 +828,18 @@ function ProviderPayments() {
     };
 
     const openEditModal = (payment) => {
+        // Verificar si la OS asociada está cerrada
+        const osId = payment.service_order?.id || payment.service_order;
+        if (osId) {
+            const os = serviceOrders.find((o) => o.id === Number(osId));
+            if (os && os.status === "cerrada") {
+                toast.error(
+                    "No se puede editar: la orden de servicio está cerrada"
+                );
+                return;
+            }
+        }
+
         setSelectedPayment(payment);
         const formDataToSet = {
             service_order: payment.service_order?.id
@@ -819,15 +874,23 @@ function ProviderPayments() {
         setIsCreateModalOpen(true);
     };
 
-    const openDetailModal = (payment) => {
-        setSelectedPayment(payment);
-        setIsDetailModalOpen(true);
+    const openDetailModal = async (payment) => {
+        try {
+            const response = await axios.get(
+                `/transfers/transfers/${payment.id}/detail_with_payments/`
+            );
+            setSelectedPayment(response.data);
+            setIsDetailModalOpen(true);
+        } catch (error) {
+            toast.error("Error al cargar detalles");
+        }
     };
 
     const handleApprove = async (payment) => {
         try {
-            await axios.patch(`/transfers/transfers/${payment.id}/`,
-                { status: 'aprobado' },
+            await axios.patch(
+                `/transfers/transfers/${payment.id}/`,
+                { status: "aprobado" },
                 { _skipErrorToast: true }
             );
             toast.success("Gasto aprobado correctamente");
@@ -859,7 +922,8 @@ function ProviderPayments() {
     };
 
     const handleExportExcel = async (exportType = "all") => {
-        const dataToExport = exportType === "filtered" ? filteredPayments : payments;
+        const dataToExport =
+            exportType === "filtered" ? filteredPayments : payments;
 
         if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
@@ -883,18 +947,20 @@ function ProviderPayments() {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toISOString().split("T")[0];
-            const filename = exportType === "filtered"
-                ? `GPRO_Pagos_Filtrados_${timestamp}.xlsx`
-                : `GPRO_Pagos_Proveedores_${timestamp}.xlsx`;
+            const filename =
+                exportType === "filtered"
+                    ? `GPRO_Pagos_Filtrados_${timestamp}.xlsx`
+                    : `GPRO_Pagos_Proveedores_${timestamp}.xlsx`;
             link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            const message = exportType === "filtered"
-                ? `${dataToExport.length} pago(s) exportado(s)`
-                : "Todos los pagos exportados exitosamente";
+            const message =
+                exportType === "filtered"
+                    ? `${dataToExport.length} pago(s) exportado(s)`
+                    : "Todos los pagos exportados exitosamente";
             toast.success(message);
         } catch (error) {
             toast.error("Error al exportar archivo");
@@ -992,6 +1058,14 @@ function ProviderPayments() {
         return count;
     }, [filters]);
 
+    // Helper para verificar si la OS de un pago está cerrada
+    const isPaymentOSClosed = (payment) => {
+        const osId = payment.service_order?.id || payment.service_order;
+        if (!osId) return false; // Gastos administrativos sin OS no están bloqueados
+        const os = serviceOrders.find((o) => o.id === Number(osId));
+        return os && os.status === "cerrada";
+    };
+
     const columns = [
         {
             header: "Orden de Servicio",
@@ -1004,14 +1078,18 @@ function ProviderPayments() {
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/service-orders/${row.service_order}`);
+                                navigate(
+                                    `/service-orders/${row.service_order}`
+                                );
                             }}
                             className="font-mono text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit"
                         >
                             {row.service_order_number}
                         </button>
                     ) : (
-                        <span className="font-mono text-xs text-slate-400 italic">Administrativo</span>
+                        <span className="font-mono text-xs text-slate-400 italic">
+                            Administrativo
+                        </span>
                     )}
                     <span className="text-[10px] text-slate-400 mt-0.5 font-medium">
                         {formatDateSafe(row.transaction_date)}
@@ -1070,10 +1148,14 @@ function ProviderPayments() {
                     {row.invoice_number ? (
                         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 w-fit">
                             <Receipt className="w-3 h-3 text-slate-400" />
-                            <span className="font-mono">{row.invoice_number}</span>
+                            <span className="font-mono">
+                                {row.invoice_number}
+                            </span>
                         </div>
                     ) : (
-                        <span className="text-[10px] text-slate-300 font-medium italic">Sin soporte</span>
+                        <span className="text-[10px] text-slate-300 font-medium italic">
+                            Sin soporte
+                        </span>
                     )}
                 </div>
             ),
@@ -1116,55 +1198,81 @@ function ProviderPayments() {
             className: "w-[140px] text-center",
             headerClassName: "text-center",
             sortable: false,
-            cell: (row) => (
-                <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
-                    <div className="flex justify-center">
-                        {(row.status === "aprobado" || row.status === "parcial") ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleMarkAsPaid(row);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
-                                title="Ejecutar Pago"
-                            >
-                                <Banknote className="w-4 h-4" />
-                            </button>
-                        ) : row.status === "pendiente" ? (
-                            <span 
-                                className="p-1.5 text-slate-300 cursor-not-allowed"
-                                title="Requiere Aprobación"
-                            >
-                                <LockIcon className="w-4 h-4" />
-                            </span>
-                        ) : null}
+            cell: (row) => {
+                const osClosed = isPaymentOSClosed(row);
+                return (
+                    <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
+                        <div className="flex justify-center">
+                            {row.status === "aprobado" ||
+                            row.status === "parcial" ? (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMarkAsPaid(row);
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                                    title="Ejecutar Pago"
+                                >
+                                    <Banknote className="w-4 h-4" />
+                                </button>
+                            ) : row.status === "pendiente" ? (
+                                <span
+                                    className="p-1.5 text-slate-300 cursor-not-allowed"
+                                    title="Requiere Aprobación"
+                                >
+                                    <LockIcon className="w-4 h-4" />
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="flex justify-center">
+                            {osClosed ? (
+                                <span
+                                    className="p-1.5 text-slate-300 cursor-not-allowed"
+                                    title="OS Cerrada"
+                                >
+                                    <LockIcon className="w-4 h-4" />
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openEditModal(row);
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                    title="Editar"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex justify-center">
+                            {osClosed ? (
+                                <span
+                                    className="p-1.5 text-slate-300 cursor-not-allowed"
+                                    title="OS Cerrada"
+                                >
+                                    <LockIcon className="w-4 h-4" />
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirm({
+                                            open: true,
+                                            id: row.id,
+                                            type: "payment",
+                                        });
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Eliminar"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex justify-center">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                openEditModal(row);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                            title="Editar"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <div className="flex justify-center">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({ open: true, id: row.id, type: 'payment' });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                            title="Eliminar"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-            ),
+                );
+            },
         },
     ];
 
@@ -1191,12 +1299,17 @@ function ProviderPayments() {
             sortable: false,
             cell: (row) => (
                 <div className="py-1">
-                    <div className="font-medium text-slate-700 text-sm truncate max-w-[200px]" title={row.provider_name}>
+                    <div
+                        className="font-medium text-slate-700 text-sm truncate max-w-[200px]"
+                        title={row.provider_name}
+                    >
                         {row.provider_name}
                     </div>
                     {row.original_transfer_info ? (
                         <span className="text-[10px] text-slate-500 font-medium">
-                            Factura: {row.original_transfer_info.invoice_number || `#${row.original_transfer_info.id}`}
+                            Factura:{" "}
+                            {row.original_transfer_info.invoice_number ||
+                                `#${row.original_transfer_info.id}`}
                         </span>
                     ) : (
                         <span className="text-[10px] text-slate-400">
@@ -1228,11 +1341,17 @@ function ProviderPayments() {
             sortable: false,
             cell: (row) => (
                 <div className="text-right py-1">
-                    <span className={cn(
-                        "font-semibold tabular-nums text-sm",
-                        parseFloat(row.applied_amount) > 0 ? "text-slate-700" : "text-slate-300"
-                    )}>
-                        {parseFloat(row.applied_amount) > 0 ? formatCurrency(row.applied_amount) : "—"}
+                    <span
+                        className={cn(
+                            "font-semibold tabular-nums text-sm",
+                            parseFloat(row.applied_amount) > 0
+                                ? "text-slate-700"
+                                : "text-slate-300"
+                        )}
+                    >
+                        {parseFloat(row.applied_amount) > 0
+                            ? formatCurrency(row.applied_amount)
+                            : "—"}
                     </span>
                 </div>
             ),
@@ -1245,10 +1364,14 @@ function ProviderPayments() {
             sortable: false,
             cell: (row) => (
                 <div className="text-right py-1">
-                    <span className={cn(
-                        "font-bold tabular-nums text-sm",
-                        parseFloat(row.available_amount) > 0 ? "text-slate-900" : "text-slate-400"
-                    )}>
+                    <span
+                        className={cn(
+                            "font-bold tabular-nums text-sm",
+                            parseFloat(row.available_amount) > 0
+                                ? "text-slate-900"
+                                : "text-slate-400"
+                        )}
+                    >
                         {formatCurrency(row.available_amount)}
                     </span>
                 </div>
@@ -1270,18 +1393,19 @@ function ProviderPayments() {
             cell: (row) => (
                 <div className="grid grid-cols-4 gap-1 w-full max-w-[130px] mx-auto">
                     <div className="flex justify-center">
-                        {row.status !== 'aplicada' && row.status !== 'anulada' && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    openApplyNCModal(row);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
-                                title="Aplicar NC"
-                            >
-                                <RotateCcw className="w-4 h-4" />
-                            </button>
-                        )}
+                        {row.status !== "aplicada" &&
+                            row.status !== "anulada" && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openApplyNCModal(row);
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                                    title="Aplicar NC"
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                </button>
+                            )}
                     </div>
                     <div className="flex justify-center">
                         <button
@@ -1312,11 +1436,15 @@ function ProviderPayments() {
                         )}
                     </div>
                     <div className="flex justify-center">
-                        {row.status === 'pendiente' && (
+                        {row.status === "pendiente" && (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeleteConfirm({ open: true, id: row.id, type: 'credit-note' });
+                                    setDeleteConfirm({
+                                        open: true,
+                                        id: row.id,
+                                        type: "credit-note",
+                                    });
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                 title="Eliminar"
@@ -1345,7 +1473,6 @@ function ProviderPayments() {
 
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
-
             {/* Bloque Superior (Estratégico): KPIs - Responsive */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
@@ -1377,11 +1504,9 @@ function ProviderPayments() {
 
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
             <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
-
                 {/* Barra de Herramientas Unificada */}
                 <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/30">
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-
                         {/* Izquierda: Tabs + Búsqueda + Filtros */}
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
                             {/* Tabs */}
@@ -1418,9 +1543,15 @@ function ProviderPayments() {
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                                     <input
                                         type="text"
-                                        placeholder={activeTab === "gastos" ? "Buscar gasto, proveedor, OS..." : "Buscar nota crédito..."}
+                                        placeholder={
+                                            activeTab === "gastos"
+                                                ? "Buscar gasto, proveedor, OS..."
+                                                : "Buscar nota crédito..."
+                                        }
                                         value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
                                         className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                                     />
                                 </div>
@@ -1428,14 +1559,19 @@ function ProviderPayments() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                        onClick={() =>
+                                            setIsFiltersOpen(!isFiltersOpen)
+                                        }
                                         className={cn(
                                             "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
-                                            isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                            isFiltersOpen &&
+                                                "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
                                         )}
                                     >
                                         <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
-                                        <span className="hidden sm:inline">Filtros</span>
+                                        <span className="hidden sm:inline">
+                                            Filtros
+                                        </span>
                                         {activeFiltersCount > 0 && (
                                             <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
                                                 {activeFiltersCount}
@@ -1451,7 +1587,9 @@ function ProviderPayments() {
                             {activeTab === "gastos" && (
                                 <ExportButton
                                     onExportAll={() => handleExportExcel("all")}
-                                    onExportFiltered={() => handleExportExcel("filtered")}
+                                    onExportFiltered={() =>
+                                        handleExportExcel("filtered")
+                                    }
                                     filteredCount={filteredPayments.length}
                                     totalCount={payments.length}
                                     isExporting={isExporting}
@@ -1464,11 +1602,17 @@ function ProviderPayments() {
 
                             <Button
                                 size="sm"
-                                onClick={() => activeTab === "gastos" ? setIsCreateModalOpen(true) : setIsNCModalOpen(true)}
+                                onClick={() =>
+                                    activeTab === "gastos"
+                                        ? setIsCreateModalOpen(true)
+                                        : setIsNCModalOpen(true)
+                                }
                                 className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
                             >
                                 <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
-                                {activeTab === "gastos" ? "Nuevo Gasto" : "Nueva NC"}
+                                {activeTab === "gastos"
+                                    ? "Nuevo Gasto"
+                                    : "Nueva NC"}
                             </Button>
                         </div>
                     </div>
@@ -1481,7 +1625,12 @@ function ProviderPayments() {
                             <SelectERP
                                 label="Tipo de Gasto"
                                 value={filters.transfer_type}
-                                onChange={(val) => setFilters({ ...filters, transfer_type: val })}
+                                onChange={(val) =>
+                                    setFilters({
+                                        ...filters,
+                                        transfer_type: val,
+                                    })
+                                }
                                 options={TRANSFER_TYPE_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -1490,7 +1639,9 @@ function ProviderPayments() {
                             <SelectERP
                                 label="Estado"
                                 value={filters.status}
-                                onChange={(val) => setFilters({ ...filters, status: val })}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, status: val })
+                                }
                                 options={STATUS_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -1499,7 +1650,9 @@ function ProviderPayments() {
                             <SelectERP
                                 label="Proveedor"
                                 value={filters.provider}
-                                onChange={(val) => setFilters({ ...filters, provider: val })}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, provider: val })
+                                }
                                 options={filterProviderOptions}
                                 searchable
                                 clearable
@@ -1510,13 +1663,23 @@ function ProviderPayments() {
                                 label="Desde"
                                 type="date"
                                 value={filters.dateFrom}
-                                onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                onChange={(e) =>
+                                    setFilters({
+                                        ...filters,
+                                        dateFrom: e.target.value,
+                                    })
+                                }
                             />
                             <Input
                                 label="Hasta"
                                 type="date"
                                 value={filters.dateTo}
-                                onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                onChange={(e) =>
+                                    setFilters({
+                                        ...filters,
+                                        dateTo: e.target.value,
+                                    })
+                                }
                             />
                         </div>
                         <div className="flex justify-end pt-5">
@@ -1562,7 +1725,11 @@ function ProviderPayments() {
                     setIsCreateModalOpen(false);
                     resetForm();
                 }}
-                title={selectedPayment ? "Editar Registro de Gasto" : "Nuevo Registro de Gasto"}
+                title={
+                    selectedPayment
+                        ? "Editar Registro de Gasto"
+                        : "Nuevo Registro de Gasto"
+                }
                 size="3xl"
             >
                 {(() => {
@@ -1570,21 +1737,27 @@ function ProviderPayments() {
                     // 1. Está completamente pagado (status === 'pagado'), O
                     // 2. Ya fue facturado al cliente (is_billed === true)
                     // NOTA: Los pagos parciales (status === 'parcial') NO se bloquean para permitir ajustes
-                    const isLocked = selectedPayment && (
-                        selectedPayment.status === 'pagado' ||
-                        selectedPayment.is_billed === true
-                    );
+                    const isLocked =
+                        selectedPayment &&
+                        (selectedPayment.status === "pagado" ||
+                            selectedPayment.is_billed === true);
 
                     // Determinar mensaje de bloqueo específico
-                    let lockReason = '';
-                    if (selectedPayment?.status === 'pagado') {
-                        lockReason = 'Este gasto ya fue pagado completamente al proveedor.';
+                    let lockReason = "";
+                    if (selectedPayment?.status === "pagado") {
+                        lockReason =
+                            "Este gasto ya fue pagado completamente al proveedor.";
                     } else if (selectedPayment?.is_billed) {
-                        lockReason = 'Este gasto ya fue facturado al cliente.';
+                        lockReason = "Este gasto ya fue facturado al cliente.";
                     }
 
                     return (
-                        <form onSubmit={selectedPayment ? handleEdit : handleCreate} className="space-y-6">
+                        <form
+                            onSubmit={
+                                selectedPayment ? handleEdit : handleCreate
+                            }
+                            className="space-y-6"
+                        >
                             {/* Indicador de Registro Bloqueado - Diseño ERP Profesional */}
                             {isLocked && (
                                 <div className="relative overflow-hidden bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-lg">
@@ -1598,7 +1771,10 @@ function ProviderPayments() {
                                                 <p className="text-sm font-semibold text-slate-900 uppercase tracking-wide">
                                                     Registro Bloqueado
                                                 </p>
-                                                <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 bg-slate-200 text-slate-700">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="text-[10px] font-bold px-1.5 py-0 bg-slate-200 text-slate-700"
+                                                >
                                                     Solo Lectura
                                                 </Badge>
                                             </div>
@@ -1611,37 +1787,48 @@ function ProviderPayments() {
                             )}
 
                             {/* Indicador de Pago Parcial - Diseño ERP Informativo */}
-                            {selectedPayment?.status === 'parcial' && !isLocked && (
-                                <div className="relative overflow-hidden bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg">
-                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
-                                    <div className="p-4 pl-5 flex items-start gap-3">
-                                        <div className="flex-shrink-0 w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center">
-                                            <CreditCard className="w-4 h-4 text-white" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <p className="text-sm font-semibold text-blue-900 uppercase tracking-wide">
-                                                    Pago Parcial Aplicado
-                                                </p>
+                            {selectedPayment?.status === "parcial" &&
+                                !isLocked && (
+                                    <div className="relative overflow-hidden bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-200 rounded-lg">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
+                                        <div className="p-4 pl-5 flex items-start gap-3">
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-md bg-blue-600 flex items-center justify-center">
+                                                <CreditCard className="w-4 h-4 text-white" />
                                             </div>
-                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
-                                                <div>
-                                                    <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">Monto Pagado</p>
-                                                    <p className="text-sm font-bold text-blue-900 tabular-nums">
-                                                        {formatCurrency(selectedPayment.paid_amount || 0)}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="text-sm font-semibold text-blue-900 uppercase tracking-wide">
+                                                        Pago Parcial Aplicado
                                                     </p>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">Saldo Pendiente</p>
-                                                    <p className="text-sm font-bold text-blue-900 tabular-nums">
-                                                        {formatCurrency(selectedPayment.balance || 0)}
-                                                    </p>
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                                                    <div>
+                                                        <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">
+                                                            Monto Pagado
+                                                        </p>
+                                                        <p className="text-sm font-bold text-blue-900 tabular-nums">
+                                                            {formatCurrency(
+                                                                selectedPayment.paid_amount ||
+                                                                    0
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-medium text-blue-600 uppercase tracking-wider">
+                                                            Saldo Pendiente
+                                                        </p>
+                                                        <p className="text-sm font-bold text-blue-900 tabular-nums">
+                                                            {formatCurrency(
+                                                                selectedPayment.balance ||
+                                                                    0
+                                                            )}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
                             {/* Section 1: Asociación */}
                             <div>
@@ -1651,10 +1838,17 @@ function ProviderPayments() {
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div>
-                                        <Label className="mb-1.5 block">Orden de Servicio</Label>
+                                        <Label className="mb-1.5 block">
+                                            Orden de Servicio
+                                        </Label>
                                         <SelectERP
                                             value={formData.service_order}
-                                            onChange={(val) => setFormData({ ...formData, service_order: val })}
+                                            onChange={(val) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    service_order: val,
+                                                })
+                                            }
                                             options={serviceOrderOptions}
                                             getOptionLabel={(opt) => opt.name}
                                             getOptionValue={(opt) => opt.id}
@@ -1662,13 +1856,23 @@ function ProviderPayments() {
                                             clearable
                                             disabled={isLocked}
                                         />
-                                        <p className="text-xs text-slate-500 mt-1.5">Opcional para gastos administrativos generales</p>
+                                        <p className="text-xs text-slate-500 mt-1.5">
+                                            Opcional para gastos administrativos
+                                            generales
+                                        </p>
                                     </div>
                                     <div>
-                                        <Label className="mb-1.5 block">Tipo de Movimiento *</Label>
+                                        <Label className="mb-1.5 block">
+                                            Tipo de Movimiento *
+                                        </Label>
                                         <SelectERP
                                             value={formData.transfer_type}
-                                            onChange={(val) => setFormData({ ...formData, transfer_type: val })}
+                                            onChange={(val) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    transfer_type: val,
+                                                })
+                                            }
                                             options={CREATE_TYPE_OPTIONS}
                                             getOptionLabel={(opt) => opt.name}
                                             getOptionValue={(opt) => opt.id}
@@ -1686,10 +1890,17 @@ function ProviderPayments() {
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div>
-                                        <Label className="mb-1.5 block">Proveedor</Label>
+                                        <Label className="mb-1.5 block">
+                                            Proveedor
+                                        </Label>
                                         <SelectERP
                                             value={formData.provider}
-                                            onChange={(val) => setFormData({ ...formData, provider: val })}
+                                            onChange={(val) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    provider: val,
+                                                })
+                                            }
                                             options={providerOptions}
                                             getOptionLabel={(opt) => opt.name}
                                             getOptionValue={(opt) => opt.id}
@@ -1699,32 +1910,56 @@ function ProviderPayments() {
                                         />
                                     </div>
                                     <div>
-                                        <Label className="mb-1.5 block">Beneficiario (Alternativo)</Label>
+                                        <Label className="mb-1.5 block">
+                                            Beneficiario (Alternativo)
+                                        </Label>
                                         <Input
                                             value={formData.beneficiary_name}
-                                            onChange={(e) => setFormData({ ...formData, beneficiary_name: e.target.value })}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    beneficiary_name:
+                                                        e.target.value,
+                                                })
+                                            }
                                             placeholder="Si el cheque/transferencia sale a otro nombre"
                                         />
                                     </div>
                                     <div className="sm:col-span-2">
-                                        <Label className="mb-1.5 block">Concepto del Gasto *</Label>
+                                        <Label className="mb-1.5 block">
+                                            Concepto del Gasto *
+                                        </Label>
                                         <Input
                                             value={formData.description}
-                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    description: e.target.value,
+                                                })
+                                            }
                                             placeholder="Ej: Pago de alquiler bodega diciembre 2025"
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <Label className="mb-1.5 block">Monto Solicitado *</Label>
+                                        <Label className="mb-1.5 block">
+                                            Monto Solicitado *
+                                        </Label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                                                $
+                                            </span>
                                             <Input
                                                 type="number"
                                                 step="0.01"
                                                 min="0"
                                                 value={formData.amount}
-                                                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                                onChange={(e) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        amount: e.target.value,
+                                                    })
+                                                }
                                                 placeholder="0.00"
                                                 className="pl-7 font-mono font-bold text-slate-900"
                                                 required
@@ -1733,11 +1968,19 @@ function ProviderPayments() {
                                         </div>
                                     </div>
                                     <div>
-                                        <Label className="mb-1.5 block">Fecha de Operación</Label>
+                                        <Label className="mb-1.5 block">
+                                            Fecha de Operación
+                                        </Label>
                                         <Input
                                             type="date"
                                             value={formData.transaction_date}
-                                            onChange={(e) => setFormData({ ...formData, transaction_date: e.target.value })}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    transaction_date:
+                                                        e.target.value,
+                                                })
+                                            }
                                             disabled={isLocked}
                                         />
                                     </div>
@@ -1752,19 +1995,34 @@ function ProviderPayments() {
                                 </h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div>
-                                        <Label className="mb-1.5 block">N° Factura / Comprobante (Opcional)</Label>
+                                        <Label className="mb-1.5 block">
+                                            N° Factura / Comprobante (Opcional)
+                                        </Label>
                                         <Input
                                             value={formData.invoice_number}
-                                            onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    invoice_number:
+                                                        e.target.value,
+                                                })
+                                            }
                                             placeholder="Ej: FAC-001-552"
                                             className="font-mono text-sm"
                                         />
                                     </div>
                                     <div>
-                                        <Label className="mb-1.5 block">Adjuntar Archivo</Label>
+                                        <Label className="mb-1.5 block">
+                                            Adjuntar Archivo
+                                        </Label>
                                         <FileUpload
                                             accept=".pdf,.jpg,.jpeg,.png"
-                                            onFileChange={(file) => setFormData({ ...formData, invoice_file: file })}
+                                            onFileChange={(file) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    invoice_file: file,
+                                                })
+                                            }
                                             helperText="PDF, JPG o PNG - Máx. 5MB"
                                         />
                                     </div>
@@ -1788,7 +2046,11 @@ function ProviderPayments() {
                                     disabled={isSubmitting}
                                     className="bg-slate-900 text-white hover:bg-black min-w-[140px] shadow-lg shadow-slate-200 transition-all active:scale-95 mr-0"
                                 >
-                                    {isSubmitting ? "Procesando..." : selectedPayment ? "Actualizar Movimiento" : "Registrar Movimiento"}
+                                    {isSubmitting
+                                        ? "Procesando..."
+                                        : selectedPayment
+                                        ? "Actualizar Movimiento"
+                                        : "Registrar Movimiento"}
                                 </Button>
                             </ModalFooter>
                         </form>
@@ -1808,166 +2070,386 @@ function ProviderPayments() {
             >
                 {selectedPayment && (
                     <div className="space-y-6">
-                        {/* Header con monto principal */}
-                        <div className="flex items-center justify-between p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700">
+                        {/* Header */}
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                             <div>
-                                <p className="text-xs font-medium text-slate-400 mb-1">Monto Total</p>
-                                <h2 className="text-3xl font-bold text-white tabular-nums">
+                                <div className="text-sm text-slate-500">
+                                    Factura Proveedor
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-slate-900">
+                                    {selectedPayment.invoice_number ||
+                                        "Sin número"}
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="outline">
+                                        {selectedPayment.type ||
+                                            selectedPayment.transfer_type ||
+                                            "Gasto"}
+                                    </Badge>
+                                    <StatusBadge
+                                        status={selectedPayment.status}
+                                    />
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm text-slate-500">
+                                    Total
+                                </div>
+                                <div className="text-2xl font-semibold text-slate-700 tabular-nums">
                                     {formatCurrency(selectedPayment.amount)}
-                                </h2>
-                            </div>
-                            <div className="text-right flex flex-col items-end gap-2">
-                                <StatusBadge status={selectedPayment.status} />
-                                <div className="text-xs text-slate-300">
-                                    {formatDateSafe(selectedPayment.transaction_date, "long")}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Grid de información */}
-                        <div className="grid grid-cols-2 gap-4">
-                            {/* Proveedor */}
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Proveedor / Beneficiario</label>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                                        <Building2 className="w-4 h-4 text-slate-600" />
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Orden de Servicio
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-slate-700 truncate">{selectedPayment.provider_name || selectedPayment.beneficiary_name || "—"}</p>
+                                    <div className="font-mono text-sm">
+                                        {selectedPayment.service_order_number ||
+                                            "Gasto Administrativo"}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Fecha de Transacción
+                                    </div>
+                                    <div className="text-sm">
+                                        {formatDateSafe(
+                                            selectedPayment.transaction_date,
+                                            "long"
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Descripción
+                                    </div>
+                                    <div className="text-sm">
+                                        {selectedPayment.description || "—"}
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Categoría */}
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Categoría</label>
-                                <div className="mt-1">
-                                    <TypeBadge type={selectedPayment.transfer_type} />
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Monto Pagado
+                                    </div>
+                                    <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                        {formatCurrency(
+                                            selectedPayment.paid_amount || 0
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Orden de Servicio */}
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Orden de Servicio</label>
-                                {selectedPayment.service_order_number ? (
-                                    <button
-                                        onClick={() => navigate(`/service-orders/${selectedPayment.service_order}`)}
-                                        className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 transition-colors group"
-                                    >
-                                        <span className="font-mono">{selectedPayment.service_order_number}</span>
-                                        <ArrowUpRight className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
-                                    </button>
-                                ) : (
-                                    <p className="text-sm text-slate-500 italic">Gasto Administrativo</p>
-                                )}
-                            </div>
-
-                            {/* Referencia Fiscal */}
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Referencia Fiscal</label>
-                                {selectedPayment.invoice_number ? (
-                                    <p className="text-sm font-mono font-semibold text-slate-700">{selectedPayment.invoice_number}</p>
-                                ) : (
-                                    <p className="text-sm text-slate-400 italic">Sin referencia</p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Descripción */}
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Concepto</label>
-                            <p className="text-sm text-slate-700 leading-relaxed">
-                                {selectedPayment.description || "Sin descripción proporcionada"}
-                            </p>
-                        </div>
-
-                        {/* Archivo adjunto */}
-                        {selectedPayment.invoice_file && (
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Archivo Adjunto</label>
-                                <button
-                                    onClick={() => window.open(selectedPayment.invoice_file, "_blank")}
-                                    className="flex items-center gap-3 p-3 bg-white border border-slate-300 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition-all group w-full"
-                                >
-                                    <div className="p-2 bg-slate-100 text-slate-600 rounded group-hover:bg-slate-900 group-hover:text-white transition-colors">
-                                        <FileText className="w-4 h-4" />
-                                    </div>
-                                    <div className="text-left flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-slate-700 truncate">Ver Documento</p>
-                                    </div>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Notas de Crédito Aplicadas */}
-                        {selectedPayment.credit_notes_applied && selectedPayment.credit_notes_applied.length > 0 && (
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">
-                                    Notas de Crédito Aplicadas
-                                </label>
-                                <div className="space-y-2">
-                                    {selectedPayment.credit_notes_applied.map((nc) => (
-                                        <div
-                                            key={nc.id}
-                                            className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
-                                                    <CreditCard className="w-4 h-4 text-slate-600" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-700 font-mono">
-                                                        {nc.note_number}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500">
-                                                        {nc.reason} • {nc.issue_date ? formatDate(nc.issue_date) : "—"}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right flex items-center gap-3">
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-800 tabular-nums">
-                                                        {formatCurrency(nc.amount)}
-                                                    </p>
-                                                    <NCStatusBadge status={nc.status} />
-                                                </div>
-                                            </div>
+                                {parseFloat(
+                                    selectedPayment.credited_amount || 0
+                                ) > 0 && (
+                                    <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                            Notas de Crédito
                                         </div>
-                                    ))}
+                                        <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                            {formatCurrency(
+                                                selectedPayment.credited_amount ||
+                                                    0
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Saldo Pendiente
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "text-xl font-bold tabular-nums",
+                                            parseFloat(
+                                                selectedPayment.balance
+                                            ) > 0
+                                                ? "text-red-600"
+                                                : "text-slate-900"
+                                        )}
+                                    >
+                                        {formatCurrency(
+                                            selectedPayment.balance || 0
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Invoice Document */}
+                        {selectedPayment.invoice_file && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
+                                    Documento Factura
+                                </h4>
+                                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-md group hover:border-slate-300 transition-all">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-white border border-slate-200 rounded flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition-colors">
+                                            <FileText className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Factura{" "}
+                                                {selectedPayment.invoice_number}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                Documento PDF
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            window.open(
+                                                selectedPayment.invoice_file,
+                                                "_blank",
+                                                "noopener,noreferrer"
+                                            );
+                                        }}
+                                        type="button"
+                                    >
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Ver PDF
+                                    </Button>
                                 </div>
                             </div>
                         )}
 
-                        {/* Botones de Acción */}
-                        <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-200">
-                            <div>
-                                {selectedPayment.status === 'pendiente' && (
+                        {/* Historial de Pagos */}
+                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                <Clock className="w-4 h-4" /> Historial de Pagos
+                            </h4>
+                            {selectedPayment.payments &&
+                            selectedPayment.payments.length > 0 ? (
+                                <div className="border rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Fecha
+                                                </th>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Método
+                                                </th>
+                                                <th className="px-4 py-2 font-medium">
+                                                    Referencia
+                                                </th>
+                                                <th className="px-4 py-2 text-right font-medium">
+                                                    Monto
+                                                </th>
+                                                <th className="px-4 py-2 text-center font-medium">
+                                                    Comprobante
+                                                </th>
+                                                <th className="px-4 py-2 text-center font-medium w-20">
+                                                    Acción
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {selectedPayment.payments.map(
+                                                (payment) => (
+                                                    <tr
+                                                        key={payment.id}
+                                                        className="hover:bg-slate-50"
+                                                    >
+                                                        <td className="px-4 py-2 text-slate-700">
+                                                            {formatDateSafe(
+                                                                payment.payment_date
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2 capitalize text-slate-700">
+                                                            {
+                                                                payment.payment_method
+                                                            }
+                                                        </td>
+                                                        <td className="px-4 py-2 font-mono text-xs text-slate-600">
+                                                            {payment.reference_number ||
+                                                                "—"}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-right font-semibold text-emerald-600 tabular-nums">
+                                                            {formatCurrency(
+                                                                payment.amount
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            {payment.proof_file ? (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={(
+                                                                        e
+                                                                    ) => {
+                                                                        e.stopPropagation();
+                                                                        window.open(
+                                                                            payment.proof_file,
+                                                                            "_blank"
+                                                                        );
+                                                                    }}
+                                                                    className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                                                    title="Ver comprobante de pago"
+                                                                >
+                                                                    <FileText className="w-4 h-4" />
+                                                                </Button>
+                                                            ) : (
+                                                                <span className="text-slate-400">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={(
+                                                                    e
+                                                                ) => {
+                                                                    e.stopPropagation();
+                                                                    setPaymentToDelete(
+                                                                        payment
+                                                                    );
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                                title="Eliminar pago"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg text-sm">
+                                    No hay pagos registrados
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Notas de Crédito */}
+                        {selectedPayment.credit_notes &&
+                            selectedPayment.credit_notes.length > 0 && (
+                                <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+                                    <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                        <FileMinus className="w-4 h-4" /> Notas
+                                        de Crédito
+                                    </h4>
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 text-slate-700">
+                                                <tr>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        Fecha
+                                                    </th>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        No. Nota
+                                                    </th>
+                                                    <th className="px-4 py-2 font-medium">
+                                                        Motivo
+                                                    </th>
+                                                    <th className="px-4 py-2 text-right font-medium">
+                                                        Monto
+                                                    </th>
+                                                    <th className="px-4 py-2 text-center font-medium">
+                                                        PDF
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {selectedPayment.credit_notes.map(
+                                                    (nc) => (
+                                                        <tr
+                                                            key={nc.id}
+                                                            className="hover:bg-slate-50/50"
+                                                        >
+                                                            <td className="px-4 py-2 text-slate-700">
+                                                                {formatDateSafe(
+                                                                    nc.payment_date
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 font-mono text-xs text-slate-600">
+                                                                {
+                                                                    nc.reference_number
+                                                                }
+                                                            </td>
+                                                            <td className="px-4 py-2 text-slate-700">
+                                                                {nc.notes ||
+                                                                    "—"}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-right font-semibold text-slate-700 tabular-nums">
+                                                                -
+                                                                {formatCurrency(
+                                                                    nc.amount
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-center">
+                                                                {nc.proof_file ? (
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={(
+                                                                            e
+                                                                        ) => {
+                                                                            e.stopPropagation();
+                                                                            window.open(
+                                                                                nc.proof_file,
+                                                                                "_blank"
+                                                                            );
+                                                                        }}
+                                                                        className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                                                        title="Ver nota de crédito"
+                                                                    >
+                                                                        <FileText className="w-4 h-4" />
+                                                                    </Button>
+                                                                ) : (
+                                                                    <span className="text-slate-400">
+                                                                        —
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    )
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                        <ModalFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setIsDetailModalOpen(false);
+                                    setSelectedPayment(null);
+                                }}
+                            >
+                                Cerrar
+                            </Button>
+                            {selectedPayment.status !== "pagado" &&
+                                selectedPayment.status !== "pagada" && (
                                     <Button
-                                        onClick={() => handleApprove(selectedPayment)}
-                                        className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
+                                        onClick={() => {
+                                            setIsDetailModalOpen(false);
+                                            openPaymentModal(selectedPayment);
+                                        }}
                                     >
-                                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                                        Aprobar Gasto
+                                        <Banknote className="w-4 h-4 mr-2" />{" "}
+                                        Registrar Pago
                                     </Button>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>
-                                    Cerrar
-                                </Button>
-                                <Button
-                                    onClick={() => {
-                                        setIsDetailModalOpen(false);
-                                        openEditModal(selectedPayment);
-                                    }}
-                                    className="bg-slate-900 text-white hover:bg-slate-800"
-                                >
-                                    <Edit2 className="w-4 h-4 mr-2" />
-                                    Editar
-                                </Button>
-                            </div>
-                        </div>
+                        </ModalFooter>
                     </div>
                 )}
             </Modal>
@@ -1988,14 +2470,20 @@ function ProviderPayments() {
                                     <Building2 className="w-5 h-5 text-slate-500" />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Proveedor / Beneficiario</p>
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                        Proveedor / Beneficiario
+                                    </p>
                                     <p className="text-sm font-bold text-slate-700 truncate max-w-[200px]">
-                                        {selectedPayment.provider_name || selectedPayment.beneficiary_name || "—"}
+                                        {selectedPayment.provider_name ||
+                                            selectedPayment.beneficiary_name ||
+                                            "—"}
                                     </p>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Monto a Pagar</p>
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                    Monto a Pagar
+                                </p>
                                 <p className="text-xl font-bold text-slate-800 tabular-nums tracking-tight">
                                     {formatCurrency(selectedPayment.amount)}
                                 </p>
@@ -2010,57 +2498,99 @@ function ProviderPayments() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
-                                    <Label className="mb-1.5 block">Método de Pago</Label>
+                                    <Label className="mb-1.5 block">
+                                        Método de Pago
+                                    </Label>
                                     <SelectERP
                                         value={payFormData.payment_method}
-                                        onChange={(val) => setPayFormData({ ...payFormData, payment_method: val })}
-                                        options={Object.entries(PAYMENT_METHODS).map(([id, name]) => ({ id, name }))}
+                                        onChange={(val) =>
+                                            setPayFormData({
+                                                ...payFormData,
+                                                payment_method: val,
+                                            })
+                                        }
+                                        options={Object.entries(
+                                            PAYMENT_METHODS
+                                        ).map(([id, name]) => ({ id, name }))}
                                         getOptionLabel={(opt) => opt.name}
                                         getOptionValue={(opt) => opt.id}
                                     />
                                 </div>
 
                                 <div>
-                                    <Label className="mb-1.5 block">Fecha de Pago</Label>
+                                    <Label className="mb-1.5 block">
+                                        Fecha de Pago
+                                    </Label>
                                     <Input
                                         type="date"
                                         value={payFormData.payment_date}
-                                        onChange={(e) => setPayFormData({ ...payFormData, payment_date: e.target.value })}
+                                        onChange={(e) =>
+                                            setPayFormData({
+                                                ...payFormData,
+                                                payment_date: e.target.value,
+                                            })
+                                        }
                                         required
                                     />
                                 </div>
 
                                 {payFormData.payment_method !== "efectivo" && (
                                     <div className="sm:col-span-2">
-                                        <Label className="mb-1.5 block">Banco de Salida</Label>
-                                                                            <SelectERP
-                                                                                value={payFormData.bank}
-                                                                                onChange={(val) => setPayFormData({ ...payFormData, bank: val })}
-                                                                                options={[
-                                                                                    { id: "", name: "Seleccionar banco..." },
-                                                                                    ...banks.map(b => ({ id: String(b.id), name: b.name }))
-                                                                                ]}
-                                                                                getOptionLabel={(opt) => opt.name}
-                                                                                getOptionValue={(opt) => opt.id}
-                                                                            />
-                                        
+                                        <Label className="mb-1.5 block">
+                                            Banco de Salida
+                                        </Label>
+                                        <SelectERP
+                                            value={payFormData.bank}
+                                            onChange={(val) =>
+                                                setPayFormData({
+                                                    ...payFormData,
+                                                    bank: val,
+                                                })
+                                            }
+                                            options={[
+                                                {
+                                                    id: "",
+                                                    name: "Seleccionar banco...",
+                                                },
+                                                ...banks.map((b) => ({
+                                                    id: String(b.id),
+                                                    name: b.name,
+                                                })),
+                                            ]}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                        />
                                     </div>
                                 )}
 
                                 <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block">Referencia / N° Cheque</Label>
+                                    <Label className="mb-1.5 block">
+                                        Referencia / N° Cheque
+                                    </Label>
                                     <Input
                                         value={payFormData.reference}
-                                        onChange={(e) => setPayFormData({ ...payFormData, reference: e.target.value })}
+                                        onChange={(e) =>
+                                            setPayFormData({
+                                                ...payFormData,
+                                                reference: e.target.value,
+                                            })
+                                        }
                                         placeholder="Ej: Transferencia #123456 o Cheque #001"
                                     />
                                 </div>
 
                                 <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block" required>Comprobante de Pago</Label>
+                                    <Label className="mb-1.5 block" required>
+                                        Comprobante de Pago
+                                    </Label>
                                     <FileUpload
                                         accept=".pdf,.jpg,.jpeg,.png"
-                                        onFileChange={(file) => setPayFormData({ ...payFormData, invoice_file: file })}
+                                        onFileChange={(file) =>
+                                            setPayFormData({
+                                                ...payFormData,
+                                                invoice_file: file,
+                                            })
+                                        }
                                         helperText="Adjuntar comprobante de transferencia o cheque (requerido)"
                                     />
                                 </div>
@@ -2081,7 +2611,9 @@ function ProviderPayments() {
                                 disabled={isSubmitting}
                                 className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
                             >
-                                {isSubmitting ? "Procesando..." : "Confirmar Pago"}
+                                {isSubmitting
+                                    ? "Procesando..."
+                                    : "Confirmar Pago"}
                             </Button>
                         </ModalFooter>
                     </form>
@@ -2105,11 +2637,14 @@ function ProviderPayments() {
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onClose={() => setDeleteConfirm({ open: false, id: null, type: null })}
+                onClose={() =>
+                    setDeleteConfirm({ open: false, id: null, type: null })
+                }
                 title="Confirmar Eliminación"
-                description={deleteConfirm.type === 'credit-note'
-                    ? "¿Estás seguro de que deseas eliminar esta nota de crédito? Esta acción es permanente."
-                    : "¿Estás seguro de que deseas eliminar este registro financiero? Esta acción es permanente y afectará los reportes mensuales."
+                description={
+                    deleteConfirm.type === "credit-note"
+                        ? "¿Estás seguro de que deseas eliminar esta nota de crédito? Esta acción es permanente."
+                        : "¿Estás seguro de que deseas eliminar este registro financiero? Esta acción es permanente y afectará los reportes mensuales."
                 }
                 confirmText="Eliminar Permanentemente"
                 cancelText="Cancelar"
@@ -2136,11 +2671,17 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <Label className="mb-1.5 block">Proveedor *</Label>
+                                <Label className="mb-1.5 block">
+                                    Proveedor *
+                                </Label>
                                 <SelectERP
                                     value={ncForm.provider}
                                     onChange={(val) => {
-                                        setNCForm({ ...ncForm, provider: val, transfer: "" });
+                                        setNCForm({
+                                            ...ncForm,
+                                            provider: val,
+                                            transfer: "",
+                                        });
                                         fetchProviderTransfersForNC(val);
                                     }}
                                     options={providerOptions}
@@ -2151,29 +2692,49 @@ function ProviderPayments() {
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Factura Original *</Label>
+                                <Label className="mb-1.5 block">
+                                    Factura Original *
+                                </Label>
                                 <SelectERP
                                     value={ncForm.transfer}
-                                    onChange={(val) => setNCForm({ ...ncForm, transfer: val })}
+                                    onChange={(val) =>
+                                        setNCForm({ ...ncForm, transfer: val })
+                                    }
                                     options={[
-                                        { id: "", name: "Seleccionar factura..." },
-                                        ...providerTransfers.map(t => ({
+                                        {
+                                            id: "",
+                                            name: "Seleccionar factura...",
+                                        },
+                                        ...providerTransfers.map((t) => ({
                                             id: String(t.id),
-                                            name: `${t.invoice_number || `ID-${t.id}`} - ${formatCurrency(t.amount)} - ${t.description?.substring(0, 30) || 'Sin descripción'}...`
-                                        }))
+                                            name: `${
+                                                t.invoice_number || `ID-${t.id}`
+                                            } - ${formatCurrency(t.amount)} - ${
+                                                t.description?.substring(
+                                                    0,
+                                                    30
+                                                ) || "Sin descripción"
+                                            }...`,
+                                        })),
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     searchable
                                     disabled={!ncForm.provider}
-                                    placeholder={ncForm.provider ? "Seleccionar factura..." : "Primero seleccione proveedor"}
+                                    placeholder={
+                                        ncForm.provider
+                                            ? "Seleccionar factura..."
+                                            : "Primero seleccione proveedor"
+                                    }
                                 />
-                                {ncForm.provider && providerTransfers.length === 0 && (
-                                    <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3" />
-                                        Este proveedor no tiene facturas registradas
-                                    </p>
-                                )}
+                                {ncForm.provider &&
+                                    providerTransfers.length === 0 && (
+                                        <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3" />
+                                            Este proveedor no tiene facturas
+                                            registradas
+                                        </p>
+                                    )}
                             </div>
                         </div>
 
@@ -2181,23 +2742,48 @@ function ProviderPayments() {
                         {ncForm.transfer && (
                             <div className="mt-4 p-4 bg-slate-100 border border-slate-300 rounded-lg">
                                 {(() => {
-                                    const selectedTransfer = providerTransfers.find(t => String(t.id) === ncForm.transfer);
+                                    const selectedTransfer =
+                                        providerTransfers.find(
+                                            (t) =>
+                                                String(t.id) === ncForm.transfer
+                                        );
                                     if (!selectedTransfer) return null;
                                     return (
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Factura Seleccionada</p>
-                                                <p className="text-sm font-medium text-slate-800">
-                                                    {selectedTransfer.invoice_number || `ID-${selectedTransfer.id}`}
+                                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                                    Factura Seleccionada
                                                 </p>
-                                                <p className="text-xs text-slate-600 mt-0.5">{selectedTransfer.description}</p>
+                                                <p className="text-sm font-medium text-slate-800">
+                                                    {selectedTransfer.invoice_number ||
+                                                        `ID-${selectedTransfer.id}`}
+                                                </p>
+                                                <p className="text-xs text-slate-600 mt-0.5">
+                                                    {
+                                                        selectedTransfer.description
+                                                    }
+                                                </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-xs text-slate-500">Monto Original</p>
-                                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedTransfer.amount)}</p>
-                                                {parseFloat(selectedTransfer.balance) < parseFloat(selectedTransfer.amount) && (
+                                                <p className="text-xs text-slate-500">
+                                                    Monto Original
+                                                </p>
+                                                <p className="text-lg font-bold text-slate-900 tabular-nums">
+                                                    {formatCurrency(
+                                                        selectedTransfer.amount
+                                                    )}
+                                                </p>
+                                                {parseFloat(
+                                                    selectedTransfer.balance
+                                                ) <
+                                                    parseFloat(
+                                                        selectedTransfer.amount
+                                                    ) && (
                                                     <p className="text-xs text-slate-500 mt-0.5">
-                                                        Saldo: {formatCurrency(selectedTransfer.balance)}
+                                                        Saldo:{" "}
+                                                        {formatCurrency(
+                                                            selectedTransfer.balance
+                                                        )}
                                                     </p>
                                                 )}
                                             </div>
@@ -2216,25 +2802,41 @@ function ProviderPayments() {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
                             <div>
-                                <Label className="mb-1.5 block">N° Nota de Crédito *</Label>
+                                <Label className="mb-1.5 block">
+                                    N° Nota de Crédito *
+                                </Label>
                                 <Input
                                     value={ncForm.note_number}
-                                    onChange={(e) => setNCForm({ ...ncForm, note_number: e.target.value })}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            note_number: e.target.value,
+                                        })
+                                    }
                                     placeholder="Ej: NC-001-2025"
                                     className="font-mono"
                                     required
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Monto de la NC *</Label>
+                                <Label className="mb-1.5 block">
+                                    Monto de la NC *
+                                </Label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                                        $
+                                    </span>
                                     <Input
                                         type="number"
                                         step="0.01"
                                         min="0.01"
                                         value={ncForm.amount}
-                                        onChange={(e) => setNCForm({ ...ncForm, amount: e.target.value })}
+                                        onChange={(e) =>
+                                            setNCForm({
+                                                ...ncForm,
+                                                amount: e.target.value,
+                                            })
+                                        }
                                         placeholder="0.00"
                                         className="pl-7 font-mono font-bold text-slate-900"
                                         required
@@ -2242,19 +2844,33 @@ function ProviderPayments() {
                                 </div>
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha de Emisión</Label>
+                                <Label className="mb-1.5 block">
+                                    Fecha de Emisión
+                                </Label>
                                 <Input
                                     type="date"
                                     value={ncForm.issue_date}
-                                    onChange={(e) => setNCForm({ ...ncForm, issue_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            issue_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha de Recepción</Label>
+                                <Label className="mb-1.5 block">
+                                    Fecha de Recepción
+                                </Label>
                                 <Input
                                     type="date"
                                     value={ncForm.received_date}
-                                    onChange={(e) => setNCForm({ ...ncForm, received_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            received_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -2271,25 +2887,38 @@ function ProviderPayments() {
                                 <Label className="mb-1.5 block">Razón *</Label>
                                 <SelectERP
                                     value={ncForm.reason}
-                                    onChange={(val) => setNCForm({ ...ncForm, reason: val })}
+                                    onChange={(val) =>
+                                        setNCForm({ ...ncForm, reason: val })
+                                    }
                                     options={NC_REASON_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Detalle / Observaciones</Label>
+                                <Label className="mb-1.5 block">
+                                    Detalle / Observaciones
+                                </Label>
                                 <Input
                                     value={ncForm.reason_detail}
-                                    onChange={(e) => setNCForm({ ...ncForm, reason_detail: e.target.value })}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            reason_detail: e.target.value,
+                                        })
+                                    }
                                     placeholder="Descripción adicional..."
                                 />
                             </div>
                             <div className="sm:col-span-2">
-                                <Label className="mb-1.5 block">Adjuntar PDF de la NC (Opcional)</Label>
+                                <Label className="mb-1.5 block">
+                                    Adjuntar PDF de la NC (Opcional)
+                                </Label>
                                 <FileUpload
                                     accept=".pdf"
-                                    onFileChange={(file) => setNCForm({ ...ncForm, pdf_file: file })}
+                                    onFileChange={(file) =>
+                                        setNCForm({ ...ncForm, pdf_file: file })
+                                    }
                                     helperText="PDF del documento original"
                                 />
                             </div>
@@ -2310,7 +2939,13 @@ function ProviderPayments() {
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isSubmitting || !ncForm.provider || !ncForm.transfer || !ncForm.note_number || !ncForm.amount}
+                            disabled={
+                                isSubmitting ||
+                                !ncForm.provider ||
+                                !ncForm.transfer ||
+                                !ncForm.note_number ||
+                                !ncForm.amount
+                            }
                             className="bg-slate-900 text-white hover:bg-black min-w-[160px] shadow-lg shadow-slate-200 transition-all active:scale-95"
                         >
                             {isSubmitting ? "Registrando..." : "Registrar NC"}
@@ -2334,7 +2969,9 @@ function ProviderPayments() {
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl border border-slate-700">
                             <div>
-                                <p className="text-xs font-medium text-slate-400 mb-1">Monto Total</p>
+                                <p className="text-xs font-medium text-slate-400 mb-1">
+                                    Monto Total
+                                </p>
                                 <h2 className="text-3xl font-bold text-white tabular-nums">
                                     {formatCurrency(selectedNC.amount)}
                                 </h2>
@@ -2350,21 +2987,31 @@ function ProviderPayments() {
                         {/* Info Grid */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Proveedor</label>
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">
+                                    Proveedor
+                                </label>
                                 <div className="flex items-center gap-2">
                                     <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
                                         <Building2 className="w-4 h-4 text-slate-600" />
                                     </div>
-                                    <p className="text-sm font-semibold text-slate-700">{selectedNC.provider_name}</p>
+                                    <p className="text-sm font-semibold text-slate-700">
+                                        {selectedNC.provider_name}
+                                    </p>
                                 </div>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">Motivo</label>
+                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-2">
+                                    Motivo
+                                </label>
                                 <p className="text-sm font-medium text-slate-700">
-                                    {NC_REASON_OPTIONS.find(r => r.id === selectedNC.reason)?.name || selectedNC.reason}
+                                    {NC_REASON_OPTIONS.find(
+                                        (r) => r.id === selectedNC.reason
+                                    )?.name || selectedNC.reason}
                                 </p>
                                 {selectedNC.reason_detail && (
-                                    <p className="text-xs text-slate-500 mt-1">{selectedNC.reason_detail}</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        {selectedNC.reason_detail}
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -2378,12 +3025,23 @@ function ProviderPayments() {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-sm font-semibold text-slate-800">
-                                            {selectedNC.original_transfer_info.invoice_number || `#${selectedNC.original_transfer_info.id}`}
+                                            {selectedNC.original_transfer_info
+                                                .invoice_number ||
+                                                `#${selectedNC.original_transfer_info.id}`}
                                         </p>
-                                        <p className="text-xs text-slate-600 mt-0.5">{selectedNC.original_transfer_info.description}</p>
+                                        <p className="text-xs text-slate-600 mt-0.5">
+                                            {
+                                                selectedNC
+                                                    .original_transfer_info
+                                                    .description
+                                            }
+                                        </p>
                                     </div>
                                     <span className="text-sm font-bold text-slate-900 tabular-nums">
-                                        {formatCurrency(selectedNC.original_transfer_info.amount)}
+                                        {formatCurrency(
+                                            selectedNC.original_transfer_info
+                                                .amount
+                                        )}
                                     </span>
                                 </div>
                             </div>
@@ -2392,52 +3050,84 @@ function ProviderPayments() {
                         {/* Montos */}
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-center">
-                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Monto Total</label>
-                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.amount)}</p>
+                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">
+                                    Monto Total
+                                </label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">
+                                    {formatCurrency(selectedNC.amount)}
+                                </p>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 text-center">
-                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">Aplicado</label>
-                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.applied_amount)}</p>
+                                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1">
+                                    Aplicado
+                                </label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">
+                                    {formatCurrency(selectedNC.applied_amount)}
+                                </p>
                             </div>
                             <div className="bg-slate-100 rounded-lg p-4 border border-slate-300 text-center">
-                                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">Disponible</label>
-                                <p className="text-lg font-bold text-slate-900 tabular-nums">{formatCurrency(selectedNC.available_amount)}</p>
+                                <label className="text-xs font-semibold text-slate-600 uppercase block mb-1">
+                                    Disponible
+                                </label>
+                                <p className="text-lg font-bold text-slate-900 tabular-nums">
+                                    {formatCurrency(
+                                        selectedNC.available_amount
+                                    )}
+                                </p>
                             </div>
                         </div>
 
                         {/* Aplicaciones */}
-                        {selectedNC.applications && selectedNC.applications.length > 0 && (
-                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">
-                                    Aplicaciones Realizadas
-                                </label>
-                                <div className="space-y-2">
-                                    {selectedNC.applications.map((app, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100">
-                                            <div>
-                                                <p className="text-sm font-medium text-slate-700">
-                                                    Factura: {app.transfer_invoice_number || `#${app.transfer}`}
-                                                </p>
-                                                <p className="text-xs text-slate-500">{formatDate(app.applied_at)}</p>
-                                            </div>
-                                            <span className="text-sm font-bold text-slate-900 tabular-nums">
-                                                {formatCurrency(app.amount)}
-                                            </span>
-                                        </div>
-                                    ))}
+                        {selectedNC.applications &&
+                            selectedNC.applications.length > 0 && (
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-3">
+                                        Aplicaciones Realizadas
+                                    </label>
+                                    <div className="space-y-2">
+                                        {selectedNC.applications.map(
+                                            (app, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-700">
+                                                            Factura:{" "}
+                                                            {app.transfer_invoice_number ||
+                                                                `#${app.transfer}`}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {formatDate(
+                                                                app.applied_at
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-slate-900 tabular-nums">
+                                                        {formatCurrency(
+                                                            app.amount
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
                         {/* Info Anulación */}
-                        {selectedNC.status === 'anulada' && (
+                        {selectedNC.status === "anulada" && (
                             <div className="bg-slate-100 rounded-lg p-4 border border-slate-300">
                                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-2">
                                     Información de Anulación
                                 </label>
-                                <p className="text-sm text-slate-700">{selectedNC.void_reason}</p>
+                                <p className="text-sm text-slate-700">
+                                    {selectedNC.void_reason}
+                                </p>
                                 <p className="text-xs text-slate-500 mt-2">
-                                    Anulada el {formatDate(selectedNC.voided_at)} por {selectedNC.voided_by_name}
+                                    Anulada el{" "}
+                                    {formatDate(selectedNC.voided_at)} por{" "}
+                                    {selectedNC.voided_by_name}
                                 </p>
                             </div>
                         )}
@@ -2445,24 +3135,27 @@ function ProviderPayments() {
                         {/* Botones */}
                         <div className="flex items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-200">
                             <div>
-                                {selectedNC.status !== 'aplicada' && selectedNC.status !== 'anulada' && (
-                                    <Button
-                                        onClick={() => {
-                                            setIsNCDetailModalOpen(false);
-                                            openApplyNCModal(selectedNC);
-                                        }}
-                                        className="bg-slate-900 text-white hover:bg-slate-800"
-                                    >
-                                        <RotateCcw className="w-4 h-4 mr-2" />
-                                        Aplicar NC
-                                    </Button>
-                                )}
+                                {selectedNC.status !== "aplicada" &&
+                                    selectedNC.status !== "anulada" && (
+                                        <Button
+                                            onClick={() => {
+                                                setIsNCDetailModalOpen(false);
+                                                openApplyNCModal(selectedNC);
+                                            }}
+                                            className="bg-slate-900 text-white hover:bg-slate-800"
+                                        >
+                                            <RotateCcw className="w-4 h-4 mr-2" />
+                                            Aplicar NC
+                                        </Button>
+                                    )}
                             </div>
                             <div className="flex items-center gap-3">
-                                {selectedNC.status !== 'anulada' && (
+                                {selectedNC.status !== "anulada" && (
                                     <Button
                                         variant="outline"
-                                        onClick={() => setIsVoidNCDialogOpen(true)}
+                                        onClick={() =>
+                                            setIsVoidNCDialogOpen(true)
+                                        }
                                         className="text-slate-600 border-slate-300 hover:bg-slate-100"
                                     >
                                         <XCircle className="w-4 h-4 mr-2" />
@@ -2502,13 +3195,25 @@ function ProviderPayments() {
                         <div className="bg-slate-100 rounded-xl p-5 border border-slate-300">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-medium text-slate-500 mb-1">Nota de Crédito</p>
-                                    <p className="font-mono font-bold text-lg text-slate-900">{selectedNC.note_number}</p>
-                                    <p className="text-sm text-slate-600 mt-1">{selectedNC.provider_name}</p>
+                                    <p className="text-xs font-medium text-slate-500 mb-1">
+                                        Nota de Crédito
+                                    </p>
+                                    <p className="font-mono font-bold text-lg text-slate-900">
+                                        {selectedNC.note_number}
+                                    </p>
+                                    <p className="text-sm text-slate-600 mt-1">
+                                        {selectedNC.provider_name}
+                                    </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-medium text-slate-500 mb-1">Saldo Disponible</p>
-                                    <p className="text-2xl font-bold tabular-nums text-slate-900">{formatCurrency(selectedNC.available_amount)}</p>
+                                    <p className="text-xs font-medium text-slate-500 mb-1">
+                                        Saldo Disponible
+                                    </p>
+                                    <p className="text-2xl font-bold tabular-nums text-slate-900">
+                                        {formatCurrency(
+                                            selectedNC.available_amount
+                                        )}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -2523,74 +3228,154 @@ function ProviderPayments() {
                             {pendingTransfers.length === 0 ? (
                                 <div className="bg-slate-50 rounded-lg p-6 text-center border border-slate-200">
                                     <FileX className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                                    <p className="text-sm text-slate-600">No hay facturas pendientes de este proveedor</p>
+                                    <p className="text-sm text-slate-600">
+                                        No hay facturas pendientes de este
+                                        proveedor
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                                     <table className="w-full">
                                         <thead className="bg-slate-50 border-b border-slate-200">
                                             <tr>
-                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Factura</th>
-                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Descripción</th>
-                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase">Saldo</th>
-                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase w-[140px]">Aplicar</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">
+                                                    Factura
+                                                </th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 uppercase">
+                                                    Descripción
+                                                </th>
+                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase">
+                                                    Saldo
+                                                </th>
+                                                <th className="text-right px-4 py-3 text-xs font-semibold text-slate-600 uppercase w-[140px]">
+                                                    Aplicar
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {pendingTransfers.map((transfer) => {
-                                                const appData = applyFormData.find(a => a.transfer_id === transfer.id) || { amount: '' };
-                                                return (
-                                                    <tr key={transfer.id} className="hover:bg-slate-50/50">
-                                                        <td className="px-4 py-3">
-                                                            <span className="font-mono text-sm font-medium text-slate-700">
-                                                                {transfer.invoice_number || `ID-${transfer.id}`}
-                                                            </span>
-                                                            <span className="text-xs text-slate-400 block mt-0.5">
-                                                                {formatDate(transfer.transaction_date, { format: 'short' })}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <span className="text-sm text-slate-600 truncate block max-w-[200px]" title={transfer.description}>
-                                                                {transfer.description}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <span className="font-bold text-slate-700 tabular-nums">
-                                                                {formatCurrency(transfer.balance)}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <div className="relative">
-                                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    max={Math.min(parseFloat(transfer.balance), parseFloat(selectedNC.available_amount))}
-                                                                    value={appData.amount}
-                                                                    onChange={(e) => {
-                                                                        const newValue = e.target.value;
-                                                                        setApplyFormData(prev => {
-                                                                            const existing = prev.find(a => a.transfer_id === transfer.id);
-                                                                            if (existing) {
-                                                                                return prev.map(a =>
-                                                                                    a.transfer_id === transfer.id
-                                                                                        ? { ...a, amount: newValue }
-                                                                                        : a
-                                                                                );
-                                                                            } else {
-                                                                                return [...prev, { transfer_id: transfer.id, amount: newValue, notes: '' }];
-                                                                            }
-                                                                        });
-                                                                    }}
-                                                                    className="w-full pl-6 pr-2 py-1.5 text-sm font-mono border border-slate-200 rounded-md focus:border-slate-400 focus:outline-none text-right"
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
+                                            {pendingTransfers.map(
+                                                (transfer) => {
+                                                    const appData =
+                                                        applyFormData.find(
+                                                            (a) =>
+                                                                a.transfer_id ===
+                                                                transfer.id
+                                                        ) || { amount: "" };
+                                                    return (
+                                                        <tr
+                                                            key={transfer.id}
+                                                            className="hover:bg-slate-50/50"
+                                                        >
+                                                            <td className="px-4 py-3">
+                                                                <span className="font-mono text-sm font-medium text-slate-700">
+                                                                    {transfer.invoice_number ||
+                                                                        `ID-${transfer.id}`}
+                                                                </span>
+                                                                <span className="text-xs text-slate-400 block mt-0.5">
+                                                                    {formatDate(
+                                                                        transfer.transaction_date,
+                                                                        {
+                                                                            format: "short",
+                                                                        }
+                                                                    )}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <span
+                                                                    className="text-sm text-slate-600 truncate block max-w-[200px]"
+                                                                    title={
+                                                                        transfer.description
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        transfer.description
+                                                                    }
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <span className="font-bold text-slate-700 tabular-nums">
+                                                                    {formatCurrency(
+                                                                        transfer.balance
+                                                                    )}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="relative">
+                                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                                                                        $
+                                                                    </span>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        max={Math.min(
+                                                                            parseFloat(
+                                                                                transfer.balance
+                                                                            ),
+                                                                            parseFloat(
+                                                                                selectedNC.available_amount
+                                                                            )
+                                                                        )}
+                                                                        value={
+                                                                            appData.amount
+                                                                        }
+                                                                        onChange={(
+                                                                            e
+                                                                        ) => {
+                                                                            const newValue =
+                                                                                e
+                                                                                    .target
+                                                                                    .value;
+                                                                            setApplyFormData(
+                                                                                (
+                                                                                    prev
+                                                                                ) => {
+                                                                                    const existing =
+                                                                                        prev.find(
+                                                                                            (
+                                                                                                a
+                                                                                            ) =>
+                                                                                                a.transfer_id ===
+                                                                                                transfer.id
+                                                                                        );
+                                                                                    if (
+                                                                                        existing
+                                                                                    ) {
+                                                                                        return prev.map(
+                                                                                            (
+                                                                                                a
+                                                                                            ) =>
+                                                                                                a.transfer_id ===
+                                                                                                transfer.id
+                                                                                                    ? {
+                                                                                                          ...a,
+                                                                                                          amount: newValue,
+                                                                                                      }
+                                                                                                    : a
+                                                                                        );
+                                                                                    } else {
+                                                                                        return [
+                                                                                            ...prev,
+                                                                                            {
+                                                                                                transfer_id:
+                                                                                                    transfer.id,
+                                                                                                amount: newValue,
+                                                                                                notes: "",
+                                                                                            },
+                                                                                        ];
+                                                                                    }
+                                                                                }
+                                                                            );
+                                                                        }}
+                                                                        className="w-full pl-6 pr-2 py-1.5 text-sm font-mono border border-slate-200 rounded-md focus:border-slate-400 focus:outline-none text-right"
+                                                                        placeholder="0.00"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -2601,9 +3386,18 @@ function ProviderPayments() {
                         {applyFormData.length > 0 && (
                             <div className="bg-slate-100 rounded-lg p-4 border border-slate-300">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-slate-700">Total a Aplicar:</span>
+                                    <span className="text-sm font-medium text-slate-700">
+                                        Total a Aplicar:
+                                    </span>
                                     <span className="text-lg font-bold text-slate-900 tabular-nums">
-                                        {formatCurrency(applyFormData.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0))}
+                                        {formatCurrency(
+                                            applyFormData.reduce(
+                                                (sum, a) =>
+                                                    sum +
+                                                    (parseFloat(a.amount) || 0),
+                                                0
+                                            )
+                                        )}
                                     </span>
                                 </div>
                             </div>
@@ -2624,10 +3418,17 @@ function ProviderPayments() {
                             </Button>
                             <Button
                                 onClick={handleApplyNC}
-                                disabled={isSubmitting || applyFormData.filter(a => parseFloat(a.amount) > 0).length === 0}
+                                disabled={
+                                    isSubmitting ||
+                                    applyFormData.filter(
+                                        (a) => parseFloat(a.amount) > 0
+                                    ).length === 0
+                                }
                                 className="bg-slate-900 text-white hover:bg-slate-800 min-w-[160px]"
                             >
-                                {isSubmitting ? "Aplicando..." : "Confirmar Aplicación"}
+                                {isSubmitting
+                                    ? "Aplicando..."
+                                    : "Confirmar Aplicación"}
                             </Button>
                         </ModalFooter>
                     </div>

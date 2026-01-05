@@ -24,6 +24,7 @@ const AccountStatements = lazy(() => import("./pages/AccountStatements"));
 const ProviderStatements = lazy(() => import("./pages/ProviderStatements"));
 const Catalogs = lazy(() => import("./pages/Catalogs"));
 const Profile = lazy(() => import("./pages/Profile"));
+const PettyCash = lazy(() => import("./pages/PettyCash"));
 
 // Loading fallback component
 function LoadingFallback() {
@@ -97,6 +98,7 @@ function App() {
                             path="provider-statements"
                             element={<ProviderStatements />}
                         />
+                        <Route path="petty-cash" element={<PettyCash />} />
                         <Route path="profile" element={<Profile />} />
                     </Route>
                 </Routes>

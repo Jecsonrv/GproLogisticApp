@@ -49,8 +49,8 @@ const ConfirmDialog = ({
         primary: {
             icon: Info,
             iconBg: "bg-blue-50",
-            iconColor: "text-blue-600",
-            buttonBg: "bg-blue-600 hover:bg-blue-700 focus:ring-blue-500",
+            iconColor: "text-blue-700",
+            buttonBg: "bg-blue-700 hover:bg-blue-800 focus:ring-blue-600",
             borderColor: "border-blue-100",
         },
         info: {

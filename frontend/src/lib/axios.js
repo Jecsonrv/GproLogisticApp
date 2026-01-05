@@ -57,13 +57,15 @@ const extractErrorMessage = (error) => {
             return fieldErrors[0].msg;
         }
         // Si son múltiples campos, incluir el nombre del campo
-        return fieldErrors
-            .slice(0, 3)
-            .map(({ key, msg }) => {
-                const fieldName = key.replace(/_/g, " ");
-                return `${fieldName}: ${msg}`;
-            })
-            .join(". ") + (fieldErrors.length > 3 ? "..." : "");
+        return (
+            fieldErrors
+                .slice(0, 3)
+                .map(({ key, msg }) => {
+                    const fieldName = key.replace(/_/g, " ");
+                    return `${fieldName}: ${msg}`;
+                })
+                .join(". ") + (fieldErrors.length > 3 ? "..." : "")
+        );
     }
 
     return "Ha ocurrido un error";
@@ -82,9 +84,13 @@ const showErrorToast = (error) => {
     // Configurar duración según severidad
     const duration = status >= 500 ? 8000 : 6000;
 
+    // Crear un ID único basado en el mensaje para evitar toasts duplicados del mismo error
+    // Usar el mensaje como parte del ID para que errores iguales no se muestren múltiples veces
+    const errorId = `error-${message.substring(0, 50).replace(/\s/g, "-")}`;
+
     toast.error(message, {
         duration,
-        id: `error-${Date.now()}`, // Evitar toasts duplicados
+        id: errorId, // Usar ID basado en el mensaje para evitar duplicados
     });
 };
 
@@ -148,10 +154,10 @@ api.interceptors.response.use(
 
         // Debug info en development
         if (import.meta.env.DEV && error.response?.status >= 500) {
-            console.error('Server Error Details:', {
+            console.error("Server Error Details:", {
                 url: error.config?.url,
                 method: error.config?.method,
-                data: error.response?.data
+                data: error.response?.data,
             });
         }
 

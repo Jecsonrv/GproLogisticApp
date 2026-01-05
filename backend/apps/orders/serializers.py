@@ -137,6 +137,22 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         """Total de costos propios (legacy + costos)"""
         return obj.transfers.filter(transfer_type__in=['propios', 'costos']).aggregate(Sum('amount'))['amount__sum'] or 0
 
+    def validate(self, data):
+        """
+        Validaciones de negocio y seguridad.
+        """
+        # 1. Bloqueo de Reapertura de Órdenes Cerradas
+        if self.instance and self.instance.status == 'cerrada':
+            new_status = data.get('status')
+            if new_status and new_status != 'cerrada':
+                user = self.context['request'].user
+                if user.role not in ['admin', 'operativo2']:
+                    raise serializers.ValidationError({
+                        'status': "No tiene permisos para reabrir una orden cerrada. Contacte a un supervisor."
+                    })
+
+        return data
+
     def validate_client(self, value):
         """
         Validar límite de crédito del cliente.

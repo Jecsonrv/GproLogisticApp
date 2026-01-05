@@ -32,6 +32,8 @@ import {
     FileMinus,
     ArrowUpRight,
     ExternalLink,
+    ListChecks,
+    Truck,
 } from "lucide-react";
 import {
     Button,
@@ -52,6 +54,11 @@ import {
     ConfirmDialog,
 } from "../components/ui";
 import ExportButton from "../components/ui/ExportButton";
+import PaymentItemsModal from "../components/PaymentItemsModal";
+import PaymentDetailModal from "../components/PaymentDetailModal";
+import CreditNoteModal from "../components/CreditNoteModal";
+import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
+import useAuthStore from "../stores/authStore";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
@@ -76,7 +83,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
@@ -95,9 +102,9 @@ const INVOICE_STATUS = {
     partial: {
         label: "Pago Parcial",
         bgColor: "bg-blue-50",
-        textColor: "text-blue-700",
-        borderColor: "border-blue-200",
-        dotColor: "bg-blue-500",
+        textColor: "text-blue-800",
+        borderColor: "border-blue-300",
+        dotColor: "bg-blue-600",
     },
     paid: {
         label: "Pagada",
@@ -142,38 +149,31 @@ const StatusBadge = ({ status }) => {
 // ============================================
 // KPI CARD COMPONENT
 // ============================================
-const KPICard = ({
-    label,
-    value,
-    subtext,
-    icon: Icon,
-    variant = "default",
-}) => {
+const KPICard = ({ label, value, subtext, icon: Icon }) => {
     return (
-        <Card>
-            <CardContent className="p-5">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                            {label}
-                        </p>
-                        <p className="text-2xl font-semibold text-slate-900 tabular-nums">
-                            {value}
-                        </p>
-                        {subtext && (
-                            <p className="text-xs text-slate-500 mt-1.5">
-                                {subtext}
-                            </p>
-                        )}
-                    </div>
-                    {Icon && (
-                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                            <Icon className="w-5 h-5 text-slate-400" />
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
+                <p
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
+                    title={label}
+                >
+                    {label}
+                </p>
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
+                    {value}
+                </p>
+                {subtext && (
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium mt-0.5 truncate">
+                        {subtext}
+                    </p>
+                )}
+            </div>
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
+            </div>
+        </div>
     );
 };
 
@@ -182,10 +182,6 @@ const KPICard = ({
 // ============================================
 const ClientCard = ({ client, isSelected, onClick }) => {
     const hasOverdue = client.overdue_amount > 0;
-    const utilizationPercent =
-        client.credit_limit > 0
-            ? Math.min((client.credit_used / client.credit_limit) * 100, 100)
-            : 0;
 
     return (
         <div
@@ -241,6 +237,7 @@ const ClientCard = ({ client, isSelected, onClick }) => {
 // YEAR OPTIONS
 // ============================================
 const YEAR_OPTIONS = [
+    { id: 2026, name: "2026" },
     { id: 2025, name: "2025" },
     { id: 2024, name: "2024" },
     { id: 2023, name: "2023" },
@@ -272,11 +269,10 @@ function AccountStatements() {
 
     // UI state
     const [loading, setLoading] = useState(true);
-    const [loadingStatement, setLoadingStatement] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [clientSearchQuery, setClientSearchQuery] = useState("");
-    const [selectedYear, setSelectedYear] = useState(2025);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [statusFilter, setStatusFilter] = useState("");
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [filters, setFilters] = useState({
@@ -286,7 +282,11 @@ function AccountStatements() {
         maxAmount: "",
         invoiceType: "",
     });
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isPaymentItemsModalOpen, setIsPaymentItemsModalOpen] =
+        useState(false);
+    const [isPaymentDetailModalOpen, setIsPaymentDetailModalOpen] =
+        useState(false);
+    const [selectedPayment, setSelectedPayment] = useState(null);
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -296,26 +296,6 @@ function AccountStatements() {
         id: null,
     });
     const [deletePaymentConfirm, setDeletePaymentConfirm] = useState(null); // {id, amount}
-
-    // Payment form
-    const [paymentForm, setPaymentForm] = useState({
-        amount: "",
-        payment_date: getTodayDate(),
-        payment_method: "transferencia",
-        bank: "",
-        reference: "",
-        notes: "",
-        payment_proof: null,
-    });
-
-    // Credit Note form
-    const [creditNoteForm, setCreditNoteForm] = useState({
-        amount: "",
-        note_number: "",
-        reason: "",
-        issue_date: getTodayDate(),
-        pdf_file: null,
-    });
 
     useEffect(() => {
         fetchClients();
@@ -388,7 +368,6 @@ function AccountStatements() {
 
     const fetchStatement = async (clientId) => {
         try {
-            setLoadingStatement(true);
             const response = await axios.get(
                 `/clients/${clientId}/account_statement/`,
                 {
@@ -399,8 +378,6 @@ function AccountStatements() {
         } catch (error) {
             toast.error("Error al cargar estado de cuenta");
             setStatement(null);
-        } finally {
-            setLoadingStatement(false);
         }
     };
 
@@ -492,118 +469,20 @@ function AccountStatements() {
         }
     };
 
-    const handleAddPayment = async (e) => {
-        e.preventDefault();
-        if (!selectedInvoice || isSubmitting) return;
+    const openPaymentItemsModal = (invoice) => {
+        setSelectedInvoice(invoice);
+        setIsPaymentItemsModalOpen(true);
+    };
 
-        try {
-            setIsSubmitting(true);
-
-            // Crear FormData para soportar archivos
-            const formData = new FormData();
-            formData.append("amount", paymentForm.amount);
-            formData.append("payment_date", paymentForm.payment_date);
-            formData.append("payment_method", paymentForm.payment_method);
-            if (paymentForm.bank)
-                formData.append("bank", paymentForm.bank);
-            if (paymentForm.reference)
-                formData.append("reference", paymentForm.reference);
-            if (paymentForm.notes) formData.append("notes", paymentForm.notes);
-            if (paymentForm.payment_proof)
-                formData.append("receipt_file", paymentForm.payment_proof);
-
-            await axios.post(
-                `/orders/invoices/${selectedInvoice.id}/add_payment/`,
-                formData,
-                {
-                    headers: { "Content-Type": "multipart/form-data" },
-                }
-            );
-
-            toast.success("Pago registrado exitosamente");
-            setIsPaymentModalOpen(false);
-            setPaymentForm({
-                amount: "",
-                payment_date: getTodayDate(),
-                payment_method: "transferencia",
-                bank: "",
-                reference: "",
-                notes: "",
-                payment_proof: null,
-            });
+    const handlePaymentItemsSuccess = () => {
+        if (selectedClient) {
             fetchInvoices(selectedClient.id);
             fetchStatement(selectedClient.id);
-            // Refresh details if open
-            if (isDetailModalOpen && selectedInvoice) {
-                fetchInvoiceDetails(selectedInvoice.id);
-            }
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
-        } finally {
-            setIsSubmitting(false);
         }
-    };
-
-    const handleAddCreditNote = async (e) => {
-        e.preventDefault();
-        if (!selectedInvoice || isSubmitting) return;
-
-        try {
-            setIsSubmitting(true);
-
-            const formData = new FormData();
-            formData.append("amount", creditNoteForm.amount);
-            formData.append("note_number", creditNoteForm.note_number);
-            formData.append("reason", creditNoteForm.reason);
-            formData.append("issue_date", creditNoteForm.issue_date);
-            if (creditNoteForm.pdf_file)
-                formData.append("pdf_file", creditNoteForm.pdf_file);
-
-            await axios.post(
-                `/orders/invoices/${selectedInvoice.id}/add_credit_note/`,
-                formData,
-                {
-                    headers: { "Content-Type": "multipart/form-data" },
-                }
-            );
-
-            toast.success("Nota de crédito registrada exitosamente");
-            setIsCreditNoteModalOpen(false);
-            setCreditNoteForm({
-                amount: "",
-                note_number: "",
-                reason: "",
-                issue_date: getTodayDate(),
-                pdf_file: null,
-            });
-            fetchInvoices(selectedClient.id);
-            fetchStatement(selectedClient.id);
-            if (isDetailModalOpen && selectedInvoice) {
-                fetchInvoiceDetails(selectedInvoice.id);
-            }
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
-        } finally {
-            setIsSubmitting(false);
+        // Si el modal de detalle está abierto, actualizar los datos
+        if (isDetailModalOpen && selectedInvoice) {
+            fetchInvoiceDetails(selectedInvoice.id);
         }
-    };
-
-    const openPaymentModal = (invoice) => {
-        setSelectedInvoice(invoice);
-        setPaymentForm({
-            ...paymentForm,
-            amount: invoice.balance || "",
-        });
-        setIsPaymentModalOpen(true);
-    };
-
-    const openCreditNoteModal = (invoice) => {
-        setSelectedInvoice(invoice);
-        setCreditNoteForm({
-            ...creditNoteForm,
-            amount: "", // Default empty, user decides
-        });
-        setIsCreditNoteModalOpen(true);
     };
 
     const handleDeleteInvoice = async () => {
@@ -661,6 +540,12 @@ function AccountStatements() {
     // Filtered invoices
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
+            // Filtro por año
+            if (selectedYear) {
+                const invDate = new Date(inv.issue_date);
+                if (invDate.getFullYear() !== selectedYear) return false;
+            }
+
             // Búsqueda por texto
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
@@ -739,7 +624,11 @@ function AccountStatements() {
     const agingData = useMemo(() => {
         // Usar fecha local sin hora para evitar problemas de zona horaria
         const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const today = new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            now.getDate()
+        );
         const aging = {
             current: { count: 0, amount: 0, invoices: [] }, // 0-30 días
             days30: { count: 0, amount: 0, invoices: [] }, // 31-60 días
@@ -756,7 +645,7 @@ function AccountStatements() {
             )
             .forEach((inv) => {
                 // Parsear fecha sin problemas de zona horaria
-                const [year, month, day] = inv.due_date.split('-').map(Number);
+                const [year, month, day] = inv.due_date.split("-").map(Number);
                 const dueDate = new Date(year, month - 1, day);
                 const diffTime = today - dueDate;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -872,19 +761,25 @@ function AccountStatements() {
             cell: (row) => {
                 let isOverdue = false;
                 let formattedDueDate = "-";
-                
+
                 if (row.due_date) {
                     // Parseo seguro sin timezone shift
-                    const [year, month, day] = row.due_date.split('-').map(Number);
+                    const [year, month, day] = row.due_date
+                        .split("-")
+                        .map(Number);
                     const dueDateObj = new Date(year, month - 1, day);
-                    
+
                     // Formateo para display
                     formattedDueDate = formatDateSafe(row.due_date);
 
                     // Lógica de vencimiento (comparar con hoy sin horas)
                     if (row.status !== "paid") {
                         const now = new Date();
-                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        const today = new Date(
+                            now.getFullYear(),
+                            now.getMonth(),
+                            now.getDate()
+                        );
                         isOverdue = dueDateObj < today;
                     }
                 }
@@ -896,14 +791,18 @@ function AccountStatements() {
                                 <div
                                     className={cn(
                                         "text-[11px] font-semibold tabular-nums",
-                                        isOverdue ? "text-red-600" : "text-slate-500"
+                                        isOverdue
+                                            ? "text-red-600"
+                                            : "text-slate-500"
                                     )}
                                 >
                                     {formattedDueDate}
                                 </div>
                                 {isOverdue && (
                                     <div className="text-[9px] text-red-600 font-bold uppercase tracking-tight">
-                                        {row.days_overdue === 1 ? 'Venció ayer' : `${row.days_overdue}d vencida`}
+                                        {row.days_overdue === 1
+                                            ? "Venció ayer"
+                                            : `${row.days_overdue}d vencida`}
                                     </div>
                                 )}
                             </>
@@ -974,11 +873,11 @@ function AccountStatements() {
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-[140px] text-center",
+            className: "w-[170px] text-center",
             headerClassName: "text-center",
             sortable: false,
             cell: (row) => (
-                <div className="grid grid-cols-4 gap-1 w-full max-w-[120px] mx-auto">
+                <div className="grid grid-cols-5 gap-1 w-full max-w-[150px] mx-auto">
                     <div className="flex justify-center">
                         {row.pdf_file ? (
                             <button
@@ -986,7 +885,7 @@ function AccountStatements() {
                                     e.stopPropagation();
                                     window.open(row.pdf_file, "_blank");
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
                                 title="Ver PDF"
                             >
                                 <FileText className="w-4 h-4" />
@@ -1000,12 +899,12 @@ function AccountStatements() {
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    openPaymentModal(row);
+                                    openPaymentItemsModal(row);
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
-                                title="Registrar pago"
+                                title="Pago por Items (detallado)"
                             >
-                                <Banknote className="w-4 h-4" />
+                                <ListChecks className="w-4 h-4" />
                             </button>
                         ) : (
                             <div className="w-7" />
@@ -1017,6 +916,7 @@ function AccountStatements() {
                                 e.stopPropagation();
                                 setSelectedInvoice(row);
                                 setIsDetailModalOpen(true);
+                                fetchInvoiceDetails(row.id);
                             }}
                             className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
                             title="Ver detalles"
@@ -1073,8 +973,7 @@ function AccountStatements() {
         {
             header: "ETA",
             accessor: "eta",
-            cell: (row) =>
-                row.eta ? formatDateSafe(row.eta) : "—",
+            cell: (row) => (row.eta ? formatDateSafe(row.eta) : "—"),
         },
         {
             header: "DUCA",
@@ -1113,7 +1012,10 @@ function AccountStatements() {
                         <Skeleton className="h-10 w-full" />
                         <div className="space-y-2">
                             {[1, 2, 3, 4, 5, 6].map((i) => (
-                                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                                <Skeleton
+                                    key={i}
+                                    className="h-16 w-full rounded-lg"
+                                />
                             ))}
                         </div>
                     </div>
@@ -1135,7 +1037,10 @@ function AccountStatements() {
                             <Skeleton className="h-6 w-40" />
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                                 {[1, 2, 3, 4, 5].map((i) => (
-                                    <Skeleton key={i} className="h-20 rounded-lg" />
+                                    <Skeleton
+                                        key={i}
+                                        className="h-20 rounded-lg"
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -1402,7 +1307,7 @@ function AccountStatements() {
                                             {/* 1-30 */}
                                             <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                                 <div className="flex items-center gap-2 mb-2">
-                                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
                                                     <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                                                         1-30 Días
                                                     </span>
@@ -1552,7 +1457,7 @@ function AccountStatements() {
                                     {/* Panel de Filtros Avanzados */}
                                     {isFiltersOpen && (
                                         <div className="pt-4 border-t border-gray-200">
-                                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 space-y-4">
+                                            <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-lg p-4 space-y-4">
                                                 <div className="flex items-center justify-between mb-3">
                                                     <div className="flex items-center gap-2">
                                                         <Filter className="w-4 h-4 text-slate-700" />
@@ -1738,7 +1643,7 @@ function AccountStatements() {
                                                 </div>
 
                                                 {/* Indicador de resultados filtrados */}
-                                                <div className="pt-2 border-t border-blue-100">
+                                                <div className="pt-2 border-t border-slate-200">
                                                     <p className="text-xs text-gray-600">
                                                         Mostrando{" "}
                                                         <span className="font-semibold text-slate-700">
@@ -1783,439 +1688,25 @@ function AccountStatements() {
                 </div>
             </div>
 
-            {/* Payment Modal */}
-            <Modal
-                isOpen={isPaymentModalOpen}
-                onClose={() => {
-                    setIsPaymentModalOpen(false);
-                    setSelectedInvoice(null);
-                }}
-                title="Registrar Abono / Pago"
-                size="lg"
-            >
-                {selectedInvoice && (
-                    <form onSubmit={handleAddPayment} className="space-y-6">
-                        {/* Summary Box */}
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                                        <Building2 className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                            Documento
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-700 font-mono">
-                                            {selectedInvoice.invoice_number}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                        Saldo Pendiente
-                                    </p>
-                                    <p className="text-2xl font-black text-red-600 tabular-nums tracking-tight">
-                                        {formatCurrency(
-                                            selectedInvoice.balance
-                                        )}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                Detalle del Cobro
-                            </h4>
-
-                            <div className="space-y-5">
-                                {/* Línea 1: Monto y Fecha */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                    <div>
-                                        <Label className="mb-1.5 block">
-                                            Monto del Pago *
-                                        </Label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
-                                                $
-                                            </span>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                min="0.01"
-                                                max={selectedInvoice?.balance}
-                                                value={paymentForm.amount}
-                                                onChange={(e) =>
-                                                    setPaymentForm({
-                                                        ...paymentForm,
-                                                        amount: e.target.value,
-                                                    })
-                                                }
-                                                className="pl-7 font-mono font-semibold text-slate-700 text-lg"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <Label className="mb-1.5 block">
-                                            Fecha de Pago *
-                                        </Label>
-                                        <Input
-                                            type="date"
-                                            value={paymentForm.payment_date}
-                                            onChange={(e) =>
-                                                setPaymentForm({
-                                                    ...paymentForm,
-                                                    payment_date: e.target.value,
-                                                })
-                                            }
-                                            required
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Línea 2: Método de Pago y Referencia */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                    <div>
-                                        <Label className="mb-1.5 block">
-                                            Método de Pago *
-                                        </Label>
-                                        <SelectERP
-                                            value={paymentForm.payment_method}
-                                            onChange={(val) =>
-                                                setPaymentForm({
-                                                    ...paymentForm,
-                                                    payment_method: val,
-                                                })
-                                            }
-                                            options={[
-                                                {
-                                                    id: "transferencia",
-                                                    name: "Transferencia Bancaria",
-                                                },
-                                                {
-                                                    id: "efectivo",
-                                                    name: "Efectivo",
-                                                },
-                                                { id: "cheque", name: "Cheque" },
-                                                {
-                                                    id: "tarjeta",
-                                                    name: "Tarjeta de Crédito/Débito",
-                                                },
-                                            ]}
-                                            getOptionLabel={(opt) => opt.name}
-                                            getOptionValue={(opt) => opt.id}
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label className="mb-1.5 block">
-                                            Referencia / No. Documento
-                                        </Label>
-                                        <Input
-                                            value={paymentForm.reference}
-                                            onChange={(e) =>
-                                                setPaymentForm({
-                                                    ...paymentForm,
-                                                    reference: e.target.value,
-                                                })
-                                            }
-                                            placeholder="Ej: TRANS-12345"
-                                            className="font-mono"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Línea 3: Banco (solo si aplica) */}
-                                {['transferencia', 'cheque', 'deposito'].includes(paymentForm.payment_method) && (
-                                    <div>
-                                        <Label className="mb-1.5 block">
-                                            Banco {['transferencia', 'cheque'].includes(paymentForm.payment_method) ? '*' : ''}
-                                        </Label>
-                                        <SelectERP
-                                            value={paymentForm.bank}
-                                            onChange={(val) =>
-                                                setPaymentForm({
-                                                    ...paymentForm,
-                                                    bank: val || "",
-                                                })
-                                            }
-                                            options={banks}
-                                            getOptionLabel={(opt) => opt.name}
-                                            getOptionValue={(opt) => opt.id}
-                                            required={['transferencia', 'cheque'].includes(paymentForm.payment_method)}
-                                            clearable
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Línea 4: Comprobante */}
-                                <div>
-                                    <Label className="mb-1.5 block">
-                                        Comprobante de Pago (Opcional)
-                                    </Label>
-                                    <FileUpload
-                                        accept=".pdf,.jpg,.jpeg,.png"
-                                        onFileChange={(file) =>
-                                            setPaymentForm({
-                                                ...paymentForm,
-                                                payment_proof: file,
-                                            })
-                                        }
-                                        helperText="Sube el soporte del pago"
-                                    />
-                                </div>
-
-                                {/* Línea 5: Notas */}
-                                <div>
-                                    <Label className="mb-1.5 block">
-                                        Notas Adicionales
-                                    </Label>
-                                    <Input
-                                        value={paymentForm.notes}
-                                        onChange={(e) =>
-                                            setPaymentForm({
-                                                ...paymentForm,
-                                                notes: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Observaciones adicionales..."
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Impact Preview */}
-                        {paymentForm.amount &&
-                            parseFloat(paymentForm.amount) > 0 && (
-                                <div className="bg-slate-900 rounded-xl p-5 text-white shadow-lg">
-                                    <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                            Saldo Proyectado
-                                        </span>
-                                        <span className="text-2xl font-black tabular-nums">
-                                            {formatCurrency(
-                                                Math.max(
-                                                    0,
-                                                    parseFloat(
-                                                        selectedInvoice.balance
-                                                    ) -
-                                                        parseFloat(
-                                                            paymentForm.amount ||
-                                                                0
-                                                        )
-                                                )
-                                            )}
-                                        </span>
-                                    </div>
-                                    {parseFloat(selectedInvoice.balance) -
-                                        parseFloat(paymentForm.amount || 0) <=
-                                        0.01 && (
-                                        <div className="flex items-center gap-2 text-emerald-400">
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            <span className="text-xs font-bold uppercase tracking-wider">
-                                                Factura será marcada como pagada
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                        <ModalFooter>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                    setIsPaymentModalOpen(false);
-                                    setSelectedInvoice(null);
-                                }}
-                                className="text-slate-500 font-semibold"
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
-                            >
-                                {isSubmitting
-                                    ? "Procesando..."
-                                    : "Confirmar Pago"}
-                            </Button>
-                        </ModalFooter>
-                    </form>
-                )}
-            </Modal>
-
-            {/* Credit Note Modal */}
-            <Modal
+            {/* Credit Note Modal - Componente Profesional Reutilizable */}
+            <CreditNoteModal
                 isOpen={isCreditNoteModalOpen}
                 onClose={() => {
                     setIsCreditNoteModalOpen(false);
                     setSelectedInvoice(null);
                 }}
-                title="Registrar Nota de Crédito"
-                size="lg"
-            >
-                {selectedInvoice && (
-                    <form onSubmit={handleAddCreditNote} className="space-y-6">
-                        {/* Summary Box */}
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                                        <Receipt className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                            Aplicar a Factura
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-700 font-mono">
-                                            {selectedInvoice.invoice_number}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                        Saldo Ajustable
-                                    </p>
-                                    <p className="text-2xl font-black text-slate-900 tabular-nums tracking-tight">
-                                        {formatCurrency(
-                                            selectedInvoice.balance
-                                        )}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
-                                Detalle del Ajuste
-                            </h4>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                <div>
-                                    <Label className="mb-1.5 block">
-                                        Monto a Acreditar *
-                                    </Label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
-                                            $
-                                        </span>
-                                        <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0.01"
-                                            max={selectedInvoice.balance}
-                                            value={creditNoteForm.amount}
-                                            onChange={(e) =>
-                                                setCreditNoteForm({
-                                                    ...creditNoteForm,
-                                                    amount: e.target.value,
-                                                })
-                                            }
-                                            className="pl-7 font-mono font-semibold text-slate-700"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <Label className="mb-1.5 block">
-                                        Fecha de Emisión *
-                                    </Label>
-                                    <Input
-                                        type="date"
-                                        value={creditNoteForm.issue_date}
-                                        onChange={(e) =>
-                                            setCreditNoteForm({
-                                                ...creditNoteForm,
-                                                issue_date: e.target.value,
-                                            })
-                                        }
-                                        required
-                                    />
-                                </div>
-
-                                <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block">
-                                        Número de Nota de Crédito *
-                                    </Label>
-                                    <Input
-                                        value={creditNoteForm.note_number}
-                                        onChange={(e) =>
-                                            setCreditNoteForm({
-                                                ...creditNoteForm,
-                                                note_number: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Ej: NC-001"
-                                        className="font-mono uppercase"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block">
-                                        Motivo / Razón *
-                                    </Label>
-                                    <Input
-                                        value={creditNoteForm.reason}
-                                        onChange={(e) =>
-                                            setCreditNoteForm({
-                                                ...creditNoteForm,
-                                                reason: e.target.value,
-                                            })
-                                        }
-                                        placeholder="Ej: Devolución, Error en precio..."
-                                        required
-                                    />
-                                </div>
-
-                                <div className="sm:col-span-2">
-                                    <Label className="mb-1.5 block">
-                                        Copia Digital (PDF)
-                                    </Label>
-                                    <FileUpload
-                                        accept=".pdf"
-                                        onFileChange={(file) =>
-                                            setCreditNoteForm({
-                                                ...creditNoteForm,
-                                                pdf_file: file,
-                                            })
-                                        }
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <ModalFooter>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                    setIsCreditNoteModalOpen(false);
-                                    setSelectedInvoice(null);
-                                }}
-                                className="text-slate-500 font-semibold"
-                            >
-                                Cancelar
-                            </Button>
-                            <Button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
-                            >
-                                {isSubmitting
-                                    ? "Procesando..."
-                                    : "Confirmar Nota"}
-                            </Button>
-                        </ModalFooter>
-                    </form>
-                )}
-            </Modal>
+                invoice={selectedInvoice}
+                onSuccess={() => {
+                    // Refrescar datos después de crear NC
+                    if (selectedClient?.id) {
+                        fetchInvoices(selectedClient.id);
+                        fetchStatement(selectedClient.id);
+                    }
+                    if (isDetailModalOpen && selectedInvoice?.id) {
+                        fetchInvoiceDetails(selectedInvoice.id);
+                    }
+                }}
+            />
 
             {/* Invoice Detail Modal */}
             <Modal
@@ -2224,8 +1715,10 @@ function AccountStatements() {
                     setIsDetailModalOpen(false);
                     setSelectedInvoice(null);
                 }}
-                title="Detalle de Factura"
-                size="2xl"
+                title={`Detalle de Factura: ${
+                    selectedInvoice?.invoice_number || ""
+                }`}
+                size="4xl"
             >
                 {selectedInvoice && (
                     <div className="space-y-6">
@@ -2267,17 +1760,35 @@ function AccountStatements() {
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
                                         Orden de Servicio
                                     </div>
-                                    <div className="font-mono text-sm">
-                                        {selectedInvoice.service_order_number ||
-                                            "—"}
-                                    </div>
+                                    {selectedInvoice.service_order_id ? (
+                                        <button
+                                            onClick={() =>
+                                                navigate(
+                                                    `/service-orders/${selectedInvoice.service_order_id}`
+                                                )
+                                            }
+                                            className="font-mono text-sm text-blue-700 hover:text-blue-900 hover:underline transition-colors flex items-center gap-1 group"
+                                        >
+                                            {selectedInvoice.service_order_number ||
+                                                "—"}
+                                            <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                    ) : (
+                                        <div className="font-mono text-sm">
+                                            {selectedInvoice.service_order_number ||
+                                                "—"}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
                                         Fecha de Emisión
                                     </div>
                                     <div className="text-sm">
-                                        {formatDateSafe(selectedInvoice.issue_date, "long")}
+                                        {formatDateSafe(
+                                            selectedInvoice.issue_date,
+                                            "long"
+                                        )}
                                     </div>
                                 </div>
                                 <div>
@@ -2286,7 +1797,10 @@ function AccountStatements() {
                                     </div>
                                     <div className="text-sm">
                                         {selectedInvoice.due_date
-                                            ? formatDateSafe(selectedInvoice.due_date, "long")
+                                            ? formatDateSafe(
+                                                  selectedInvoice.due_date,
+                                                  "long"
+                                              )
                                             : "—"}
                                     </div>
                                 </div>
@@ -2339,223 +1853,34 @@ function AccountStatements() {
                             </div>
                         </div>
 
-                        {/* Invoice Document */}
-                        {selectedInvoice.pdf_file && (
-                            <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                                    <FileText className="w-4 h-4" />
-                                    Documento Fiscal
-                                </h4>
-                                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-md group hover:border-slate-300 transition-all">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white border border-slate-200 rounded flex items-center justify-center text-slate-400 group-hover:text-slate-600 transition-colors">
-                                            <FileText className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-slate-900">
-                                                {selectedInvoice.invoice_type ||
-                                                    "DTE"}{" "}
-                                                -{" "}
-                                                {selectedInvoice.invoice_number}
-                                            </p>
-                                            <p className="text-xs text-slate-500">
-                                                Documento PDF
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            window.open(
-                                                selectedInvoice.pdf_file,
-                                                "_blank"
-                                            )
-                                        }
-                                        className="bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
-                                    >
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Ver Documento
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Credit Note History Table */}
-                        {selectedInvoice.credit_notes &&
-                            selectedInvoice.credit_notes.length > 0 && (
-                                <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                                    <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
-                                        <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide flex items-center gap-2">
-                                            <FileMinus className="w-4 h-4" />
-                                            Notas de Crédito Aplicadas
-                                        </h4>
-                                    </div>
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-white text-slate-500 font-medium text-xs uppercase border-b border-slate-100">
-                                            <tr>
-                                                <th className="px-4 py-2.5 text-left">
-                                                    Número
-                                                </th>
-                                                <th className="px-4 py-2.5 text-left">
-                                                    Fecha
-                                                </th>
-                                                <th className="px-4 py-2.5 text-left">
-                                                    Motivo
-                                                </th>
-                                                <th className="px-4 py-2.5 text-right">
-                                                    Monto
-                                                </th>
-                                                <th className="px-4 py-2.5 text-center w-16">
-                                                    PDF
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {selectedInvoice.credit_notes.map(
-                                                (nc) => (
-                                                    <tr
-                                                        key={nc.id}
-                                                        className="hover:bg-slate-50 transition-colors"
-                                                    >
-                                                        <td className="px-4 py-2.5 font-mono font-medium text-slate-900">
-                                                            {nc.note_number}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-slate-600">
-                                                            {formatDateSafe(nc.issue_date)}
-                                                        </td>
-                                                        <td
-                                                            className="px-4 py-2.5 text-slate-600 max-w-[200px] truncate"
-                                                            title={nc.reason}
-                                                        >
-                                                            {nc.reason}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right font-semibold text-purple-700">
-                                                            -
-                                                            {formatCurrency(
-                                                                nc.amount
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-center">
-                                                            {nc.pdf_file ? (
-                                                                <button
-                                                                    onClick={() =>
-                                                                        window.open(
-                                                                            nc.pdf_file,
-                                                                            "_blank"
-                                                                        )
-                                                                    }
-                                                                    className="text-slate-400 hover:text-slate-900 hover:bg-slate-100 p-1.5 rounded transition-all"
-                                                                    title="Ver Documento"
-                                                                >
-                                                                    <FileText className="w-4 h-4" />
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-xs">
-                                                                    —
-                                                                </span>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                )
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-
-                        {/* Payment History - Tabla igual a CXC */}
-                        {selectedInvoice.payments &&
-                            selectedInvoice.payments.length > 0 && (
-                                <div>
-                                    <h5 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                        <Receipt className="h-3.5 w-3.5" />
-                                        Pagos Recibidos ({selectedInvoice.payments.length})
-                                    </h5>
-                                    <div className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
-                                        <table className="min-w-full divide-y divide-slate-200 text-sm">
-                                            <thead className="bg-slate-50/80">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
-                                                        Fecha
-                                                    </th>
-                                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
-                                                        Método
-                                                    </th>
-                                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
-                                                        Banco
-                                                    </th>
-                                                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase">
-                                                        Referencia
-                                                    </th>
-                                                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase w-28">
-                                                        Monto
-                                                    </th>
-                                                    <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase w-24">
-                                                        Comprobante
-                                                    </th>
-                                                    <th className="px-3 py-2 w-12"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {selectedInvoice.payments.map((payment) => (
-                                                    <tr key={payment.id} className="hover:bg-slate-50 group">
-                                                        <td className="px-3 py-2 text-slate-700 text-sm">
-                                                            {formatDateSafe(payment.payment_date)}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-slate-700 text-sm capitalize">
-                                                            {payment.payment_method === 'transferencia' ? 'Transferencia' :
-                                                             payment.payment_method === 'efectivo' ? 'Efectivo' :
-                                                             payment.payment_method === 'cheque' ? 'Cheque' :
-                                                             payment.payment_method === 'deposito' ? 'Depósito' :
-                                                             payment.payment_method === 'tarjeta' ? 'Tarjeta' :
-                                                             payment.payment_method || "—"}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-slate-700 text-sm">
-                                                            {payment.bank_name || "—"}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-slate-600 text-sm font-mono">
-                                                            {payment.reference_number || "—"}
-                                                            {payment.notes && (
-                                                                <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
-                                                                    {payment.notes}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-600 text-sm">
-                                                            {formatCurrency(payment.amount)}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-center">
-                                                            {payment.receipt_file ? (
-                                                                <button
-                                                                    onClick={() => window.open(payment.receipt_file, "_blank")}
-                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
-                                                                    title="Ver comprobante"
-                                                                >
-                                                                    <FileText className="h-3.5 w-3.5" />
-                                                                    <ExternalLink className="h-3 w-3" />
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-xs">—</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-center">
-                                                            <button
-                                                                onClick={() => setDeletePaymentConfirm({ id: payment.id, amount: payment.amount })}
-                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                                                title="Eliminar pago"
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-
+                        <div className="pt-4 border-t border-slate-200">
+                            <InvoiceItemsEditor
+                                invoice={{
+                                    ...selectedInvoice,
+                                    billed_charges:
+                                        selectedInvoice.billed_charges ||
+                                        selectedInvoice.charges ||
+                                        [],
+                                    billed_expenses:
+                                        selectedInvoice.billed_expenses ||
+                                        selectedInvoice.billed_transfers ||
+                                        [],
+                                }}
+                                onUpdate={() => {
+                                    if (selectedClient) {
+                                        fetchInvoices(selectedClient.id);
+                                        fetchStatement(selectedClient.id);
+                                    }
+                                    if (selectedInvoice?.id) {
+                                        fetchInvoiceDetails(selectedInvoice.id);
+                                    }
+                                }}
+                                onPaymentClick={(payment) => {
+                                    setSelectedPayment(payment);
+                                    setIsPaymentDetailModalOpen(true);
+                                }}
+                            />
+                        </div>
                         <ModalFooter>
                             <Button
                                 variant="outline"
@@ -2569,13 +1894,16 @@ function AccountStatements() {
                             {selectedInvoice.status !== "paid" &&
                                 selectedInvoice.status !== "cancelled" && (
                                     <Button
+                                        variant="outline"
                                         onClick={() => {
                                             setIsDetailModalOpen(false);
-                                            openPaymentModal(selectedInvoice);
+                                            openPaymentItemsModal(
+                                                selectedInvoice
+                                            );
                                         }}
                                     >
-                                        <Banknote className="w-4 h-4 mr-2" />
-                                        Registrar Pago
+                                        <ListChecks className="w-4 h-4 mr-2" />
+                                        Pago por Items
                                     </Button>
                                 )}
                         </ModalFooter>
@@ -2605,11 +1933,41 @@ function AccountStatements() {
                 open={!!deletePaymentConfirm}
                 onClose={() => setDeletePaymentConfirm(null)}
                 title="¿Eliminar pago?"
-                description={`Se eliminará el pago de ${formatCurrency(deletePaymentConfirm?.amount || 0)}. El saldo de la factura será recalculado automáticamente.`}
+                description={`Se eliminará el pago de ${formatCurrency(
+                    deletePaymentConfirm?.amount || 0
+                )}. El saldo de la factura será recalculado automáticamente.`}
                 confirmText="Eliminar Pago"
                 cancelText="Cancelar"
                 variant="danger"
                 onConfirm={() => handleDeletePayment(deletePaymentConfirm?.id)}
+            />
+
+            {/* Payment Items Modal */}
+            <PaymentItemsModal
+                isOpen={isPaymentItemsModalOpen}
+                onClose={() => {
+                    setIsPaymentItemsModalOpen(false);
+                    setSelectedInvoice(null);
+                }}
+                invoice={selectedInvoice}
+                banks={banks}
+                onPaymentSuccess={handlePaymentItemsSuccess}
+            />
+
+            {/* Payment Detail Modal */}
+            <PaymentDetailModal
+                isOpen={isPaymentDetailModalOpen}
+                onClose={() => {
+                    setIsPaymentDetailModalOpen(false);
+                    setSelectedPayment(null);
+                }}
+                payment={selectedPayment}
+                onUpdate={() => {
+                    // Recargar el detalle de la factura para obtener el comprobante actualizado
+                    if (selectedInvoice) {
+                        fetchInvoiceDetails(selectedInvoice.id);
+                    }
+                }}
             />
         </div>
     );

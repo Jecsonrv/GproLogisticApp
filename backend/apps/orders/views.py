@@ -113,11 +113,17 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
         for charge in charges:
             iva_type = getattr(charge, 'iva_type', 'gravado')
+            # Construir descripción sin guion al final si no hay descripción
+            desc_parts = [charge.service.name]
+            if charge.description:
+                desc_parts.append(charge.description)
+            description = " - ".join(desc_parts)
+            
             items.append({
                 'id': f'charge_{charge.id}',
                 'original_id': charge.id,
                 'type': 'service',
-                'description': f"{charge.service.name} - {charge.description or ''}",
+                'description': description,
                 'service_name': charge.service.name,
                 # Desglose de montos para cuadre con DTE
                 'subtotal_neto': float(charge.subtotal),
@@ -137,7 +143,12 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 'unit_price': float(charge.unit_price),
                 'discount': float(charge.discount),
                 'notes': charge.description,
-                'source_model': 'OrderCharge'
+                'source_model': 'OrderCharge',
+                # NUEVO: Información de costos directos para análisis de rentabilidad
+                'is_third_party_service': charge.is_third_party_service,
+                'cost_amount': float(charge.get_cost()),
+                'profit': float(charge.get_profit()),
+                'margin_percentage': float(charge.get_margin_percentage()),
             })
 
         # 2. Gastos Reembolsables (Transfer) - Calculadora de Gastos
@@ -252,6 +263,18 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 {'error': 'No se pueden agregar cargos a una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # AUDITORÍA #4: Advertencia si la OS ya tiene facturas
+        # Los nuevos cargos no se agregarán automáticamente a facturas existentes
+        existing_invoices = order.invoices.filter(status__in=['pending', 'partial', 'paid'])
+        warning_message = None
+        if existing_invoices.exists():
+            invoice_numbers = ', '.join([inv.invoice_number for inv in existing_invoices[:3]])
+            warning_message = (
+                f"ADVERTENCIA: Esta orden ya tiene facturas emitidas ({invoice_numbers}). "
+                "El nuevo cargo NO se agregará automáticamente a las facturas existentes. "
+                "Deberá agregarlo manualmente o crear una nueva factura."
+            )
         
         service_id = request.data.get('service')
         if not service_id:
@@ -285,8 +308,13 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             # The frontend sends 'notes' but model has 'description'.
             # Validar iva_type
             iva_type = request.data.get('iva_type', 'gravado')
-            if iva_type not in ['gravado', 'no_sujeto']:
+            if iva_type not in ['gravado', 'exento', 'no_sujeto']:
                 iva_type = 'gravado'
+
+            # Procesar is_third_party_service
+            is_third_party_service = request.data.get('is_third_party_service', False)
+            if isinstance(is_third_party_service, str):
+                is_third_party_service = is_third_party_service.lower() in ('true', '1', 'yes')
 
             charge = OrderCharge.objects.create(
                 service_order=order,
@@ -295,16 +323,25 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 unit_price=unit_price,
                 discount=discount,
                 description=request.data.get('notes', ''),
-                iva_type=iva_type
+                iva_type=iva_type,
+                is_third_party_service=is_third_party_service
             )
-            
+
             # Set current user for signal
             charge._current_user = request.user
 
-            return Response({
+            response_data = {
                 'id': charge.id,
+                'charge_id': charge.id,
                 'message': 'Cargo agregado exitosamente'
-            }, status=status.HTTP_201_CREATED)
+            }
+
+            # AUDITORÍA #4: Incluir advertencia si existe
+            if warning_message:
+                response_data['warning'] = warning_message
+                response_data['has_existing_invoices'] = True
+
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
         except Service.DoesNotExist:
             return Response(
@@ -354,12 +391,15 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         try:
             charge = OrderCharge.objects.get(id=charge_id, service_order=order)
 
-            # Verificar que el cargo no esté facturado
-            if charge.invoice_id:
-                return Response(
-                    {'error': 'No se puede editar un cargo que ya está facturado'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Verificar que el cargo sea editable (Permitir si es pre-factura sin DTE)
+            if charge.invoice:
+                if charge.invoice.is_dte_issued:
+                    return Response(
+                        {'error': 'No se puede editar un cargo que pertenece a una factura con DTE emitido'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Si tiene factura pero no DTE, permitimos editar y se recalculará automáticamente
+                # gracias al signal o lógica de guardado
 
             # Validar y convertir valores numéricos
             from decimal import Decimal
@@ -375,7 +415,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
             # Validar iva_type
             iva_type = request.data.get('iva_type', charge.iva_type)
-            if iva_type not in ['gravado', 'no_sujeto']:
+            if iva_type not in ['gravado', 'exento', 'no_sujeto']:
                 iva_type = 'gravado'
 
             # Actualizar campos
@@ -546,10 +586,10 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         ws.title = "Órdenes de Servicio"
 
         # Estilos profesionales - Diseño GPRO
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=10)
-        title_font = Font(size=16, bold=True, color="1F4E79")
-        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -653,12 +693,13 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         - Facturas emitidas (Invoice.pdf_file, Invoice.dte_file)
         - Comprobantes de pago de clientes (InvoicePayment.receipt_file)
         - Notas de crédito a clientes (CreditNote.pdf_file)
+        - Costos directos (ProviderInvoice.invoice_file)
         - Facturas de proveedores (Transfer.invoice_file)
         - Comprobantes de pago a proveedores (TransferPayment.proof_file)
         - Notas de crédito de proveedores (ProviderCreditNote.pdf_file)
         """
         from .models import Invoice, InvoicePayment, CreditNote
-        from apps.transfers.models import Transfer, TransferPayment, ProviderCreditNote
+        from apps.transfers.models import Transfer, TransferPayment, ProviderCreditNote, ProviderInvoice
         
         order = self.get_object()
         documents = []
@@ -768,7 +809,29 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                         'source_id': cn.id,
                     })
         
-        # 5. Facturas de proveedores / Gastos (Transfer)
+        # 5. Costos Directos (ProviderInvoice)
+        provider_invoices = ProviderInvoice.objects.filter(service_order=order, is_deleted=False)
+        for pi in provider_invoices:
+            if pi.invoice_file:
+                documents.append({
+                    'id': f'pi_{pi.id}',
+                    'category': 'costo_directo',
+                    'category_label': 'Costos Directos',
+                    'subcategory': 'Factura de Proveedor',
+                    'file_url': pi.invoice_file.url,
+                    'file_name': pi.invoice_file.name.split('/')[-1] if pi.invoice_file else None,
+                    'description': f'Costo Directo - {pi.invoice_number}',
+                    'reference': pi.invoice_number,
+                    'reference_label': f'Factura {pi.invoice_number} - {pi.provider.name if pi.provider else "Sin proveedor"}',
+                    'uploaded_by': pi.created_by.get_full_name() if pi.created_by else None,
+                    'uploaded_at': pi.created_at.isoformat() if pi.created_at else None,
+                    'amount': float(pi.total_amount),
+                    'deletable': False,
+                    'source_model': 'ProviderInvoice',
+                    'source_id': pi.id,
+                })
+        
+        # 6. Facturas de proveedores / Gastos (Transfer)
         transfers = Transfer.objects.filter(service_order=order, is_deleted=False)
         for tr in transfers:
             if tr.invoice_file:
@@ -790,7 +853,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                     'source_id': tr.id,
                 })
             
-            # 6. Comprobantes de pago a proveedores (TransferPayment)
+            # 7. Comprobantes de pago a proveedores (TransferPayment)
             for tp in tr.payments.filter(is_deleted=False):
                 if tp.proof_file:
                     documents.append({
@@ -811,7 +874,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                         'source_id': tp.id,
                     })
 
-            # 7. Notas de crédito de proveedores vinculadas a este Transfer
+            # 8. Notas de crédito de proveedores vinculadas a este Transfer
             # Se buscan NC que tengan este transfer como original_transfer
             provider_credit_notes = ProviderCreditNote.objects.filter(
                 original_transfer=tr,

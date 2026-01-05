@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from apps.orders.models import ServiceOrder, Invoice
 from apps.transfers.models import Transfer
 from datetime import datetime, timedelta
+from django.utils import timezone
 from django.db.models import Q
 from apps.users.permissions import IsOperativo
 
@@ -14,7 +15,8 @@ class AlertsView(APIView):
     permission_classes = [IsOperativo]
 
     def get(self, request):
-        today = datetime.now().date()
+        today = timezone.localdate()
+        now = timezone.now()
         alerts = []
 
         # === 1. ALERTAS OPERATIVAS (LOGÍSTICA) ===
@@ -62,7 +64,7 @@ class AlertsView(APIView):
         # Cierre Pendiente (Finalizada hace > 7 días pero no cerrada)
         closure_pending = ServiceOrder.objects.filter(
             status='finalizada',
-            updated_at__lte=datetime.now() - timedelta(days=7)
+            updated_at__lte=now - timedelta(days=7)
         ).exclude(status='cerrada').select_related('client')
 
         for os in closure_pending:
@@ -77,15 +79,36 @@ class AlertsView(APIView):
                 'date': os.updated_at.date()
             })
 
+        # OS con más de 30 días sin cerrar (cualquier estado distinto de cerrada)
+        stale_orders = ServiceOrder.objects.filter(
+            created_at__lte=now - timedelta(days=30)
+        ).exclude(status='cerrada').select_related('client')
+
+        for os in stale_orders:
+            days_open = (today - os.created_at.date()).days
+            alerts.append({
+                'id': f'stale_os_{os.id}',
+                'severity': 'warning',
+                'type': 'stale_order',
+                'message': f"OS-{os.order_number}: Creada hace {days_open} días y sigue abierta",
+                'client': os.client.name,
+                'order': os.order_number,
+                'link': f"/service-orders/{os.id}",
+                'date': os.created_at.date()
+            })
+
         # === 2. ALERTAS FINANCIERAS (CXC) ===
 
         # Facturas Vencidas
         overdue_invoices = Invoice.objects.filter(
-            status='overdue'
+            Q(status='overdue') |
+            (Q(balance__gt=0) & Q(due_date__lt=today) & ~Q(status__in=['paid', 'cancelled']))
         ).select_related('service_order__client')
 
         for inv in overdue_invoices:
             days = inv.days_overdue()
+            if not days and inv.due_date:
+                days = max((today - inv.due_date).days, 0)
             alerts.append({
                 'id': f'cxc_overdue_{inv.id}',
                 'severity': 'high',

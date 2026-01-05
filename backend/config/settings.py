@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'apps.orders',
     'apps.transfers',
     'apps.dashboard',
+    'apps.petty_cash',
 ]
 
 MIDDLEWARE = [

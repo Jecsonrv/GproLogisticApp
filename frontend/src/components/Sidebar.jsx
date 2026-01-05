@@ -13,6 +13,7 @@ import {
     ShieldCheck,
     X,
     Boxes,
+    Wallet,
 } from "lucide-react";
 
 /**
@@ -55,6 +56,12 @@ const menuSections = [
     {
         title: "FINANZAS",
         items: [
+            {
+                name: "Caja Chica",
+                path: "/petty-cash",
+                icon: Wallet,
+                module: "dashboard", // Temporalmente accesible para todos (o usar provider_payments)
+            },
             {
                 name: "Facturación y CXC",
                 path: "/invoicing",

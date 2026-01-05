@@ -39,6 +39,7 @@ import {
     SkeletonTable,
     ConfirmDialog,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
@@ -213,6 +214,7 @@ const ProviderStatements = () => {
     // UI State
     const [loading, setLoading] = useState(false);
     const [loadingStatement, setLoadingStatement] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -339,6 +341,42 @@ const ProviderStatements = () => {
             setSelectedTransfer(response.data);
         } catch (error) {
             toast.error("Error al cargar detalles");
+        }
+    };
+
+    const handleExportExcel = async (exportType = "full") => {
+        if (!selectedProvider) {
+            toast.error("Seleccione un proveedor primero");
+            return;
+        }
+
+        try {
+            setIsExporting(true);
+
+            const response = await axios.get(
+                `/catalogs/providers/${selectedProvider.id}/export_statement_excel/`,
+                {
+                    responseType: "blob",
+                    params: { year: selectedYear },
+                }
+            );
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement("a");
+            link.href = url;
+            const filename = `estado_cuenta_proveedor_${selectedProvider.name}_${selectedYear}.xlsx`;
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            toast.success("Estado de cuenta exportado exitosamente");
+        } catch (error) {
+            toast.error("Error al exportar");
+            console.error("Export error:", error);
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -874,6 +912,15 @@ const ProviderStatements = () => {
                 >
                     <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
                 </Button>
+                <ExportButton
+                    onExportAll={() => handleExportExcel("full")}
+                    isExporting={isExporting}
+                    disabled={!selectedProvider}
+                    totalCount={statement?.transfers?.length || 0}
+                    allLabel="Estado de Cuenta"
+                    allDescription={`Exportar movimientos del año ${selectedYear}`}
+                    className="ml-2"
+                />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

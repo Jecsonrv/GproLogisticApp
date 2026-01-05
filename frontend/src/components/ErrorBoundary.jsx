@@ -70,7 +70,7 @@ class ErrorBoundary extends React.Component {
                             </div>
 
                             {/* Detalles Técnicos (Solo Desarrollo) - Estilo Terminal */}
-                            {process.env.NODE_ENV === "development" && this.state.error && (
+                            {import.meta.env.MODE === "development" && this.state.error && (
                                 <div className="mb-6 bg-gray-900 rounded-md overflow-hidden text-left">
                                     <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
                                         <span className="text-xs text-gray-400 font-mono uppercase tracking-wider">Stack Trace</span>

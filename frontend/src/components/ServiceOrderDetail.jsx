@@ -11,6 +11,8 @@ import {
     Edit,
     FileCheck,
     Check,
+    Package,
+    Receipt,
 } from "lucide-react";
 import {
     Badge,
@@ -28,6 +30,7 @@ import ProviderPaymentsTab from "./ProviderPaymentsTab";
 import DocumentsTabUnified from "./DocumentsTabUnified";
 import HistoryTab from "./HistoryTab";
 import ExpenseCalculatorTab from "./ExpenseCalculatorTab";
+import CostsTab from "./CostsTab";
 import BillingWizard from "./BillingWizard";
 import api from "../lib/axios";
 import axios from "axios";
@@ -48,6 +51,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const [services, setServices] = useState([]);
     const [providers, setProviders] = useState([]);
     const [clientPrices, setClientPrices] = useState([]);
+    const [providerInvoices, setProviderInvoices] = useState([]); // Costos directos disponibles
 
     // Charges
     const [charges, setCharges] = useState([]);
@@ -59,6 +63,11 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         discount: "",
         notes: "",
         iva_type: "gravado", // Por defecto gravado (13% IVA)
+        is_third_party_service: false, // Servicio tercerizado
+        provider_invoice_id: "", // Factura de proveedor asociada
+        // Campos para cálculo de margen en servicios tercerizados
+        cost_amount: "", // Monto del costo base
+        margin_percentage: "",
     });
 
     // Edición de cargos
@@ -80,31 +89,57 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         id: null,
     });
 
+    // Confirm Close Dialog
+    const [confirmCloseDialog, setConfirmCloseDialog] = useState({
+        open: false,
+        newStatus: null,
+    });
+
     const STATUS_OPTIONS = [
-        { id: 'pendiente', name: 'Pendiente' },
-        { id: 'en_transito', name: 'En Tránsito' },
-        { id: 'en_puerto', name: 'En Puerto' },
-        { id: 'en_almacen', name: 'En Almacenadora' },
-        { id: 'finalizada', name: 'Finalizada' },
-        { id: 'cerrada', name: 'Cerrada' },
+        { id: "pendiente", name: "Pendiente" },
+        { id: "en_transito", name: "En Tránsito" },
+        { id: "en_puerto", name: "En Puerto" },
+        { id: "en_almacen", name: "En Almacenadora" },
+        { id: "finalizada", name: "Finalizada" },
+        { id: "cerrada", name: "Cerrada" },
     ];
 
     const handleStatusChange = async (newStatus) => {
+        // Si se está cerrando la orden, mostrar confirmación
+        if (newStatus === "cerrada" && order.status !== "cerrada") {
+            setConfirmCloseDialog({ open: true, newStatus });
+            return;
+        }
+
+        // Proceder con el cambio de estado normal
+        await executeStatusChange(newStatus);
+    };
+
+    const executeStatusChange = async (newStatus) => {
         try {
             // Optimistic update
             const oldStatus = order.status;
             setOrder({ ...order, status: newStatus });
 
             await api.patch(`/orders/service-orders/${orderId}/`, {
-                status: newStatus
+                status: newStatus,
             });
 
-            toast.success(`Estado actualizado a: ${STATUS_OPTIONS.find(s => s.id === newStatus)?.name}`);
+            toast.success(
+                `Estado actualizado a: ${
+                    STATUS_OPTIONS.find((s) => s.id === newStatus)?.name
+                }`
+            );
             if (onUpdate) onUpdate();
         } catch (error) {
             // El interceptor ya maneja el error
             fetchOrderDetail(false); // Revert on error
         }
+    };
+
+    const confirmClose = async () => {
+        await executeStatusChange(confirmCloseDialog.newStatus);
+        setConfirmCloseDialog({ open: false, newStatus: null });
     };
 
     useEffect(() => {
@@ -113,6 +148,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(true, controller.signal);
             fetchServices(controller.signal);
             fetchProviders(controller.signal);
+            fetchProviderInvoices(controller.signal);
         }
         return () => controller.abort();
     }, [orderId]);
@@ -146,11 +182,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const fetchServices = async (signal) => {
         try {
-            const response = await api.get("/catalogs/services/activos/", { signal });
+            const response = await api.get("/catalogs/services/activos/", {
+                signal,
+            });
             setServices(response.data);
         } catch (error) {
             if (!axios.isCancel(error)) {
-                 // Silencioso para catálogos secundarios
+                // Silencioso para catálogos secundarios
             }
         }
     };
@@ -160,9 +198,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             const response = await api.get("/catalogs/providers/", { signal });
             setProviders(response.data);
         } catch (error) {
-             if (!axios.isCancel(error)) {
+            if (!axios.isCancel(error)) {
                 // Silencioso para catálogos secundarios
-             }
+            }
+        }
+    };
+
+    const fetchProviderInvoices = async (signal) => {
+        try {
+            const response = await api.get(
+                `/transfers/provider-invoices/by_service_order/?service_order=${orderId}`,
+                { signal }
+            );
+            setProviderInvoices(response.data || []);
+        } catch (error) {
+            if (!axios.isCancel(error)) {
+                // Silencioso - facturas de proveedor son opcionales
+            }
         }
     };
 
@@ -186,14 +238,121 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             return;
         }
 
+        // Validar que si es tercerizado, debe tener factura asociada
+        if (
+            chargeForm.is_third_party_service &&
+            !chargeForm.provider_invoice_id
+        ) {
+            toast.error(
+                "Seleccione una factura de proveedor para el servicio tercerizado"
+            );
+            return;
+        }
+
+        // Validaciones específicas para servicios tercerizados
+        if (chargeForm.is_third_party_service) {
+            const costAmount = parseFloat(chargeForm.cost_amount);
+            const quantity = parseInt(chargeForm.quantity) || 1;
+            const marginPercent = parseFloat(chargeForm.margin_percentage);
+
+            if (!costAmount || costAmount <= 0) {
+                toast.error("Ingrese el costo base del servicio tercerizado");
+                return;
+            }
+
+            if (
+                marginPercent === null ||
+                marginPercent === undefined ||
+                marginPercent === ""
+            ) {
+                toast.error("Ingrese el porcentaje de margen");
+                return;
+            }
+
+            // Validar que el costo total no exceda el disponible
+            const selectedInvoice = providerInvoices.find(
+                (inv) => inv.id === chargeForm.provider_invoice_id
+            );
+            const totalCost = costAmount * quantity;
+
+            if (
+                selectedInvoice &&
+                totalCost > parseFloat(selectedInvoice.unallocated_amount)
+            ) {
+                toast.error(
+                    `El costo total (${formatCurrency(
+                        totalCost
+                    )}) excede el monto disponible de la factura (${formatCurrency(
+                        selectedInvoice.unallocated_amount
+                    )})`
+                );
+                return;
+            }
+
+            // Calcular precio de venta automáticamente
+            const calculatedUnitPrice = costAmount * (1 + marginPercent / 100);
+            chargeForm.unit_price = calculatedUnitPrice.toFixed(2);
+        }
+
         try {
-            await api.post(`/orders/service-orders/${orderId}/add_charge/`, {
+            const payload = {
                 ...chargeForm,
                 discount: parseFloat(chargeForm.discount || 0),
-            });
+                is_third_party_service: chargeForm.is_third_party_service,
+            };
+
+            // Agregar el cargo
+            const response = await api.post(
+                `/orders/service-orders/${orderId}/add_charge/`,
+                payload
+            );
+
+            // Si es tercerizado y hay factura, crear la asignacion de costo
+            if (
+                chargeForm.is_third_party_service &&
+                chargeForm.provider_invoice_id &&
+                response.data?.charge_id
+            ) {
+                try {
+                    const allocResponse = await api.post(
+                        `/transfers/provider-invoices/${chargeForm.provider_invoice_id}/allocate_cost/`,
+                        {
+                            order_charge_id: response.data.charge_id,
+                            cost_amount:
+                                parseFloat(chargeForm.cost_amount) *
+                                parseInt(chargeForm.quantity || 1),
+                            description: `Costo tercerizado - ${
+                                chargeForm.notes || ""
+                            }`.trim(),
+                        }
+                    );
+
+                    // Mostrar warning si existe
+                    if (allocResponse.data?.warning) {
+                        toast(allocResponse.data.warning, {
+                            icon: "⚠️",
+                            duration: 6000,
+                            style: {
+                                background: "#fef3c7",
+                                color: "#92400e",
+                                border: "1px solid #fbbf24",
+                            },
+                        });
+                    }
+                } catch (allocError) {
+                    // Si falla la asignacion, al menos el cargo se creo
+                    console.warn(
+                        "No se pudo vincular automaticamente al costo directo:",
+                        allocError
+                    );
+                }
+            }
+
             toast.success("Cargo agregado exitosamente");
             fetchOrderDetail(false);
+            fetchProviderInvoices(); // Refrescar facturas
             setIsAddingCharge(false);
+            resetChargeForm();
         } catch (error) {
             // El interceptor ya maneja el error
         }
@@ -211,6 +370,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             await api.delete(`/orders/charges/${id}/`);
             toast.success("Cargo eliminado exitosamente");
             fetchOrderDetail(false);
+            fetchProviderInvoices(); // Refrescar facturas disponibles
             if (onUpdate) onUpdate(); // Update parent list totals
         } catch (error) {
             // El interceptor ya maneja el error
@@ -222,9 +382,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             service: "",
             quantity: 1,
             unit_price: "",
+            cost_amount: "",
+            margin_percentage: "",
             discount: "",
             notes: "",
-            iva_type: order?.client_type === "internacional" ? "no_sujeto" : "gravado",
+            iva_type:
+                order?.client_type === "internacional"
+                    ? "no_sujeto"
+                    : "gravado",
+            is_third_party_service: false,
+            provider_invoice_id: "",
         });
     };
 
@@ -289,8 +456,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const tabs = [
         { id: "info", name: "Info General", icon: FileText },
-        { id: "charges", name: "Calculadora de Servicios", icon: DollarSign },
-        { id: "expenses", name: "Costos de la Orden", icon: Truck },
+        { id: "charges", name: "Servicios", icon: DollarSign },
+        { id: "costs", name: "Costos de la Orden", icon: Truck },
         { id: "documents", name: "Documentos", icon: Folder },
         { id: "history", name: "Historial", icon: Clock },
     ];
@@ -336,32 +503,41 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 </div>
                 <div className="flex flex-col items-end gap-2 w-full md:w-auto">
                     <div className="text-right w-full md:w-auto flex justify-between md:block items-center">
-                        <div className="text-sm text-slate-500 md:mb-1">Total</div>
+                        <div className="text-sm text-slate-500 md:mb-1">
+                            Total
+                        </div>
                         <div className="text-2xl sm:text-3xl font-bold text-slate-900">
                             {formatCurrency(order.total_amount || 0)}
                         </div>
                     </div>
-                    {onEdit && ['pendiente', 'en_transito', 'en_puerto', 'en_almacen', 'finalizada'].includes(order.status) && (
-                        <div className="flex flex-wrap justify-end gap-2 mt-1 w-full">
-                            <Button
-                                size="sm"
-                                onClick={() => setShowBillingWizard(true)}
-                                className="bg-slate-900 hover:bg-slate-800 text-white flex-1 sm:flex-none justify-center"
-                            >
-                                <DollarSign className="w-4 h-4 mr-2" />
-                                Generar Factura
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onEdit(order)}
-                                className="border-slate-300 text-slate-700 hover:bg-slate-50 flex-1 sm:flex-none justify-center"
-                            >
-                                <Edit className="w-4 h-4 mr-2" />
-                                Editar Orden
-                            </Button>
-                        </div>
-                    )}
+                    {onEdit &&
+                        [
+                            "pendiente",
+                            "en_transito",
+                            "en_puerto",
+                            "en_almacen",
+                            "finalizada",
+                        ].includes(order.status) && (
+                            <div className="flex flex-wrap justify-end gap-2 mt-1 w-full">
+                                <Button
+                                    size="sm"
+                                    onClick={() => setShowBillingWizard(true)}
+                                    className="bg-slate-900 hover:bg-slate-800 text-white flex-1 sm:flex-none justify-center"
+                                >
+                                    <DollarSign className="w-4 h-4 mr-2" />
+                                    Generar Factura
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onEdit(order)}
+                                    className="border-slate-300 text-slate-700 hover:bg-slate-50 flex-1 sm:flex-none justify-center"
+                                >
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Editar Orden
+                                </Button>
+                            </div>
+                        )}
                 </div>
             </div>
 
@@ -575,8 +751,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? (order.fiscal_summary?.services?.total_con_iva ?? order.total_services ?? 0)
-                                                    : (order.fiscal_summary?.services?.subtotal_neto ?? order.total_services ?? 0)
+                                                    ? order.fiscal_summary
+                                                          ?.services
+                                                          ?.total_con_iva ??
+                                                          order.total_services ??
+                                                          0
+                                                    : order.fiscal_summary
+                                                          ?.services
+                                                          ?.subtotal_neto ??
+                                                          order.total_services ??
+                                                          0
                                             )}
                                         </div>
                                     </div>
@@ -590,8 +774,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? (order.fiscal_summary?.third_party?.total_con_iva ?? order.total_third_party ?? 0)
-                                                    : (order.fiscal_summary?.third_party?.subtotal_neto ?? order.total_third_party ?? 0)
+                                                    ? order.fiscal_summary
+                                                          ?.third_party
+                                                          ?.total_con_iva ??
+                                                          order.total_third_party ??
+                                                          0
+                                                    : order.fiscal_summary
+                                                          ?.third_party
+                                                          ?.subtotal_neto ??
+                                                          order.total_third_party ??
+                                                          0
                                             )}
                                         </div>
                                     </div>
@@ -605,18 +797,32 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-white mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? (order.fiscal_summary?.consolidated?.total_con_iva ?? order.total_amount ?? 0)
-                                                    : (order.fiscal_summary?.consolidated?.subtotal_neto ?? order.total_amount ?? 0)
+                                                    ? order.fiscal_summary
+                                                          ?.consolidated
+                                                          ?.total_con_iva ??
+                                                          order.total_amount ??
+                                                          0
+                                                    : order.fiscal_summary
+                                                          ?.consolidated
+                                                          ?.subtotal_neto ??
+                                                          order.total_amount ??
+                                                          0
                                             )}
                                         </div>
                                     </div>
                                 </div>
                                 {/* Desglose de IVA cuando se muestra Con IVA */}
-                                {showWithIva && order.fiscal_summary?.consolidated?.iva_total > 0 && (
-                                    <div className="mt-2 sm:mt-3 text-right text-xs sm:text-sm text-slate-500">
-                                        IVA incluido: {formatCurrency(order.fiscal_summary.consolidated.iva_total)}
-                                    </div>
-                                )}
+                                {showWithIva &&
+                                    order.fiscal_summary?.consolidated
+                                        ?.iva_total > 0 && (
+                                        <div className="mt-2 sm:mt-3 text-right text-xs sm:text-sm text-slate-500">
+                                            IVA incluido:{" "}
+                                            {formatCurrency(
+                                                order.fiscal_summary
+                                                    .consolidated.iva_total
+                                            )}
+                                        </div>
+                                    )}
                             </div>
                         </CardContent>
                     </Card>
@@ -702,10 +908,15 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
                                                         // Determinar Tratamiento Fiscal (Prioridad: Personalizado > General)
                                                         // SI ES INTERNACIONAL -> SIEMPRE DEFAULT A NO SUJETO
-                                                        let defaultIvaType = "gravado";
+                                                        let defaultIvaType =
+                                                            "gravado";
 
-                                                        if (order?.client_type === "internacional") {
-                                                            defaultIvaType = "no_sujeto";
+                                                        if (
+                                                            order?.client_type ===
+                                                            "internacional"
+                                                        ) {
+                                                            defaultIvaType =
+                                                                "no_sujeto";
                                                         } else if (
                                                             customPrice &&
                                                             customPrice.iva_type
@@ -785,9 +996,17 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     step="1"
                                                     value={chargeForm.quantity}
                                                     onChange={(e) => {
-                                                        const val = e.target.value;
+                                                        const val =
+                                                            e.target.value;
                                                         // Solo permitir enteros positivos
-                                                        if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
+                                                        if (
+                                                            val === "" ||
+                                                            (/^\d+$/.test(
+                                                                val
+                                                            ) &&
+                                                                parseInt(val) >
+                                                                    0)
+                                                        ) {
                                                             setChargeForm({
                                                                 ...chargeForm,
                                                                 quantity: val,
@@ -803,6 +1022,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             <div>
                                                 <Label className="mb-2 block">
                                                     Precio Unitario (Sin IVA)
+                                                    {chargeForm.is_third_party_service && (
+                                                        <span className="ml-2 text-xs font-normal text-slate-500 italic">
+                                                            Calculado
+                                                            automáticamente
+                                                        </span>
+                                                    )}
                                                 </Label>
                                                 <div className="relative">
                                                     <span className="absolute left-3 top-2 text-slate-500">
@@ -814,20 +1039,73 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         step="0.01"
                                                         min="0.01"
                                                         value={
-                                                            chargeForm.unit_price
+                                                            chargeForm.is_third_party_service
+                                                                ? (() => {
+                                                                      const cost =
+                                                                          parseFloat(
+                                                                              chargeForm.cost_amount
+                                                                          ) ||
+                                                                          0;
+                                                                      const margin =
+                                                                          parseFloat(
+                                                                              chargeForm.margin_percentage
+                                                                          ) ||
+                                                                          0;
+                                                                      return cost >
+                                                                          0
+                                                                          ? (
+                                                                                cost *
+                                                                                (1 +
+                                                                                    margin /
+                                                                                        100)
+                                                                            ).toFixed(
+                                                                                2
+                                                                            )
+                                                                          : "";
+                                                                  })()
+                                                                : chargeForm.unit_price
                                                         }
                                                         onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            if (val === '' || parseFloat(val) >= 0) {
-                                                                setChargeForm({
-                                                                    ...chargeForm,
-                                                                    unit_price: val,
-                                                                })
+                                                            if (
+                                                                !chargeForm.is_third_party_service
+                                                            ) {
+                                                                const val =
+                                                                    e.target
+                                                                        .value;
+                                                                if (
+                                                                    val ===
+                                                                        "" ||
+                                                                    parseFloat(
+                                                                        val
+                                                                    ) >= 0
+                                                                ) {
+                                                                    setChargeForm(
+                                                                        {
+                                                                            ...chargeForm,
+                                                                            unit_price:
+                                                                                val,
+                                                                        }
+                                                                    );
+                                                                }
                                                             }
                                                         }}
+                                                        disabled={
+                                                            chargeForm.is_third_party_service
+                                                        }
                                                         required
+                                                        placeholder={
+                                                            chargeForm.is_third_party_service
+                                                                ? "Se calcula con margen"
+                                                                : "0.00"
+                                                        }
                                                     />
                                                 </div>
+                                                {chargeForm.is_third_party_service && (
+                                                    <p className="text-xs text-slate-500 mt-1">
+                                                        Basado en costo + margen
+                                                        configurado
+                                                    </p>
+                                                )}
                                             </div>
                                             <div>
                                                 <Label className="mb-2 block">
@@ -841,10 +1119,15 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     placeholder="0.00"
                                                     value={chargeForm.discount}
                                                     onChange={(e) => {
-                                                        const val = e.target.value;
+                                                        const val =
+                                                            e.target.value;
                                                         if (
                                                             val === "" ||
-                                                            (parseFloat(val) >= 0 && parseFloat(val) <= 100)
+                                                            (parseFloat(val) >=
+                                                                0 &&
+                                                                parseFloat(
+                                                                    val
+                                                                ) <= 100)
                                                         ) {
                                                             setChargeForm({
                                                                 ...chargeForm,
@@ -894,6 +1177,472 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                     ? "Se aplicará IVA del 13% sobre el precio"
                                                     : "No se aplicará IVA (fuera del ámbito de aplicación)"}
                                             </p>
+                                        </div>
+
+                                        {/* Checkbox Servicio Tercerizado */}
+                                        <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    id="is_third_party_service"
+                                                    checked={
+                                                        chargeForm.is_third_party_service
+                                                    }
+                                                    onChange={(e) =>
+                                                        setChargeForm({
+                                                            ...chargeForm,
+                                                            is_third_party_service:
+                                                                e.target
+                                                                    .checked,
+                                                            provider_invoice_id:
+                                                                e.target.checked
+                                                                    ? chargeForm.provider_invoice_id
+                                                                    : "",
+                                                            cost_amount: "",
+                                                            margin_percentage:
+                                                                "",
+                                                            unit_price: e.target
+                                                                .checked
+                                                                ? ""
+                                                                : chargeForm.unit_price,
+                                                        })
+                                                    }
+                                                    className="w-4 h-4 text-slate-900 border-slate-300 rounded focus:ring-slate-500"
+                                                />
+                                                <div>
+                                                    <Label
+                                                        htmlFor="is_third_party_service"
+                                                        className="font-medium text-slate-800 cursor-pointer"
+                                                    >
+                                                        Servicio Tercerizado
+                                                    </Label>
+                                                    <p className="text-xs text-slate-500">
+                                                        Servicio prestado por
+                                                        proveedor externo con
+                                                        costo directo
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Selector de Factura de Proveedor + Calculadora de Margen */}
+                                            {chargeForm.is_third_party_service &&
+                                                (() => {
+                                                    const availableInvoices =
+                                                        providerInvoices.filter(
+                                                            (inv) =>
+                                                                parseFloat(
+                                                                    inv.unallocated_amount
+                                                                ) > 0
+                                                        );
+
+                                                    // Obtener factura seleccionada
+                                                    const selectedInvoice =
+                                                        availableInvoices.find(
+                                                            (inv) =>
+                                                                inv.id ===
+                                                                chargeForm.provider_invoice_id
+                                                        );
+
+                                                    // Cálculos automáticos
+                                                    const costAmount =
+                                                        parseFloat(
+                                                            chargeForm.cost_amount
+                                                        ) || 0;
+                                                    const marginPercent =
+                                                        parseFloat(
+                                                            chargeForm.margin_percentage
+                                                        ) || 0;
+                                                    const calculatedPrice =
+                                                        costAmount > 0
+                                                            ? costAmount *
+                                                              (1 +
+                                                                  marginPercent /
+                                                                      100)
+                                                            : 0;
+                                                    const quantity =
+                                                        parseInt(
+                                                            chargeForm.quantity
+                                                        ) || 1;
+                                                    const subtotal =
+                                                        calculatedPrice *
+                                                        quantity;
+                                                    const ivaAmount =
+                                                        chargeForm.iva_type ===
+                                                        "gravado"
+                                                            ? subtotal * 0.13
+                                                            : 0;
+                                                    const totalWithIva =
+                                                        subtotal + ivaAmount;
+                                                    const profit =
+                                                        subtotal -
+                                                        costAmount * quantity;
+
+                                                    return (
+                                                        <div className="mt-4 pt-4 border-t border-slate-200 space-y-4">
+                                                            {/* Selector de Factura */}
+                                                            <div>
+                                                                <Label className="mb-2 block text-sm font-medium text-slate-700">
+                                                                    Factura de
+                                                                    Proveedor
+                                                                    (Costo
+                                                                    Directo){" "}
+                                                                    <span className="text-red-600">
+                                                                        *
+                                                                    </span>
+                                                                </Label>
+                                                                {availableInvoices.length >
+                                                                0 ? (
+                                                                    <Select
+                                                                        value={
+                                                                            chargeForm.provider_invoice_id
+                                                                        }
+                                                                        onChange={(
+                                                                            value
+                                                                        ) => {
+                                                                            const invoice =
+                                                                                availableInvoices.find(
+                                                                                    (
+                                                                                        inv
+                                                                                    ) =>
+                                                                                        inv.id ===
+                                                                                        value
+                                                                                );
+                                                                            setChargeForm(
+                                                                                {
+                                                                                    ...chargeForm,
+                                                                                    provider_invoice_id:
+                                                                                        value,
+                                                                                    // Sugerir el monto disponible como costo inicial
+                                                                                    cost_amount:
+                                                                                        invoice
+                                                                                            ? invoice.unallocated_amount
+                                                                                            : "",
+                                                                                }
+                                                                            );
+                                                                        }}
+                                                                        options={
+                                                                            availableInvoices
+                                                                        }
+                                                                        getOptionLabel={(
+                                                                            opt
+                                                                        ) =>
+                                                                            `${
+                                                                                opt.invoice_number
+                                                                            } - ${
+                                                                                opt.provider_name
+                                                                            } (Disp: ${formatCurrency(
+                                                                                opt.unallocated_amount
+                                                                            )})`
+                                                                        }
+                                                                        getOptionValue={(
+                                                                            opt
+                                                                        ) =>
+                                                                            opt.id
+                                                                        }
+                                                                        placeholder="Seleccione factura..."
+                                                                    />
+                                                                ) : (
+                                                                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                                                        <p className="text-sm text-slate-600">
+                                                                            Sin
+                                                                            facturas
+                                                                            disponibles
+                                                                        </p>
+                                                                        <p className="text-xs text-slate-500 mt-1">
+                                                                            Registre
+                                                                            un
+                                                                            costo
+                                                                            directo
+                                                                            en
+                                                                            la
+                                                                            pestaña
+                                                                            "Costos
+                                                                            de
+                                                                            la
+                                                                            Orden".
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Calculadora de Margen */}
+                                                            {chargeForm.provider_invoice_id && (
+                                                                <div className="space-y-3 bg-white rounded-lg p-4 border border-slate-200">
+                                                                    <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                                                                        <DollarSign className="w-4 h-4 text-slate-600" />
+                                                                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                                                            Calculadora
+                                                                            de
+                                                                            Margen
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {/* Monto de Costo y Margen */}
+                                                                    <div className="grid grid-cols-2 gap-3">
+                                                                        <div>
+                                                                            <Label className="mb-1.5 block text-xs">
+                                                                                Costo
+                                                                                Base
+                                                                                (Unitario)
+                                                                            </Label>
+                                                                            <div className="relative">
+                                                                                <span className="absolute left-3 top-2 text-slate-500 text-sm">
+                                                                                    $
+                                                                                </span>
+                                                                                <Input
+                                                                                    className="pl-7"
+                                                                                    type="number"
+                                                                                    step="0.01"
+                                                                                    min="0.01"
+                                                                                    max={
+                                                                                        selectedInvoice?.unallocated_amount
+                                                                                    }
+                                                                                    value={
+                                                                                        chargeForm.cost_amount
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e
+                                                                                    ) => {
+                                                                                        const val =
+                                                                                            e
+                                                                                                .target
+                                                                                                .value;
+                                                                                        if (
+                                                                                            val ===
+                                                                                                "" ||
+                                                                                            parseFloat(
+                                                                                                val
+                                                                                            ) >=
+                                                                                                0
+                                                                                        ) {
+                                                                                            setChargeForm(
+                                                                                                {
+                                                                                                    ...chargeForm,
+                                                                                                    cost_amount:
+                                                                                                        val,
+                                                                                                }
+                                                                                            );
+                                                                                        }
+                                                                                    }}
+                                                                                    placeholder="0.00"
+                                                                                    required
+                                                                                />
+                                                                            </div>
+                                                                            {selectedInvoice && (
+                                                                                <p className="text-xs text-slate-500 mt-1">
+                                                                                    Disponible:{" "}
+                                                                                    {formatCurrency(
+                                                                                        selectedInvoice.unallocated_amount
+                                                                                    )}
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            <Label className="mb-1.5 block text-xs">
+                                                                                Margen
+                                                                                de
+                                                                                Ganancia
+                                                                                (%)
+                                                                            </Label>
+                                                                            <Input
+                                                                                type="number"
+                                                                                step="0.1"
+                                                                                min="0"
+                                                                                max="1000"
+                                                                                value={
+                                                                                    chargeForm.margin_percentage
+                                                                                }
+                                                                                onChange={(
+                                                                                    e
+                                                                                ) => {
+                                                                                    const val =
+                                                                                        e
+                                                                                            .target
+                                                                                            .value;
+                                                                                    if (
+                                                                                        val ===
+                                                                                            "" ||
+                                                                                        parseFloat(
+                                                                                            val
+                                                                                        ) >=
+                                                                                            0
+                                                                                    ) {
+                                                                                        setChargeForm(
+                                                                                            {
+                                                                                                ...chargeForm,
+                                                                                                margin_percentage:
+                                                                                                    val,
+                                                                                            }
+                                                                                        );
+                                                                                    }
+                                                                                }}
+                                                                                placeholder="20"
+                                                                                required
+                                                                            />
+                                                                            <p className="text-xs text-slate-500 mt-1">
+                                                                                Ej:
+                                                                                20
+                                                                                =
+                                                                                20%
+                                                                                sobre
+                                                                                costo
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Vista Previa de Cálculos */}
+                                                                    {costAmount >
+                                                                        0 && (
+                                                                        <div className="pt-3 border-t border-slate-200 space-y-2">
+                                                                            <div className="flex justify-between items-center text-sm">
+                                                                                <span className="text-slate-600">
+                                                                                    Precio
+                                                                                    Venta
+                                                                                    Unitario
+                                                                                    (sin
+                                                                                    IVA):
+                                                                                </span>
+                                                                                <span className="font-bold text-slate-900 tabular-nums">
+                                                                                    {formatCurrency(
+                                                                                        calculatedPrice
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center text-sm">
+                                                                                <span className="text-slate-600">
+                                                                                    Cantidad:
+                                                                                </span>
+                                                                                <span className="font-semibold text-slate-800 tabular-nums">
+                                                                                    x
+                                                                                    {
+                                                                                        quantity
+                                                                                    }
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-200">
+                                                                                <span className="text-slate-600">
+                                                                                    Subtotal
+                                                                                    (sin
+                                                                                    IVA):
+                                                                                </span>
+                                                                                <span className="font-bold text-slate-900 tabular-nums">
+                                                                                    {formatCurrency(
+                                                                                        subtotal
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            {chargeForm.iva_type ===
+                                                                                "gravado" && (
+                                                                                <div className="flex justify-between items-center text-xs">
+                                                                                    <span className="text-slate-500">
+                                                                                        IVA
+                                                                                        13%:
+                                                                                    </span>
+                                                                                    <span className="text-slate-700 tabular-nums">
+                                                                                        {formatCurrency(
+                                                                                            ivaAmount
+                                                                                        )}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex justify-between items-center text-sm font-bold pt-2 border-t border-slate-200">
+                                                                                <span className="text-slate-800">
+                                                                                    Total
+                                                                                    al
+                                                                                    Cliente:
+                                                                                </span>
+                                                                                <span className="text-lg text-emerald-700 tabular-nums">
+                                                                                    {formatCurrency(
+                                                                                        totalWithIva
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-200">
+                                                                                <span className="text-xs text-slate-600">
+                                                                                    Ganancia
+                                                                                    Neta:
+                                                                                </span>
+                                                                                <span
+                                                                                    className={`font-bold tabular-nums ${
+                                                                                        profit >=
+                                                                                        0
+                                                                                            ? "text-emerald-700"
+                                                                                            : "text-red-600"
+                                                                                    }`}
+                                                                                >
+                                                                                    {formatCurrency(
+                                                                                        profit
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            {/* Validaciones visuales */}
+                                                                            {costAmount *
+                                                                                quantity >
+                                                                                (selectedInvoice?.unallocated_amount ||
+                                                                                    0) && (
+                                                                                <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg mt-2">
+                                                                                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                                                                    <p className="text-xs text-red-700">
+                                                                                        <strong>
+                                                                                            Error:
+                                                                                        </strong>{" "}
+                                                                                        El
+                                                                                        costo
+                                                                                        total
+                                                                                        (
+                                                                                        {formatCurrency(
+                                                                                            costAmount *
+                                                                                                quantity
+                                                                                        )}
+
+                                                                                        )
+                                                                                        excede
+                                                                                        el
+                                                                                        monto
+                                                                                        disponible
+                                                                                        de
+                                                                                        la
+                                                                                        factura.
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+                                                                            {marginPercent <
+                                                                                0 && (
+                                                                                <div className="flex items-start gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg mt-2">
+                                                                                    <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                                                                    <p className="text-xs text-red-700">
+                                                                                        <strong>
+                                                                                            Advertencia:
+                                                                                        </strong>{" "}
+                                                                                        Margen
+                                                                                        negativo
+                                                                                        generará
+                                                                                        pérdida.
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+
+                                                                    <div className="pt-2 border-t border-slate-200">
+                                                                        <p className="text-xs text-slate-500 italic">
+                                                                            El
+                                                                            precio
+                                                                            de
+                                                                            venta
+                                                                            se
+                                                                            calculará
+                                                                            automáticamente
+                                                                            al
+                                                                            guardar.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                         </div>
 
                                         <div className="mb-4">
@@ -947,23 +1696,32 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             <table className="min-w-full divide-y divide-slate-200 text-sm">
                                                 <thead className="bg-slate-50">
                                                     <tr>
-                                                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[180px]">
+                                                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider min-w-[200px]">
                                                             Servicio
                                                         </th>
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
                                                             Cant.
                                                         </th>
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
+                                                            Costo
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
                                                             Precio
                                                         </th>
-                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-16">
-                                                            Desc.
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
+                                                            Ganancia
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">
+                                                            Margen
                                                         </th>
                                                         <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
                                                             Tipo IVA
                                                         </th>
-                                                        <th className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider w-20">
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">
                                                             IVA
+                                                        </th>
+                                                        <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
+                                                            Subtotal
                                                         </th>
                                                         <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider w-28">
                                                             Total
@@ -989,7 +1747,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 }`}
                                                             >
                                                                 <td className="px-3 py-2.5">
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
                                                                         <div
                                                                             className={`text-sm font-medium ${
                                                                                 isBilled
@@ -1004,6 +1762,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 charge.service_name
                                                                             }
                                                                         </div>
+                                                                        {charge.is_third_party_service && (
+                                                                            <Badge
+                                                                                variant="outline"
+                                                                                className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 text-slate-600 border-slate-300"
+                                                                            >
+                                                                                Tercerizado
+                                                                            </Badge>
+                                                                        )}
                                                                         {isBilled && (
                                                                             <Badge
                                                                                 variant="outline"
@@ -1042,14 +1808,28 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             onChange={(
                                                                                 e
                                                                             ) => {
-                                                                                const val = e.target.value;
-                                                                                if (val === '' || (/^\d+$/.test(val) && parseInt(val) > 0)) {
+                                                                                const val =
+                                                                                    e
+                                                                                        .target
+                                                                                        .value;
+                                                                                if (
+                                                                                    val ===
+                                                                                        "" ||
+                                                                                    (/^\d+$/.test(
+                                                                                        val
+                                                                                    ) &&
+                                                                                        parseInt(
+                                                                                            val
+                                                                                        ) >
+                                                                                            0)
+                                                                                ) {
                                                                                     setEditChargeForm(
                                                                                         {
                                                                                             ...editChargeForm,
-                                                                                            quantity: val,
+                                                                                            quantity:
+                                                                                                val,
                                                                                         }
-                                                                                    )
+                                                                                    );
                                                                                 }
                                                                             }}
                                                                             className="w-16 h-7 text-sm text-right"
@@ -1068,6 +1848,28 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </span>
                                                                     )}
                                                                 </td>
+                                                                {/* Costo */}
+                                                                <td className="px-3 py-2.5 text-right text-sm tabular-nums">
+                                                                    {charge.cost_allocation_info ? (
+                                                                        <span
+                                                                            className={
+                                                                                isBilled
+                                                                                    ? "text-slate-500"
+                                                                                    : "text-slate-700"
+                                                                            }
+                                                                        >
+                                                                            {formatCurrency(
+                                                                                charge
+                                                                                    .cost_allocation_info
+                                                                                    .cost_amount
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
                                                                 {/* Precio */}
                                                                 <td className="px-3 py-2.5 text-right text-sm">
                                                                     {editingChargeId ===
@@ -1082,14 +1884,25 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             onChange={(
                                                                                 e
                                                                             ) => {
-                                                                                const val = e.target.value;
-                                                                                if (val === '' || parseFloat(val) >= 0) {
+                                                                                const val =
+                                                                                    e
+                                                                                        .target
+                                                                                        .value;
+                                                                                if (
+                                                                                    val ===
+                                                                                        "" ||
+                                                                                    parseFloat(
+                                                                                        val
+                                                                                    ) >=
+                                                                                        0
+                                                                                ) {
                                                                                     setEditChargeForm(
                                                                                         {
                                                                                             ...editChargeForm,
-                                                                                            unit_price: val,
+                                                                                            unit_price:
+                                                                                                val,
                                                                                         }
-                                                                                    )
+                                                                                    );
                                                                                 }
                                                                             }}
                                                                             className="w-24 h-7 text-sm text-right"
@@ -1108,48 +1921,60 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </span>
                                                                     )}
                                                                 </td>
-                                                                {/* Descuento */}
-                                                                <td className="px-3 py-2.5 text-right text-sm">
-                                                                    {editingChargeId ===
-                                                                    charge.id ? (
-                                                                        <Input
-                                                                            type="number"
-                                                                            min="0"
-                                                                            max="100"
-                                                                            step="0.01"
-                                                                            value={
-                                                                                editChargeForm.discount
-                                                                            }
-                                                                            onChange={(
-                                                                                e
-                                                                            ) => {
-                                                                                const val = e.target.value;
-                                                                                if (
-                                                                                    val === "" ||
-                                                                                    (parseFloat(val) >= 0 && parseFloat(val) <= 100)
-                                                                                ) {
-                                                                                    setEditChargeForm(
-                                                                                        {
-                                                                                            ...editChargeForm,
-                                                                                            discount: val,
-                                                                                        }
-                                                                                    )
-                                                                                }
-                                                                            }}
-                                                                            className="w-16 h-7 text-sm text-right"
-                                                                        />
-                                                                    ) : (
+                                                                {/* Ganancia */}
+                                                                <td className="px-3 py-2.5 text-right text-sm tabular-nums">
+                                                                    {charge.cost_allocation_info ? (
                                                                         <span
-                                                                            className={
-                                                                                isBilled
-                                                                                    ? "text-slate-500"
-                                                                                    : "text-slate-700"
-                                                                            }
+                                                                            className={`font-medium ${
+                                                                                charge
+                                                                                    .cost_allocation_info
+                                                                                    .profit >=
+                                                                                0
+                                                                                    ? isBilled
+                                                                                        ? "text-emerald-600/70"
+                                                                                        : "text-emerald-700"
+                                                                                    : isBilled
+                                                                                    ? "text-red-600/70"
+                                                                                    : "text-red-700"
+                                                                            }`}
                                                                         >
-                                                                            {charge.discount >
-                                                                            0
-                                                                                ? `${charge.discount}%`
-                                                                                : "-"}
+                                                                            {formatCurrency(
+                                                                                charge
+                                                                                    .cost_allocation_info
+                                                                                    .profit
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                {/* Margen */}
+                                                                <td className="px-3 py-2.5 text-right text-xs tabular-nums">
+                                                                    {charge.cost_allocation_info ? (
+                                                                        <span
+                                                                            className={`${
+                                                                                charge
+                                                                                    .cost_allocation_info
+                                                                                    .margin_percentage >=
+                                                                                0
+                                                                                    ? isBilled
+                                                                                        ? "text-slate-500"
+                                                                                        : "text-slate-600"
+                                                                                    : isBilled
+                                                                                    ? "text-red-600/70"
+                                                                                    : "text-red-700"
+                                                                            }`}
+                                                                        >
+                                                                            {charge.cost_allocation_info.margin_percentage.toFixed(
+                                                                                1
+                                                                            )}
+                                                                            %
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
                                                                         </span>
                                                                     )}
                                                                 </td>
@@ -1162,6 +1987,10 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 {
                                                                                     id: "gravado",
                                                                                     name: "Gravado 13%",
+                                                                                },
+                                                                                {
+                                                                                    id: "exento",
+                                                                                    name: "Exento",
                                                                                 },
                                                                                 {
                                                                                     id: "no_sujeto",
@@ -1207,10 +2036,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             {charge.iva_type ===
                                                                             "gravado"
                                                                                 ? "Gravado 13%"
+                                                                                : charge.iva_type ===
+                                                                                  "exento"
+                                                                                ? "Exento"
                                                                                 : "No Sujeto"}
                                                                         </Badge>
                                                                     )}
                                                                 </td>
+                                                                {/* IVA */}
                                                                 <td
                                                                     className={`px-3 py-2.5 text-center text-sm tabular-nums ${
                                                                         isBilled
@@ -1230,6 +2063,19 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </span>
                                                                     )}
                                                                 </td>
+                                                                {/* Subtotal */}
+                                                                <td
+                                                                    className={`px-3 py-2.5 text-right text-sm tabular-nums ${
+                                                                        isBilled
+                                                                            ? "text-slate-500"
+                                                                            : "text-slate-700"
+                                                                    }`}
+                                                                >
+                                                                    {formatCurrency(
+                                                                        charge.amount
+                                                                    )}
+                                                                </td>
+                                                                {/* Total */}
                                                                 <td
                                                                     className={`px-3 py-2.5 text-right text-sm font-semibold tabular-nums ${
                                                                         isBilled
@@ -1346,10 +2192,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             charges
                                                                 .filter(
                                                                     (charge) =>
-                                                                        charge.iva_type === "gravado"
+                                                                        charge.iva_type ===
+                                                                        "gravado"
                                                                 )
                                                                 .reduce(
-                                                                    (sum, charge) =>
+                                                                    (
+                                                                        sum,
+                                                                        charge
+                                                                    ) =>
                                                                         sum +
                                                                         parseFloat(
                                                                             charge.amount ||
@@ -1385,7 +2235,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 <tr>
                                                                     <td
                                                                         colSpan={
-                                                                            6
+                                                                            9
                                                                         }
                                                                         className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                     >
@@ -1406,7 +2256,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 <tr>
                                                                     <td
                                                                         colSpan={
-                                                                            6
+                                                                            9
                                                                         }
                                                                         className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                     >
@@ -1423,33 +2273,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         <td></td>
                                                                     )}
                                                                 </tr>
-                                                                <tr className="border-t border-slate-200">
-                                                                    <td
-                                                                        colSpan={
-                                                                            6
-                                                                        }
-                                                                        className="px-3 py-2.5 text-right text-xs font-semibold text-slate-700"
-                                                                    >
-                                                                        Total
-                                                                        Bruto:
-                                                                    </td>
-                                                                    <td className="px-3 py-2.5 text-right font-semibold text-slate-900 text-base tabular-nums">
-                                                                        {formatCurrency(
-                                                                            totalBruto
-                                                                        )}
-                                                                    </td>
-                                                                    {order.status !==
-                                                                        "cerrada" && (
-                                                                        <td></td>
-                                                                    )}
-                                                                </tr>
                                                                 {retencion >
                                                                     0 && (
                                                                     <>
                                                                         <tr className="border-t border-slate-200">
                                                                             <td
                                                                                 colSpan={
-                                                                                    6
+                                                                                    9
                                                                                 }
                                                                                 className="px-3 py-2 text-right text-xs font-medium text-slate-600"
                                                                             >
@@ -1475,7 +2305,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         <tr className="border-t-2 border-slate-400 bg-slate-100">
                                                                             <td
                                                                                 colSpan={
-                                                                                    6
+                                                                                    9
                                                                                 }
                                                                                 className="px-3 py-2.5 text-right text-sm font-bold text-slate-800"
                                                                             >
@@ -1501,7 +2331,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     <tr className="border-t-2 border-slate-400 bg-slate-100">
                                                                         <td
                                                                             colSpan={
-                                                                                6
+                                                                                9
                                                                             }
                                                                             className="px-3 py-2.5 text-right text-sm font-bold text-slate-800"
                                                                         >
@@ -1544,12 +2374,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     </div>
                 )}
 
-                {/* Pagos a Proveedores */}
-                {activeTab === "expenses" && (
-                    <ProviderPaymentsTab
+                {/* Costos de la Orden - Unificado */}
+                {activeTab === "costs" && (
+                    <CostsTab
                         orderId={orderId}
+                        isClosed={order?.status === "cerrada"}
                         onUpdate={() => {
                             fetchOrderDetail();
+                            fetchProviderInvoices(); // Refrescar facturas disponibles
                             if (onUpdate) onUpdate();
                         }}
                     />
@@ -1560,6 +2392,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     <DocumentsTabUnified
                         orderId={orderId}
                         orderNumber={order?.order_number}
+                        isClosed={order?.status === "cerrada"}
                         onUpdate={() => {
                             fetchOrderDetail();
                             if (onUpdate) onUpdate();
@@ -1581,6 +2414,18 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 confirmText="Eliminar"
                 cancelText="Cancelar"
                 variant="danger"
+            />
+
+            {/* Confirm Close Dialog */}
+            <ConfirmDialog
+                open={confirmCloseDialog.open}
+                onClose={() => setConfirmCloseDialog({ open: false, newStatus: null })}
+                onConfirm={confirmClose}
+                title="¿Cerrar Orden de Servicio?"
+                description="Al cerrar la orden, se bloqueará la edición de costos y precios. Solo podrá reabrirse por un administrador."
+                confirmText="Cerrar Orden"
+                cancelText="Cancelar"
+                variant="warning"
             />
         </div>
     );

@@ -121,6 +121,174 @@ class ProviderViewSet(viewsets.ModelViewSet):
             'year': year
         })
 
+    @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
+    def export_statement_excel(self, request, pk=None):
+        """Exportar estado de cuenta del proveedor a Excel"""
+        from apps.transfers.models import Transfer
+        from django.http import HttpResponse
+        from datetime import datetime
+        import openpyxl
+        from openpyxl.utils import get_column_letter
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        provider = self.get_object()
+        year = request.query_params.get('year', datetime.now().year)
+
+        # Filtros opcionales
+        # (Aquí podríamos agregar filtros si fueran necesarios, por ahora exportamos todo lo del año)
+        
+        # Historial del año seleccionado
+        transfers = Transfer.objects.filter(
+            provider=provider,
+            transaction_date__year=year
+        ).select_related('service_order').order_by('transaction_date')
+
+        # Crear workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Estado de Cuenta Proveedor"
+
+        # Estilos profesionales - Diseño GPRO
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=10)
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
+        label_font = Font(bold=True, color="404040", size=10)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        currency_format = '"$"#,##0.00'
+
+        # === ENCABEZADO ===
+        ws['A1'] = "ESTADO DE CUENTA - PROVEEDOR"
+        ws['A1'].font = title_font
+        ws.merge_cells('A1:J1')
+
+        ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+        ws['A2'].font = Font(size=11, color="666666")
+        ws.merge_cells('A2:J2')
+
+        ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        ws['A3'].font = Font(size=9, italic=True, color="999999")
+
+        # === INFORMACIÓN DEL PROVEEDOR ===
+        ws['A5'] = "INFORMACIÓN DEL PROVEEDOR"
+        ws['A5'].font = subtitle_font
+        ws.merge_cells('A5:J5')
+
+        # Datos del proveedor
+        provider_data = [
+            ('Proveedor:', provider.name),
+            ('NIT:', provider.nit or 'No registrado'),
+            ('Email:', provider.email or 'No registrado'),
+            ('Teléfono:', provider.phone or 'No registrado'),
+        ]
+
+        row = 6
+        for label, value in provider_data:
+            ws.cell(row=row, column=1, value=label).font = label_font
+            ws.cell(row=row, column=2, value=value)
+            ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+            row += 1
+
+        # === TABLA DE MOVIMIENTOS ===
+        start_row = 12
+        ws.cell(row=start_row, column=1, value=f"MOVIMIENTOS DEL AÑO {year}").font = subtitle_font
+        ws.merge_cells(f'A{start_row}:J{start_row}')
+
+        # Headers de la tabla
+        headers = ['Fecha', 'Factura Prov.', 'Orden de Servicio', 'Tipo', 'Descripción',
+                   'Estado', 'Total', 'Pagado', 'Saldo', 'Comprobante']
+        header_row = start_row + 1
+
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=header_row, column=col_num, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.border = thin_border
+
+        # Datos
+        data_row = header_row + 1
+        totals = {'total': 0, 'paid': 0, 'balance': 0}
+
+        for transfer in transfers:
+            ws.cell(row=data_row, column=1, value=transfer.transaction_date.strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=2, value=transfer.invoice_number or 'S/N').border = thin_border
+            ws.cell(row=data_row, column=3, value=transfer.service_order.order_number if transfer.service_order else 'Gastos Admin').border = thin_border
+            ws.cell(row=data_row, column=4, value=transfer.get_transfer_type_display()).border = thin_border
+            ws.cell(row=data_row, column=5, value=transfer.description or '').border = thin_border
+            ws.cell(row=data_row, column=6, value=transfer.get_status_display()).border = thin_border
+
+            # Montos
+            total_cell = ws.cell(row=data_row, column=7, value=float(transfer.amount))
+            total_cell.number_format = currency_format
+            total_cell.border = thin_border
+            total_cell.alignment = Alignment(horizontal='right')
+
+            paid_cell = ws.cell(row=data_row, column=8, value=float(transfer.paid_amount))
+            paid_cell.number_format = currency_format
+            paid_cell.border = thin_border
+            paid_cell.alignment = Alignment(horizontal='right')
+
+            balance_cell = ws.cell(row=data_row, column=9, value=float(transfer.balance))
+            balance_cell.number_format = currency_format
+            balance_cell.border = thin_border
+            balance_cell.alignment = Alignment(horizontal='right')
+
+            ws.cell(row=data_row, column=10, value="Sí" if transfer.invoice_file else "No").border = thin_border
+            ws.cell(row=data_row, column=10).alignment = Alignment(horizontal='center')
+
+            totals['total'] += float(transfer.amount)
+            totals['paid'] += float(transfer.paid_amount)
+            totals['balance'] += float(transfer.balance)
+
+            data_row += 1
+
+        # Fila de totales
+        ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
+        ws.cell(row=data_row, column=1).border = thin_border
+        for col in range(2, 7):
+            ws.cell(row=data_row, column=col).border = thin_border
+
+        total_total = ws.cell(row=data_row, column=7, value=totals['total'])
+        total_total.number_format = currency_format
+        total_total.font = Font(bold=True)
+        total_total.border = thin_border
+        total_total.alignment = Alignment(horizontal='right')
+
+        total_paid = ws.cell(row=data_row, column=8, value=totals['paid'])
+        total_paid.number_format = currency_format
+        total_paid.font = Font(bold=True)
+        total_paid.border = thin_border
+        total_paid.alignment = Alignment(horizontal='right')
+
+        total_balance = ws.cell(row=data_row, column=9, value=totals['balance'])
+        total_balance.number_format = currency_format
+        total_balance.font = Font(bold=True)
+        total_balance.border = thin_border
+        total_balance.alignment = Alignment(horizontal='right')
+
+        ws.cell(row=data_row, column=10).border = thin_border
+
+        # Ajustar anchos
+        column_widths = [12, 15, 18, 15, 30, 12, 15, 15, 15, 10]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = width
+
+        # Generar respuesta
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f'estado_cuenta_proveedor_{provider.name.replace(" ", "_")}_{year}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        wb.save(response)
+        return response
+
 class CustomsAgentViewSet(viewsets.ModelViewSet):
     queryset = CustomsAgent.objects.all()
     serializer_class = CustomsAgentSerializer

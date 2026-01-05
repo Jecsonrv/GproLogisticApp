@@ -14,6 +14,344 @@ RETENCION_RATE = Decimal('0.01')
 RETENCION_THRESHOLD = Decimal('100.00')
 
 
+class ProviderInvoice(SoftDeleteModel):
+    """
+    Factura de Proveedor (Costo Directo)
+
+    Representa una factura de proveedor por servicios tercerizados que se revenderán
+    al cliente con margen de ganancia. El costo se desglosa en múltiples servicios.
+
+    Ejemplo de uso:
+    - MSC me factura $1,150 por servicios portuarios
+    - Yo desgloso: Cuadrilla $250, Flete $700, Estadía $200
+    - Cada desglose se vende al cliente con un margen (ej: 20%)
+
+    FLUJO:
+    1. Registrar factura del proveedor (costo total)
+    2. Crear desglose en DirectCostAllocation
+    3. Cada desglose se vincula a un OrderCharge (servicio)
+    4. El sistema valida que suma de desgloses <= total factura
+    """
+
+    STATUS_CHOICES = (
+        ('pendiente', 'Pendiente de Asignar'),
+        ('parcial', 'Parcialmente Asignado'),
+        ('asignado', 'Completamente Asignado'),
+        ('facturado', 'Servicios Facturados al Cliente'),
+    )
+
+    PAYMENT_STATUS_CHOICES = (
+        ('pendiente', 'Pendiente de Pago'),
+        ('parcial', 'Pago Parcial'),
+        ('pagado', 'Pagado'),
+    )
+
+    # Identificación
+    invoice_number = models.CharField(
+        max_length=100,
+        verbose_name="No. Factura Proveedor",
+        help_text="Número de la factura emitida por el proveedor"
+    )
+
+    # Proveedor
+    provider = models.ForeignKey(
+        Provider,
+        on_delete=models.PROTECT,
+        related_name='direct_cost_invoices',
+        verbose_name="Proveedor"
+    )
+
+    # Orden de servicio
+    service_order = models.ForeignKey(
+        ServiceOrder,
+        on_delete=models.CASCADE,
+        related_name='provider_invoices',
+        verbose_name="Orden de Servicio"
+    )
+
+    # Montos
+    total_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Total Factura"
+    )
+    allocated_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Monto Asignado a Servicios"
+    )
+    unallocated_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Monto Sin Asignar"
+    )
+
+    # Estado de asignación
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pendiente',
+        verbose_name="Estado de Asignación"
+    )
+
+    # Estado de pago al proveedor
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='pendiente',
+        verbose_name="Estado de Pago"
+    )
+    paid_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Monto Pagado"
+    )
+    payment_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de Pago"
+    )
+
+    # Documento
+    invoice_file = models.FileField(
+        upload_to='provider_invoices/',
+        null=True,
+        blank=True,
+        verbose_name="Archivo de Factura",
+        validators=[validate_document_file]
+    )
+    issue_date = models.DateField(
+        default=timezone.now,
+        verbose_name="Fecha de Emisión"
+    )
+
+    # Notas
+    notes = models.TextField(blank=True, verbose_name="Notas")
+
+    # Auditoría
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_provider_invoices',
+        verbose_name="Registrado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Factura de Proveedor (Costo Directo)"
+        verbose_name_plural = "Facturas de Proveedores (Costos Directos)"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['service_order', 'status']),
+            models.Index(fields=['provider', 'issue_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.invoice_number} - {self.provider.name} - ${self.total_amount}"
+
+    def save(self, *args, **kwargs):
+        # Calcular monto sin asignar
+        self.unallocated_amount = self.total_amount - self.allocated_amount
+
+        # Actualizar estado de asignación
+        if self.allocated_amount == Decimal('0.00'):
+            self.status = 'pendiente'
+        elif self.allocated_amount < self.total_amount:
+            self.status = 'parcial'
+        else:
+            # Verificar si los servicios vinculados ya fueron facturados al cliente
+            if hasattr(self, 'pk') and self.pk:
+                all_billed = all(
+                    alloc.order_charge.billing_status == 'facturado'
+                    for alloc in self.allocations.filter(is_deleted=False)
+                )
+                self.status = 'facturado' if all_billed and self.allocations.exists() else 'asignado'
+            else:
+                self.status = 'asignado'
+
+        # Actualizar estado de pago
+        if self.paid_amount >= self.total_amount:
+            self.payment_status = 'pagado'
+        elif self.paid_amount > Decimal('0.00'):
+            self.payment_status = 'parcial'
+        else:
+            self.payment_status = 'pendiente'
+
+        super().save(*args, **kwargs)
+
+    def recalculate_allocated(self):
+        """Recalcula el monto asignado desde las asignaciones"""
+        from django.db.models import Sum
+        total = self.allocations.filter(is_deleted=False).aggregate(
+            total=Sum('cost_amount')
+        )['total'] or Decimal('0.00')
+        self.allocated_amount = total
+        self.save()
+
+    def get_profit_summary(self):
+        """Retorna resumen de rentabilidad de esta factura"""
+        total_cost = Decimal('0.00')
+        total_sale = Decimal('0.00')
+
+        for alloc in self.allocations.filter(is_deleted=False):
+            total_cost += alloc.cost_amount
+            if alloc.order_charge:
+                total_sale += alloc.order_charge.subtotal
+
+        profit = total_sale - total_cost
+        margin = (profit / total_cost * 100) if total_cost > 0 else Decimal('0.00')
+
+        return {
+            'total_cost': float(total_cost),
+            'total_sale': float(total_sale),
+            'profit': float(profit),
+            'margin_percentage': float(margin),
+            'unallocated': float(self.unallocated_amount)
+        }
+
+
+class DirectCostAllocation(SoftDeleteModel):
+    """
+    Desglose de Costo Directo
+
+    Asigna una porción de una factura de proveedor a un servicio específico
+    que se venderá al cliente. Permite el desglose 1:N de facturas.
+
+    Relación: ProviderInvoice (1) --> (N) DirectCostAllocation --> (1) OrderCharge
+
+    VALIDACIONES:
+    - La suma de asignaciones no puede exceder el total de la factura
+    - El precio de venta (OrderCharge.subtotal) debe ser >= cost_amount
+    """
+
+    # Factura origen
+    provider_invoice = models.ForeignKey(
+        ProviderInvoice,
+        on_delete=models.CASCADE,
+        related_name='allocations',
+        verbose_name="Factura de Proveedor"
+    )
+
+    # Servicio destino (vinculación con OrderCharge)
+    order_charge = models.OneToOneField(
+        'orders.OrderCharge',
+        on_delete=models.CASCADE,
+        related_name='cost_allocation',
+        verbose_name="Servicio Vinculado"
+    )
+
+    # Monto asignado (costo base de este servicio)
+    cost_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Costo Asignado",
+        help_text="Porción del costo de la factura asignada a este servicio"
+    )
+
+    # Descripción del desglose
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Descripción del Desglose"
+    )
+
+    # Auditoría
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Creado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Asignación de Costo Directo"
+        verbose_name_plural = "Asignaciones de Costos Directos"
+        ordering = ['provider_invoice', 'id']
+
+    def __str__(self):
+        return f"{self.provider_invoice.invoice_number} → {self.order_charge.description or self.order_charge.service.name} (${self.cost_amount})"
+
+    def clean(self):
+        """Validaciones de negocio"""
+        super().clean()
+
+        if self.provider_invoice and self.cost_amount:
+            # Calcular suma actual de asignaciones (excluyendo esta si es update)
+            from django.db.models import Sum
+            existing_sum = self.provider_invoice.allocations.filter(
+                is_deleted=False
+            ).exclude(pk=self.pk).aggregate(
+                total=Sum('cost_amount')
+            )['total'] or Decimal('0.00')
+
+            total_after = existing_sum + self.cost_amount
+
+            if total_after > self.provider_invoice.total_amount:
+                max_allowed = self.provider_invoice.total_amount - existing_sum
+                raise ValidationError({
+                    'cost_amount': f'El monto asignado (${self.cost_amount}) excede el disponible. '
+                                   f'Máximo permitido: ${max_allowed}'
+                })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+
+        is_new = not self.pk
+        super().save(*args, **kwargs)
+
+        # Actualizar el monto asignado en la factura de proveedor
+        self.provider_invoice.recalculate_allocated()
+
+        # Marcar el OrderCharge como servicio tercerizado
+        if self.order_charge and not self.order_charge.is_third_party_service:
+            self.order_charge.is_third_party_service = True
+            self.order_charge.save(skip_order_validation=True)
+
+    def delete(self, *args, **kwargs):
+        """Al eliminar, actualizar factura y desmarcar servicio"""
+        order_charge = self.order_charge
+        provider_invoice = self.provider_invoice
+
+        super().delete(*args, **kwargs)
+
+        # Recalcular en la factura
+        provider_invoice.recalculate_allocated()
+
+        # Desmarcar el servicio como tercerizado si ya no tiene asignación
+        if order_charge and not hasattr(order_charge, 'cost_allocation'):
+            order_charge.is_third_party_service = False
+            order_charge.save(skip_order_validation=True)
+
+    def get_profit(self):
+        """Calcula la ganancia de este servicio"""
+        if self.order_charge:
+            return self.order_charge.subtotal - self.cost_amount
+        return Decimal('0.00')
+
+    def get_margin_percentage(self):
+        """Calcula el margen de ganancia en porcentaje"""
+        if self.cost_amount > 0 and self.order_charge:
+            return ((self.order_charge.subtotal - self.cost_amount) / self.cost_amount) * 100
+        return Decimal('0.00')
+
+    def validate_no_loss(self):
+        """Valida que el precio de venta no genere pérdida"""
+        if self.order_charge and self.order_charge.subtotal < self.cost_amount:
+            return False, f'El precio de venta (${self.order_charge.subtotal}) es menor al costo (${self.cost_amount}). Esto generaría una pérdida.'
+        return True, None
+
+
 class Transfer(SoftDeleteModel):
     """
     Pagos a Proveedores - Registro de gastos y costos (Calculadora de Gastos Reembolsables)
@@ -22,16 +360,23 @@ class Transfer(SoftDeleteModel):
     ya que representa el costo real pagado/por pagar al proveedor.
     Solo se permite editar: customer_markup_percentage y customer_iva_type.
 
+    TIPOS DE GASTO:
+    - cargos: Cargos a Clientes (Pass-through/Reembolsos) - Se facturan NETO
+    - admin: Gastos de Operación - No vinculados a OS específica
+
+    NOTA: Los "Costos Directos" (servicios tercerizados con margen) ahora se
+    manejan con ProviderInvoice + DirectCostAllocation para mejor trazabilidad.
+
     Tratamiento fiscal según normativa salvadoreña:
     - GRAVADO: Se aplica IVA 13% al cobrar al cliente
     - EXENTO: No se aplica IVA
     - NO_SUJETO: No se aplica IVA (servicios de exportación)
     """
     TYPE_CHOICES = (
-        ('costos', 'Costos Directos'),  # Pagos para ejecutar servicio de cliente
-        ('cargos', 'Cargos a Clientes'),  # Facturables al cliente
+        ('cargos', 'Cargos a Clientes (Reembolso)'),  # Pass-through, factura a nombre del cliente
         ('admin', 'Gastos de Operación'),  # No vinculados a OS
-        # Mantener compatibilidad
+        # Mantener compatibilidad con datos existentes
+        ('costos', 'Costos Directos (Legacy)'),  # DEPRECATED: Usar ProviderInvoice
         ('terceros', 'Cargos a Clientes (Legacy)'),
         ('propios', 'Costos Operativos (Legacy)'),
     )
@@ -133,6 +478,13 @@ class Transfer(SoftDeleteModel):
         help_text="Tipo de IVA a aplicar al cobrar este gasto al cliente"
     )
 
+    # Flag para identificar gastos Pass-through (Reembolsos)
+    is_pass_through = models.BooleanField(
+        default=False,
+        verbose_name="Es Reembolso (Pass-through)",
+        help_text="La factura original está a nombre del cliente. Se factura NETO sin margen."
+    )
+
     # Estado de facturación para tracking
     billing_status = models.CharField(
         max_length=20,
@@ -195,6 +547,24 @@ class Transfer(SoftDeleteModel):
     def save(self, *args, **kwargs):
         self.full_clean()
 
+        # AUDITORÍA #1: Validar que no se modifique el monto si ya está facturado
+        if self.pk:  # Solo para updates, no creación
+            try:
+                old_instance = Transfer.objects.get(pk=self.pk)
+                if old_instance.amount != self.amount:
+                    # El monto cambió, verificar si es permitido
+                    if old_instance.invoice_id is not None:
+                        raise ValidationError(
+                            "No se puede modificar el monto de un gasto que ya está facturado. "
+                            "Use notas de crédito para ajustes."
+                        )
+                    if old_instance.paid_amount and old_instance.paid_amount > 0:
+                        raise ValidationError(
+                            "No se puede modificar el monto de un gasto que ya tiene pagos registrados."
+                        )
+            except Transfer.DoesNotExist:
+                pass  # Nuevo registro
+
         # Establecer el mes automáticamente
         if not self.mes:
             months = {
@@ -204,6 +574,10 @@ class Transfer(SoftDeleteModel):
             }
             month_num = self.transaction_date.month if self.transaction_date else timezone.now().month
             self.mes = months[month_num]
+
+        # Si es pass-through (reembolso), forzar margen a 0%
+        if self.is_pass_through:
+            self.customer_markup_percentage = Decimal('0.00')
 
         # Sincronizar campo legacy customer_applies_iva con customer_iva_type
         self.customer_applies_iva = (self.customer_iva_type == 'gravado')
@@ -300,11 +674,18 @@ class Transfer(SoftDeleteModel):
 
         El monto base NO es editable si:
         - Tiene pagos registrados (amount_locked=True)
-        - Ya fue facturado al cliente
+        - Ya fue facturado al cliente (tiene invoice asociado)
+        - Tiene pagos parciales al proveedor (paid_amount > 0)
+
+        AUDITORÍA #1: Bloqueado para prevenir desincronización de márgenes
+        post-facturación.
         """
         if self.amount_locked:
             return False
         if self.invoice:
+            return False
+        # Bloquear si ya tiene pagos al proveedor
+        if self.paid_amount and self.paid_amount > 0:
             return False
         return True
 

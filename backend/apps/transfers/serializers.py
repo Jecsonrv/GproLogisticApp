@@ -1,5 +1,207 @@
 from rest_framework import serializers
-from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication
+from decimal import Decimal
+from .models import (
+    Transfer, TransferPayment, BatchPayment, ProviderCreditNote,
+    CreditNoteApplication, ProviderInvoice, DirectCostAllocation
+)
+
+
+# ============================================
+# SERIALIZERS PARA COSTOS DIRECTOS (ProviderInvoice)
+# ============================================
+
+class DirectCostAllocationSerializer(serializers.ModelSerializer):
+    """Serializer para asignaciones de costo a servicios"""
+    order_charge_description = serializers.SerializerMethodField()
+    order_charge_service_name = serializers.SerializerMethodField()
+    sale_price = serializers.SerializerMethodField()
+    profit = serializers.SerializerMethodField()
+    margin_percentage = serializers.SerializerMethodField()
+    is_billed = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DirectCostAllocation
+        fields = [
+            'id', 'provider_invoice', 'order_charge', 'order_charge_description',
+            'order_charge_service_name', 'cost_amount', 'sale_price', 'profit',
+            'margin_percentage', 'description', 'is_billed',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_order_charge_description(self, obj):
+        if obj.order_charge:
+            return obj.order_charge.description or obj.order_charge.service.name
+        return None
+
+    def get_order_charge_service_name(self, obj):
+        if obj.order_charge:
+            return obj.order_charge.service.name
+        return None
+
+    def get_sale_price(self, obj):
+        if obj.order_charge:
+            return float(obj.order_charge.subtotal)
+        return 0
+
+    def get_profit(self, obj):
+        return float(obj.get_profit())
+
+    def get_margin_percentage(self, obj):
+        return float(obj.get_margin_percentage())
+
+    def get_is_billed(self, obj):
+        if obj.order_charge:
+            return obj.order_charge.billing_status == 'facturado'
+        return False
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+            return full_name if full_name else obj.created_by.username
+        return None
+
+
+class ProviderInvoiceListSerializer(serializers.ModelSerializer):
+    """Serializer para listado de facturas de proveedor (costos directos)"""
+    provider_name = serializers.CharField(source='provider.name', read_only=True)
+    service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    allocations_count = serializers.SerializerMethodField()
+    profit_summary = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProviderInvoice
+        fields = [
+            'id', 'invoice_number', 'provider', 'provider_name',
+            'service_order', 'service_order_number',
+            'total_amount', 'allocated_amount', 'unallocated_amount',
+            'status', 'status_display', 'payment_status', 'payment_status_display',
+            'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
+            'notes', 'allocations_count', 'profit_summary',
+            'created_by', 'created_by_name', 'created_at'
+        ]
+
+    def get_allocations_count(self, obj):
+        return obj.allocations.filter(is_deleted=False).count()
+
+    def get_profit_summary(self, obj):
+        return obj.get_profit_summary()
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+            return full_name if full_name else obj.created_by.username
+        return None
+
+
+class ProviderInvoiceDetailSerializer(serializers.ModelSerializer):
+    """Serializer detallado con asignaciones"""
+    provider_name = serializers.CharField(source='provider.name', read_only=True)
+    service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
+    allocations = DirectCostAllocationSerializer(many=True, read_only=True)
+    profit_summary = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProviderInvoice
+        fields = [
+            'id', 'invoice_number', 'provider', 'provider_name',
+            'service_order', 'service_order_number',
+            'total_amount', 'allocated_amount', 'unallocated_amount',
+            'status', 'status_display', 'payment_status', 'payment_status_display',
+            'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
+            'notes', 'allocations', 'profit_summary',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+
+    def get_profit_summary(self, obj):
+        return obj.get_profit_summary()
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+            return full_name if full_name else obj.created_by.username
+        return None
+
+
+class ProviderInvoiceCreateSerializer(serializers.ModelSerializer):
+    """Serializer para crear facturas de proveedor"""
+
+    class Meta:
+        model = ProviderInvoice
+        fields = [
+            'id', 'invoice_number', 'provider', 'service_order',
+            'total_amount', 'issue_date', 'invoice_file', 'notes'
+        ]
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        # Validar que el monto sea positivo
+        if attrs.get('total_amount', 0) <= 0:
+            raise serializers.ValidationError({
+                'total_amount': 'El monto debe ser mayor a cero'
+            })
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['created_by'] = request.user
+        return super().create(validated_data)
+
+
+class DirectCostAllocationCreateSerializer(serializers.ModelSerializer):
+    """Serializer para crear asignaciones de costo"""
+
+    class Meta:
+        model = DirectCostAllocation
+        fields = ['id', 'provider_invoice', 'order_charge', 'cost_amount', 'description']
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        provider_invoice = attrs.get('provider_invoice')
+        order_charge = attrs.get('order_charge')
+        cost_amount = attrs.get('cost_amount', Decimal('0'))
+
+        # Validar que el order_charge pertenezca a la misma OS
+        if provider_invoice and order_charge:
+            if provider_invoice.service_order != order_charge.service_order:
+                raise serializers.ValidationError({
+                    'order_charge': 'El servicio debe pertenecer a la misma orden de servicio'
+                })
+
+        # Validar que no exceda el monto disponible
+        if provider_invoice and cost_amount:
+            available = provider_invoice.total_amount - provider_invoice.allocated_amount
+            if cost_amount > available:
+                raise serializers.ValidationError({
+                    'cost_amount': f'El monto excede el disponible (${available})'
+                })
+
+        # Validar que el order_charge no tenga ya una asignación
+        if order_charge:
+            existing = DirectCostAllocation.objects.filter(
+                order_charge=order_charge,
+                is_deleted=False
+            ).exists()
+            if existing:
+                raise serializers.ValidationError({
+                    'order_charge': 'Este servicio ya tiene un costo directo asignado'
+                })
+
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['created_by'] = request.user
+        return super().create(validated_data)
 
 class TransferSerializer(serializers.ModelSerializer):
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True, allow_null=True)
@@ -28,6 +230,7 @@ class TransferSerializer(serializers.ModelSerializer):
             'payment_method', 'invoice_number', 'ccf',
             'invoice_file', 'balance', 'paid_amount',
             'customer_markup_percentage', 'customer_applies_iva', 'customer_iva_type',
+            'is_pass_through',  # Nuevo campo para reembolsos
             'created_by', 'created_by_username', 'created_by_name',
             'created_at', 'updated_at'
         ]

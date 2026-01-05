@@ -1,11 +1,5 @@
 import React from "react";
-import {
-    Menu,
-    LogOut,
-    ChevronDown,
-    User,
-    Settings,
-} from "lucide-react";
+import { Menu, LogOut, ChevronDown, User, Settings } from "lucide-react";
 import useAuthStore from "../stores/authStore";
 import useHeaderStore from "../stores/headerStore"; // Importar store
 import { useNavigate, useLocation } from "react-router-dom";
@@ -40,6 +34,7 @@ const pageTitles = {
     "/profile": "Mi Perfil",
     "/provider-payments": "Gestión de Pagos",
     "/provider-statements": "Cuentas por Pagar",
+    "/petty-cash": "Caja Chica",
 };
 
 export function Header({ onMenuClick }) {
@@ -114,7 +109,6 @@ export function Header({ onMenuClick }) {
 
             {/* Right Section */}
             <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0">
-
                 {/* Dynamic Page Actions (Injected via Portal/Store) - oculto en móvil */}
                 {actions && (
                     <div className="hidden md:flex items-center gap-2 mr-2 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -149,7 +143,10 @@ export function Header({ onMenuClick }) {
                         <ChevronDown className="h-4 w-4 text-slate-400 hidden md:block opacity-50" />
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent align="end" className="w-56 max-w-[calc(100vw-2rem)]">
+                    <DropdownMenuContent
+                        align="end"
+                        className="w-56 max-w-[calc(100vw-2rem)]"
+                    >
                         <DropdownMenuLabel className="font-normal">
                             <div className="flex flex-col space-y-1">
                                 <p className="text-sm font-medium text-slate-900 leading-none">

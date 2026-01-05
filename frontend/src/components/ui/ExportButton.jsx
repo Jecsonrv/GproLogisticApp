@@ -100,7 +100,7 @@ const ExportButton = ({
                                 className="w-full flex items-start gap-3 px-3 py-3 hover:bg-blue-50 rounded-lg transition-colors text-left group"
                             >
                                 <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                                    <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                                    <FileSpreadsheet className="w-4 h-4 text-blue-700" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-semibold text-slate-900">
@@ -112,7 +112,8 @@ const ExportButton = ({
                                             <span className="font-medium text-slate-700">
                                                 {" "}
                                                 ({totalCount.toLocaleString()}{" "}
-                                                registro{totalCount !== 1 ? "s" : ""})
+                                                registro
+                                                {totalCount !== 1 ? "s" : ""})
                                             </span>
                                         )}
                                     </p>
@@ -137,8 +138,11 @@ const ExportButton = ({
                                         {filteredCount > 0 ? (
                                             <span className="font-medium text-emerald-700">
                                                 {" "}
-                                                ({filteredCount.toLocaleString()}{" "}
-                                                registro{filteredCount !== 1 ? "s" : ""})
+                                                (
+                                                {filteredCount.toLocaleString()}{" "}
+                                                registro
+                                                {filteredCount !== 1 ? "s" : ""}
+                                                )
                                             </span>
                                         ) : (
                                             <span className="font-medium text-slate-400">
@@ -154,7 +158,8 @@ const ExportButton = ({
                         {/* Footer informativo (opcional) */}
                         <div className="px-4 py-2 bg-slate-50 border-t border-slate-200">
                             <p className="text-xs text-slate-500">
-                                Los archivos se descargarán en formato Excel (.xlsx)
+                                Los archivos se descargarán en formato Excel
+                                (.xlsx)
                             </p>
                         </div>
                     </div>

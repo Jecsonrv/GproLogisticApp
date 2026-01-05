@@ -8,7 +8,7 @@ const Spinner = ({ size = "md", className = "", color = "slate" }) => {
     };
 
     const colors = {
-        blue: "text-blue-600",
+        blue: "text-blue-700",
         slate: "text-slate-600",
         white: "text-white",
         green: "text-green-600",

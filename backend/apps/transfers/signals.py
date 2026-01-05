@@ -320,3 +320,19 @@ def delete_application_document(sender, instance, **kwargs):
         ).delete()
     except Exception as e:
         logger.error(f"Error al eliminar documento de aplicación de NC: {e}")
+
+
+@receiver(post_save, sender=Transfer)
+def sync_invoice_totals_on_transfer_change(sender, instance, created, **kwargs):
+    """
+    CRITICAL FIX: Sincronización Financiera.
+    Si se modifica un Transfer (gasto) que está vinculado a una Factura (Invoice),
+    se debe forzar el recálculo de la factura para reflejar cambios en montos, márgenes o IVA.
+    """
+    if instance.invoice:
+        try:
+            # Recalcular totales de la factura vinculada
+            instance.invoice.calculate_totals()
+            logger.info(f"Sincronizados totales de Factura #{instance.invoice.id} por cambios en Gasto #{instance.id}")
+        except Exception as e:
+            logger.error(f"Error al sincronizar totales de factura desde transfer: {e}")

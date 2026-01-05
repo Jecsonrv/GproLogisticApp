@@ -32,7 +32,7 @@ import JSZip from "jszip";
  * Diseño ERP corporativo con exportación masiva ZIP
  * Refactorizado para UX/UI limpia y sobria
  */
-const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
+const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false }) => {
     const [allDocuments, setAllDocuments] = useState([]);
     const [categoriesSummary, setCategoriesSummary] = useState({});
     const [totalDocuments, setTotalDocuments] = useState(0);
@@ -120,6 +120,14 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
             color: "text-slate-600",
             hoverColor: "hover:text-purple-700",
             prefix: "NC",
+        },
+        costo_directo: {
+            label: "Costos Directos",
+            fullLabel: "Costos Directos",
+            icon: Building2,
+            color: "text-slate-600",
+            hoverColor: "hover:text-orange-700",
+            prefix: "COSTO DIRECTO",
         },
         factura_costo: {
             label: "Costos",
@@ -484,32 +492,34 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
                                 : "Descargar Todo ZIP"}
                         </Button>
                     )}
-                    <Button
-                        size="sm"
-                        onClick={() => setShowUploadForm(!showUploadForm)}
-                        className={
-                            showUploadForm
-                                ? "bg-slate-700 text-white"
-                                : "bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
-                        }
-                    >
-                        {showUploadForm ? (
-                            <>
-                                <X className="w-4 h-4 mr-2" />
-                                Cancelar Subida
-                            </>
-                        ) : (
-                            <>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Subir Documento
-                            </>
-                        )}
-                    </Button>
+                    {!isClosed && (
+                        <Button
+                            size="sm"
+                            onClick={() => setShowUploadForm(!showUploadForm)}
+                            className={
+                                showUploadForm
+                                    ? "bg-slate-700 text-white"
+                                    : "bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+                            }
+                        >
+                            {showUploadForm ? (
+                                <>
+                                    <X className="w-4 h-4 mr-2" />
+                                    Cancelar Subida
+                                </>
+                            ) : (
+                                <>
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Subir Documento
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
             </div>
 
             {/* Formulario de Upload colapsable - Diseño limpio */}
-            {showUploadForm && (
+            {showUploadForm && !isClosed && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 animate-in fade-in slide-in-from-top-2 duration-200">
                     <form onSubmit={handleUpload} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -775,164 +785,240 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
                                     {/* Checkbox column */}
                                 </th>
                                 <th className="px-4 py-3">Documento</th>
-                                <th className="px-4 py-3 hidden sm:table-cell">Referencia</th>
-                                <th className="px-4 py-3 hidden md:table-cell">Subido</th>
-                                <th className="px-4 py-3 text-right">Acciones</th>
+                                <th className="px-4 py-3 hidden sm:table-cell">
+                                    Referencia
+                                </th>
+                                <th className="px-4 py-3 hidden md:table-cell">
+                                    Subido
+                                </th>
+                                <th className="px-4 py-3 text-right">
+                                    Acciones
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {Object.entries(groupedDocuments).map(([category, docs]) => {
-                                const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.otros;
-                                const isExpanded = expandedCategories[category] !== false;
-                                const allSelected = docs.every((doc) => selectedDocs.has(doc.id));
+                            {Object.entries(groupedDocuments).map(
+                                ([category, docs]) => {
+                                    const config =
+                                        CATEGORY_CONFIG[category] ||
+                                        CATEGORY_CONFIG.otros;
+                                    const isExpanded =
+                                        expandedCategories[category] !== false;
+                                    const allSelected = docs.every((doc) =>
+                                        selectedDocs.has(doc.id)
+                                    );
 
-                                return (
-                                    <React.Fragment key={category}>
-                                        {/* Group Header Row */}
-                                        <tr className="bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                                            <td colSpan="5" className="px-4 py-2 border-y border-slate-100">
-                                                <div className="flex items-center justify-between">
-                                                    <button
-                                                        onClick={() => toggleCategory(category)}
-                                                        className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-700"
-                                                    >
-                                                        <span className="p-1 bg-white border border-slate-200 rounded-md text-slate-500">
-                                                            {isExpanded ? (
-                                                                <ChevronDown className="w-3.5 h-3.5" />
-                                                            ) : (
-                                                                <ChevronRight className="w-3.5 h-3.5" />
-                                                            )}
-                                                        </span>
-                                                        <span className="flex items-center gap-2">
-                                                            {config.fullLabel}
-                                                            <span className="text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                                                                {docs.length}
-                                                            </span>
-                                                        </span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => selectAllInCategory(category)}
-                                                        className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 hover:bg-white rounded transition-colors"
-                                                    >
-                                                        {allSelected ? "Deseleccionar grupo" : "Seleccionar grupo"}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-
-                                        {/* Document Rows */}
-                                        {isExpanded &&
-                                            docs.map((doc) => {
-                                                const isSelected = selectedDocs.has(doc.id);
-                                                return (
-                                                    <tr
-                                                        key={doc.id}
-                                                        className={cn(
-                                                            "group/row transition-colors hover:bg-slate-50",
-                                                            isSelected && "bg-blue-50/30 hover:bg-blue-50/50"
-                                                        )}
-                                                    >
-                                                        <td className="px-4 py-3 text-center align-top pt-4">
-                                                            <button
-                                                                onClick={() => toggleDocSelection(doc.id)}
-                                                                className="outline-none focus:ring-2 focus:ring-slate-400 rounded"
-                                                            >
-                                                                {isSelected ? (
-                                                                    <CheckSquare className="w-4 h-4 text-slate-900" />
+                                    return (
+                                        <React.Fragment key={category}>
+                                            {/* Group Header Row */}
+                                            <tr className="bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                                                <td
+                                                    colSpan="5"
+                                                    className="px-4 py-2 border-y border-slate-100"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <button
+                                                            onClick={() =>
+                                                                toggleCategory(
+                                                                    category
+                                                                )
+                                                            }
+                                                            className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-700"
+                                                        >
+                                                            <span className="p-1 bg-white border border-slate-200 rounded-md text-slate-500">
+                                                                {isExpanded ? (
+                                                                    <ChevronDown className="w-3.5 h-3.5" />
                                                                 ) : (
-                                                                    <Square className="w-4 h-4 text-slate-300 group-hover/row:text-slate-400" />
+                                                                    <ChevronRight className="w-3.5 h-3.5" />
                                                                 )}
-                                                            </button>
-                                                        </td>
-                                                        <td className="px-4 py-3">
-                                                            <div className="flex items-start gap-3">
-                                                                <div
-                                                                    className={cn(
-                                                                        "mt-0.5 p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-400",
-                                                                        config.color
-                                                                    )}
+                                                            </span>
+                                                            <span className="flex items-center gap-2">
+                                                                {
+                                                                    config.fullLabel
+                                                                }
+                                                                <span className="text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                                                                    {
+                                                                        docs.length
+                                                                    }
+                                                                </span>
+                                                            </span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                selectAllInCategory(
+                                                                    category
+                                                                )
+                                                            }
+                                                            className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 hover:bg-white rounded transition-colors"
+                                                        >
+                                                            {allSelected
+                                                                ? "Deseleccionar grupo"
+                                                                : "Seleccionar grupo"}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+
+                                            {/* Document Rows */}
+                                            {isExpanded &&
+                                                docs.map((doc) => {
+                                                    const isSelected =
+                                                        selectedDocs.has(
+                                                            doc.id
+                                                        );
+                                                    return (
+                                                        <tr
+                                                            key={doc.id}
+                                                            className={cn(
+                                                                "group/row transition-colors hover:bg-slate-50",
+                                                                isSelected &&
+                                                                    "bg-blue-50/30 hover:bg-blue-50/50"
+                                                            )}
+                                                        >
+                                                            <td className="px-4 py-3 text-center align-top pt-4">
+                                                                <button
+                                                                    onClick={() =>
+                                                                        toggleDocSelection(
+                                                                            doc.id
+                                                                        )
+                                                                    }
+                                                                    className="outline-none focus:ring-2 focus:ring-slate-400 rounded"
                                                                 >
-                                                                    <config.icon className="w-4 h-4" />
-                                                                </div>
-                                                                <div className="min-w-0">
-                                                                    <p
-                                                                        className="font-medium text-slate-900 group-hover/row:text-slate-700 transition-colors cursor-pointer hover:underline truncate"
-                                                                        onClick={() => window.open(doc.file_url, "_blank")}
-                                                                        title={doc.description}
-                                                                    >
-                                                                        {doc.description}
-                                                                    </p>
-                                                                    <div className="flex flex-wrap gap-2 mt-1">
-                                                                        <span
-                                                                            className="text-xs text-slate-500 truncate max-w-[200px]"
-                                                                            title={doc.file_name}
-                                                                        >
-                                                                            {doc.file_name}
-                                                                        </span>
-                                                                        {doc.amount && (
-                                                                            <Badge
-                                                                                variant="outline"
-                                                                                className="text-[10px] py-0 h-4 border-slate-200 text-slate-600 bg-white"
-                                                                            >
-                                                                                {formatCurrency(doc.amount)}
-                                                                            </Badge>
+                                                                    {isSelected ? (
+                                                                        <CheckSquare className="w-4 h-4 text-slate-900" />
+                                                                    ) : (
+                                                                        <Square className="w-4 h-4 text-slate-300 group-hover/row:text-slate-400" />
+                                                                    )}
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-start gap-3">
+                                                                    <div
+                                                                        className={cn(
+                                                                            "mt-0.5 p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-400",
+                                                                            config.color
                                                                         )}
+                                                                    >
+                                                                        <config.icon className="w-4 h-4" />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p
+                                                                            className="font-medium text-slate-900 group-hover/row:text-slate-700 transition-colors cursor-pointer hover:underline truncate"
+                                                                            onClick={() =>
+                                                                                window.open(
+                                                                                    doc.file_url,
+                                                                                    "_blank"
+                                                                                )
+                                                                            }
+                                                                            title={
+                                                                                doc.description
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                doc.description
+                                                                            }
+                                                                        </p>
+                                                                        <div className="flex flex-wrap gap-2 mt-1">
+                                                                            <span
+                                                                                className="text-xs text-slate-500 truncate max-w-[200px]"
+                                                                                title={
+                                                                                    doc.file_name
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    doc.file_name
+                                                                                }
+                                                                            </span>
+                                                                            {doc.amount && (
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="text-[10px] py-0 h-4 border-slate-200 text-slate-600 bg-white"
+                                                                                >
+                                                                                    {formatCurrency(
+                                                                                        doc.amount
+                                                                                    )}
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 hidden sm:table-cell text-sm text-slate-600 align-top pt-4">
-                                                            {doc.reference_label ? (
-                                                                <span className="text-slate-700 font-mono text-sm">
-                                                                    {doc.reference_label}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-slate-300 text-xs">—</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-3 hidden md:table-cell align-top pt-4">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-medium text-slate-700">
-                                                                    {formatDate(doc.uploaded_at, { format: "short" })}
-                                                                </span>
-                                                                <span className="text-[10px] text-slate-400">
-                                                                    {doc.uploaded_by || "Sistema"}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right align-top pt-3">
-                                                            <div className="flex items-center justify-end gap-1">
-                                                                <button
-                                                                    onClick={() => window.open(doc.file_url, "_blank")}
-                                                                    className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                                                                    title="Ver documento"
-                                                                >
-                                                                    <Eye className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDownload(doc)}
-                                                                    className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                                                                    title="Descargar"
-                                                                >
-                                                                    <Download className="w-4 h-4" />
-                                                                </button>
-                                                                {doc.deletable && (
-                                                                    <button
-                                                                        onClick={() => handleDelete(doc)}
-                                                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                                                        title="Eliminar"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
+                                                            </td>
+                                                            <td className="px-4 py-3 hidden sm:table-cell text-sm text-slate-600 align-top pt-4">
+                                                                {doc.reference_label ? (
+                                                                    <span className="text-slate-700 font-mono text-sm">
+                                                                        {
+                                                                            doc.reference_label
+                                                                        }
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-slate-300 text-xs">
+                                                                        —
+                                                                    </span>
                                                                 )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                    </React.Fragment>
-                                );
-                            })}
+                                                            </td>
+                                                            <td className="px-4 py-3 hidden md:table-cell align-top pt-4">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs font-medium text-slate-700">
+                                                                        {formatDate(
+                                                                            doc.uploaded_at,
+                                                                            {
+                                                                                format: "short",
+                                                                            }
+                                                                        )}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-slate-400">
+                                                                        {doc.uploaded_by ||
+                                                                            "Sistema"}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right align-top pt-3">
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            window.open(
+                                                                                doc.file_url,
+                                                                                "_blank"
+                                                                            )
+                                                                        }
+                                                                        className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                                                        title="Ver documento"
+                                                                    >
+                                                                        <Eye className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            handleDownload(
+                                                                                doc
+                                                                            )
+                                                                        }
+                                                                        className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                                                        title="Descargar"
+                                                                    >
+                                                                        <Download className="w-4 h-4" />
+                                                                    </button>
+                                                                    {doc.deletable && (
+                                                                        <button
+                                                                            onClick={() =>
+                                                                                handleDelete(
+                                                                                    doc
+                                                                                )
+                                                                            }
+                                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                                                            title="Eliminar"
+                                                                        >
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                        </React.Fragment>
+                                    );
+                                }
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -947,7 +1033,7 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate }) => {
                                 : "No se han cargado documentos para esta orden"
                         }
                         action={
-                            activeFilter === "all" && (
+                            activeFilter === "all" && !isClosed && (
                                 <Button
                                     size="sm"
                                     variant="outline"

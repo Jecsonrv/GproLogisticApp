@@ -135,12 +135,21 @@ class ServiceOrder(SoftDeleteModel):
     def get_total_direct_costs(self):
         """Calcula el total de costos directos (USD)"""
         total = Decimal('0.00')
+        
+        # 1. Costos vía Transfers (Legacy/Operativos)
         transfers = self.transfers.filter(
             transfer_type__in=['costos', 'propios'],
             is_deleted=False
         )
         for transfer in transfers:
             total += (transfer.amount or Decimal('0.00'))
+        
+        # 2. Costos vía Facturas de Proveedores (Nuevo Modelo de Asignación)
+        # Sumar el cost_amount de todos los cargos que tengan una asignación de costo
+        for charge in self.charges.filter(is_deleted=False):
+            if hasattr(charge, 'cost_allocation'):
+                total += charge.cost_allocation.cost_amount
+                
         return total
     
     def get_total_admin_costs(self):
@@ -255,10 +264,15 @@ class OrderCharge(SoftDeleteModel):
     Tratamiento fiscal según normativa salvadoreña:
     - GRAVADO: Se aplica IVA 13%
     - NO_SUJETO: No se aplica IVA (fuera del ámbito de aplicación de la ley)
+
+    TIPOS DE SERVICIO:
+    - Servicios Propios: Sin costo directo asociado, 100% margen
+    - Servicios Tercerizados: Vinculados a ProviderInvoice mediante DirectCostAllocation
     """
     # Tipos de tratamiento fiscal
     IVA_TYPE_CHOICES = (
         ('gravado', 'Gravado (13% IVA)'),
+        ('exento', 'Exento'),
         ('no_sujeto', 'No Sujeto'),
     )
 
@@ -303,6 +317,13 @@ class OrderCharge(SoftDeleteModel):
         choices=BILLING_STATUS_CHOICES,
         default='disponible',
         verbose_name="Estado de Facturación"
+    )
+
+    # Flag para servicios tercerizados (vinculados a ProviderInvoice)
+    is_third_party_service = models.BooleanField(
+        default=False,
+        verbose_name="Servicio Tercerizado",
+        help_text="Si es True, este servicio tiene un costo directo asociado (ProviderInvoice)"
     )
 
     # Moneda - SIEMPRE DOLARES
@@ -421,6 +442,57 @@ class OrderCharge(SoftDeleteModel):
             return False
         return True
 
+    def get_cost(self):
+        """
+        Retorna el costo base si es servicio tercerizado, 0 si es propio.
+
+        Returns:
+            Decimal: Costo asignado desde ProviderInvoice o 0
+        """
+        if self.is_third_party_service and hasattr(self, 'cost_allocation'):
+            return self.cost_allocation.cost_amount
+        return Decimal('0.00')
+
+    def get_profit(self):
+        """
+        Calcula la ganancia de este servicio.
+
+        Returns:
+            Decimal: Precio de venta - Costo
+        """
+        return self.subtotal - self.get_cost()
+
+    def get_margin_percentage(self):
+        """
+        Calcula el margen de ganancia en porcentaje.
+
+        Returns:
+            Decimal: Margen porcentual sobre el costo
+        """
+        cost = self.get_cost()
+        if cost > 0:
+            return ((self.subtotal - cost) / cost) * Decimal('100.00')
+        return Decimal('100.00')  # Si no hay costo, es 100% margen
+
+    def get_cost_allocation_info(self):
+        """
+        Retorna información de la asignación de costo si existe.
+
+        Returns:
+            dict: Información de la factura de proveedor y costo asignado
+        """
+        if self.is_third_party_service and hasattr(self, 'cost_allocation'):
+            alloc = self.cost_allocation
+            return {
+                'provider_invoice_id': alloc.provider_invoice.id,
+                'provider_invoice_number': alloc.provider_invoice.invoice_number,
+                'provider_name': alloc.provider_invoice.provider.name,
+                'cost_amount': float(alloc.cost_amount),
+                'profit': float(self.get_profit()),
+                'margin_percentage': float(self.get_margin_percentage())
+            }
+        return None
+
 
 class Invoice(models.Model):
     """
@@ -487,6 +559,8 @@ class Invoice(models.Model):
     # Estado de facturación
     is_dte_issued = models.BooleanField(default=False, verbose_name="DTE Emitido", 
         help_text="Marcar cuando se emita la factura real en el sistema fiscal. Una vez marcado, solo se pueden hacer notas de crédito.")
+    dte_issued_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Emisión DTE",
+        help_text="Fecha y hora en que se marcó como DTE emitido. Permite eliminación durante 24 horas.")
     dte_number = models.CharField(max_length=100, blank=True, verbose_name="Número DTE Real",
         help_text="Número de factura emitida en el sistema fiscal externo")
 
@@ -558,6 +632,12 @@ class Invoice(models.Model):
 
                 self.invoice_number = f"PRE-{new_num:05d}-{year}"
 
+        # Auto-bloquear DTE cuando se sube el PDF de la factura
+        if self.pdf_file and not self.is_dte_issued:
+            self.is_dte_issued = True
+            if not self.dte_issued_at:
+                self.dte_issued_at = timezone.now()
+
         # Calcular totales consolidados
         self.subtotal_neto = self.subtotal_services + self.subtotal_third_party
         self.iva_total = self.iva_services + (self.iva_third_party if hasattr(self, 'iva_third_party') else Decimal('0.00'))
@@ -602,7 +682,11 @@ class Invoice(models.Model):
 
         # Actualizar estado
         today = timezone.localdate()
-        if self.balance <= 0 and self.status != 'cancelled':
+        
+        # PARCHE DE SEGURIDAD: Si está anulada, el balance debe ser 0 para liberar crédito
+        if self.status == 'cancelled':
+            self.balance = Decimal('0.00')
+        elif self.balance <= 0:
             self.status = 'paid'
         elif self.paid_amount > 0 and self.balance > 0:
             self.status = 'partial'
@@ -619,10 +703,49 @@ class Invoice(models.Model):
 
         super().save(*args, **kwargs)
 
+    def can_delete_without_credit_note(self):
+        """
+        Verifica si la factura puede eliminarse sin nota de crédito.
+        Retorna True si:
+        - No está emitida como DTE, O
+        - Está emitida pero han pasado menos de 24 horas desde la emisión
+        """
+        if not self.is_dte_issued:
+            return True
+        
+        if not self.dte_issued_at:
+            # Si está marcado como emitido pero no tiene fecha, no permitir eliminación
+            return False
+        
+        from datetime import timedelta
+        time_limit = self.dte_issued_at + timedelta(hours=24)
+        return timezone.now() < time_limit
+
+    def get_hours_until_locked(self):
+        """
+        Retorna las horas restantes hasta que se bloquee permanentemente.
+        Retorna None si ya está bloqueado o no aplica.
+        """
+        if not self.is_dte_issued or not self.dte_issued_at:
+            return None
+        
+        from datetime import timedelta
+        time_limit = self.dte_issued_at + timedelta(hours=24)
+        now = timezone.now()
+        
+        if now >= time_limit:
+            return 0  # Ya está bloqueado
+        
+        remaining = time_limit - now
+        return remaining.total_seconds() / 3600  # Convertir a horas
+
     def calculate_totals(self):
         """
         Calcula los totales de servicios y gastos a terceros con desglose de IVA.
         Asegura coherencia entre OS y CXC mediante cálculo atómico.
+
+        AUDITORÍA #6: Ahora también recalcula la retención del 1% cuando
+        cambian los cargos gravados.
         """
         from decimal import Decimal
         from django.db import transaction
@@ -656,6 +779,21 @@ class Invoice(models.Model):
 
             # 4. Total general (Neto + IVA)
             self.total_amount = self.subtotal_neto + self.iva_total
+
+            # AUDITORÍA #6: Recalcular retención del 1% sobre base gravada
+            # La retención aplica solo a servicios gravados (iva_type='gravado')
+            client = self.service_order.client
+            base_gravada_servicios = sum(
+                c.subtotal for c in charges if c.iva_type == 'gravado'
+            ) or Decimal('0.00')
+
+            if self.invoice_type == 'DTE' and client.applies_retention(base_gravada_servicios):
+                self.retencion = client.calculate_retention(base_gravada_servicios)
+            else:
+                self.retencion = Decimal('0.00')
+
+            # 5. Recalcular balance considerando retención actualizada
+            self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
 
             self.save()
 
@@ -846,6 +984,168 @@ class InvoicePayment(SoftDeleteModel):
         payments = invoice.payments.filter(is_deleted=False)
         invoice.paid_amount = sum(payment.amount for payment in payments)
         invoice.save()
+    
+    def get_item_allocations_summary(self):
+        """
+        Retorna un resumen de las asignaciones de pago por item.
+        """
+        allocations = self.item_allocations.filter(is_deleted=False)
+        return {
+            'total_allocated': sum(a.amount for a in allocations),
+            'charges': [{
+                'charge_id': a.charge_id,
+                'amount': float(a.amount)
+            } for a in allocations if a.charge_id],
+            'expenses': [{
+                'expense_id': a.expense_id,
+                'amount': float(a.amount)
+            } for a in allocations if a.expense_id]
+        }
+
+
+class PaymentItemAllocation(SoftDeleteModel):
+    """
+    Asignación de un pago a items específicos de la factura.
+    
+    Permite registrar qué parte de un pago corresponde a cada item facturado,
+    ya sea un servicio (OrderCharge) o un gasto (Transfer).
+    
+    Esto facilita:
+    - Pagos parciales por item específico
+    - Tracking detallado de qué se ha pagado
+    - Conciliación con clientes que pagan por concepto
+    """
+    payment = models.ForeignKey(
+        InvoicePayment,
+        on_delete=models.CASCADE,
+        related_name='item_allocations',
+        verbose_name="Pago"
+    )
+    
+    # Un allocation puede ser para un cargo (servicio) O un gasto (expense)
+    charge = models.ForeignKey(
+        'OrderCharge',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='payment_allocations',
+        verbose_name="Servicio"
+    )
+    expense = models.ForeignKey(
+        'transfers.Transfer',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='payment_allocations',
+        verbose_name="Gasto"
+    )
+    
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Asignado"
+    )
+    
+    notes = models.CharField(max_length=255, blank=True, verbose_name="Notas")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Asignación de Pago por Item"
+        verbose_name_plural = "Asignaciones de Pago por Item"
+        ordering = ['payment', 'id']
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(charge__isnull=False, expense__isnull=True) |
+                    models.Q(charge__isnull=True, expense__isnull=False)
+                ),
+                name='payment_allocation_one_item_type'
+            )
+        ]
+
+    def __str__(self):
+        item_desc = ""
+        if self.charge:
+            item_desc = f"Servicio: {self.charge.service.name}"
+        elif self.expense:
+            item_desc = f"Gasto: {self.expense.description[:30]}"
+        return f"Pago #{self.payment_id} - {item_desc} - ${self.amount}"
+
+    def clean(self):
+        """Validaciones de integridad"""
+        super().clean()
+        
+        # Validar que tenga exactamente un item
+        if not self.charge and not self.expense:
+            raise ValidationError("Debe especificar un servicio o un gasto")
+        
+        if self.charge and self.expense:
+            raise ValidationError("Solo puede especificar un servicio O un gasto, no ambos")
+        
+        # Validar que el item pertenezca a la misma factura que el pago
+        invoice = self.payment.invoice
+        
+        if self.charge and self.charge.invoice_id != invoice.id:
+            raise ValidationError("El servicio no pertenece a la factura de este pago")
+        
+        if self.expense and self.expense.invoice_id != invoice.id:
+            raise ValidationError("El gasto no pertenece a la factura de este pago")
+        
+        # Validar que el monto no exceda el pendiente del item
+        item_total = self.get_item_total()
+        item_paid = self.get_item_paid_amount(exclude_self=True)
+        item_pending = item_total - item_paid
+        
+        if self.amount > item_pending:
+            raise ValidationError({
+                'amount': f'El monto (${self.amount}) excede el pendiente del item (${item_pending})'
+            })
+
+    def get_item_total(self):
+        """Retorna el total del item asociado"""
+        if self.charge:
+            return self.charge.total
+        elif self.expense:
+            return self.expense.get_customer_total()
+        return Decimal('0.00')
+
+    def get_item_paid_amount(self, exclude_self=False):
+        """
+        Calcula el monto ya pagado para este item específico.
+        
+        Args:
+            exclude_self: Si es True, excluye esta asignación del cálculo
+        """
+        if self.charge:
+            qs = PaymentItemAllocation.objects.filter(
+                charge=self.charge,
+                payment__is_deleted=False,
+                is_deleted=False
+            )
+        elif self.expense:
+            qs = PaymentItemAllocation.objects.filter(
+                expense=self.expense,
+                payment__is_deleted=False,
+                is_deleted=False
+            )
+        else:
+            return Decimal('0.00')
+        
+        if exclude_self and self.pk:
+            qs = qs.exclude(pk=self.pk)
+        
+        return qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+    def get_item_pending_amount(self):
+        """Retorna el monto pendiente del item"""
+        return self.get_item_total() - self.get_item_paid_amount()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class OrderHistory(models.Model):
@@ -855,6 +1155,7 @@ class OrderHistory(models.Model):
         ('updated', 'Orden Actualizada'),
         ('status_changed', 'Cambio de Estado'),
         ('charge_added', 'Cobro Agregado'),
+        ('charge_updated', 'Cobro Actualizado'),  # AUDITORÍA #9
         ('charge_deleted', 'Cobro Eliminado'),
         ('payment_added', 'Pago a Proveedor Agregado'),
         ('payment_updated', 'Pago a Proveedor Actualizado'),
@@ -865,6 +1166,9 @@ class OrderHistory(models.Model):
         ('document_deleted', 'Documento Eliminado'),
         ('invoice_generated', 'Factura Generada'),
         ('invoice_payment', 'Pago de Cliente Recibido'),
+        ('invoice_payment_deleted', 'Pago de Cliente Eliminado'),  # AUDITORÍA #9
+        ('invoice_voided', 'Factura Anulada'),  # AUDITORÍA #9
+        ('credit_note_added', 'Nota de Crédito Aplicada'),  # AUDITORÍA #9
         ('closed', 'Orden Cerrada'),
         ('reopened', 'Orden Reabierta'),
     )

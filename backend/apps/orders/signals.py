@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from .models import ServiceOrder, OrderCharge, OrderDocument, OrderHistory, InvoicePayment
+from .models import ServiceOrder, OrderCharge, OrderDocument, OrderHistory, InvoicePayment, Invoice, CreditNote
 from ..transfers.models import Transfer
 from apps.users.models import Notification
 
@@ -313,14 +313,37 @@ def log_document_deletion(sender, instance, **kwargs):
 @receiver(post_save, sender=InvoicePayment)
 def notify_payment_received(sender, instance, created, **kwargs):
     """
-    Notificar cuando se recibe un pago de cliente
+    Notificar cuando se recibe un pago de cliente y registrar en historial de OS
+    AUDITORÍA #9: Agregado registro en OrderHistory
     """
+    if not instance.invoice or not instance.invoice.service_order:
+        return
+
+    service_order = instance.invoice.service_order
+    user = getattr(instance, 'created_by', None)
+
     if created and instance.amount > 0:
+        # Registrar en historial de OS
+        OrderHistory.objects.create(
+            service_order=service_order,
+            user=user,
+            event_type='invoice_payment',
+            description=f'Pago recibido: ${instance.amount} - Factura {instance.invoice.invoice_number}',
+            metadata={
+                'invoice_id': instance.invoice.id,
+                'invoice_number': instance.invoice.invoice_number,
+                'payment_id': instance.id,
+                'amount': float(instance.amount),
+                'payment_method': instance.payment_method,
+                'new_balance': float(instance.invoice.balance)
+            }
+        )
+
         # Notificar al creador de la factura (si existe y no es quien registró el pago)
         invoice_creator = instance.invoice.created_by
-        payment_registrar = getattr(instance, 'created_by', None)
-        os_number = instance.invoice.service_order.order_number
-        
+        payment_registrar = user
+        os_number = service_order.order_number
+
         if invoice_creator and invoice_creator != payment_registrar:
             Notification.create_notification(
                 user=invoice_creator,
@@ -330,3 +353,85 @@ def notify_payment_received(sender, instance, created, **kwargs):
                 category='payment',
                 related_object=instance.invoice
             )
+
+
+@receiver(pre_save, sender=InvoicePayment)
+def capture_previous_payment_state(sender, instance, **kwargs):
+    """AUDITORÍA #9: Capturar estado anterior del pago para detectar soft delete"""
+    if instance.pk:
+        try:
+            previous = InvoicePayment.all_objects.get(pk=instance.pk)
+            instance._was_deleted = previous.is_deleted
+        except InvoicePayment.DoesNotExist:
+            instance._was_deleted = False
+
+
+@receiver(post_save, sender=InvoicePayment)
+def log_payment_deletion(sender, instance, created, **kwargs):
+    """AUDITORÍA #9: Registrar eliminación de pagos de cliente"""
+    if not created and instance.is_deleted and not getattr(instance, '_was_deleted', False):
+        if instance.invoice and instance.invoice.service_order:
+            OrderHistory.objects.create(
+                service_order=instance.invoice.service_order,
+                user=getattr(instance, '_current_user', None),
+                event_type='invoice_payment_deleted',
+                description=f'Pago eliminado: ${instance.amount} - Factura {instance.invoice.invoice_number}',
+                metadata={
+                    'invoice_id': instance.invoice.id,
+                    'invoice_number': instance.invoice.invoice_number,
+                    'payment_id': instance.id,
+                    'amount': float(instance.amount),
+                    'payment_method': instance.payment_method
+                }
+            )
+
+
+@receiver(post_save, sender=Invoice)
+def log_invoice_events(sender, instance, created, **kwargs):
+    """AUDITORÍA #9: Registrar creación de facturas en historial de OS"""
+    if not instance.service_order:
+        return
+
+    user = getattr(instance, '_current_user', instance.created_by)
+
+    if created:
+        OrderHistory.objects.create(
+            service_order=instance.service_order,
+            user=user,
+            event_type='invoice_generated',
+            description=f'Factura generada: {instance.invoice_number} - Total: ${instance.total_amount}',
+            metadata={
+                'invoice_id': instance.id,
+                'invoice_number': instance.invoice_number,
+                'invoice_type': instance.invoice_type,
+                'total_amount': float(instance.total_amount),
+                'total_services': float(instance.total_services),
+                'total_third_party': float(instance.total_third_party)
+            }
+        )
+
+
+@receiver(post_save, sender=CreditNote)
+def log_credit_note_events(sender, instance, created, **kwargs):
+    """AUDITORÍA #9: Registrar notas de crédito en historial de OS"""
+    if not instance.invoice or not instance.invoice.service_order:
+        return
+
+    user = getattr(instance, 'created_by', None)
+
+    if created:
+        OrderHistory.objects.create(
+            service_order=instance.invoice.service_order,
+            user=user,
+            event_type='credit_note_added',
+            description=f'Nota de crédito aplicada: ${instance.amount} - Factura {instance.invoice.invoice_number}',
+            metadata={
+                'credit_note_id': instance.id,
+                'note_number': instance.note_number,
+                'invoice_id': instance.invoice.id,
+                'invoice_number': instance.invoice.invoice_number,
+                'amount': float(instance.amount),
+                'reason': instance.reason,
+                'new_balance': float(instance.invoice.balance)
+            }
+        )

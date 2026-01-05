@@ -125,33 +125,102 @@ class Client(models.Model):
         return subtotal_services * self.get_retention_rate()
 
     def get_credit_available(self):
-        """Calcula el crédito disponible del cliente basado en facturas pendientes"""
+        """
+        Calcula el crédito disponible del cliente basado en facturas pendientes.
+
+        AUDITORÍA #3: Unificado con get_credit_used() para usar la misma lógica:
+        - Filtra por balance > 0 (facturas con saldo pendiente)
+        - Excluye facturas anuladas (status='cancelled')
+        """
         from apps.orders.models import Invoice
         from decimal import Decimal
 
         if self.payment_condition != 'credito':
             return Decimal('0.00')
 
-        # El crédito usado es la suma de saldos pendientes de facturas no pagadas
-        pending_invoices = Invoice.objects.filter(
+        # CORREGIDO: Usar misma lógica que get_credit_used()
+        # Facturas con saldo pendiente, excluyendo anuladas
+        credit_used = Invoice.objects.filter(
             service_order__client=self,
-            status__in=['pending', 'partial', 'overdue']
-        )
-        credit_used = pending_invoices.aggregate(
+            balance__gt=0
+        ).exclude(
+            status='cancelled'
+        ).aggregate(
             total=models.Sum('balance')
         )['total'] or Decimal('0.00')
 
         return max(Decimal('0.00'), self.credit_limit - credit_used)
 
     def get_credit_used(self):
-        """Retorna el crédito actualmente utilizado"""
+        """
+        Retorna el crédito actualmente utilizado.
+
+        AUDITORÍA #3: Sincronizado con get_credit_available()
+        - Cuenta facturas con saldo pendiente (balance > 0)
+        - Excluye facturas anuladas (status='cancelled')
+        """
         from apps.orders.models import Invoice
         from decimal import Decimal
 
-        pending_invoices = Invoice.objects.filter(
+        # Facturas con saldo pendiente, excluyendo anuladas
+        return Invoice.objects.filter(
             service_order__client=self,
-            status__in=['pending', 'partial', 'overdue']
-        )
-        return pending_invoices.aggregate(
+            balance__gt=0
+        ).exclude(
+            status='cancelled'
+        ).aggregate(
             total=models.Sum('balance')
         )['total'] or Decimal('0.00')
+
+    def validate_credit_for_invoice(self, invoice_amount):
+        """
+        AUDITORÍA #7: Validación atómica de crédito para facturación.
+
+        Usa select_for_update() para prevenir race conditions cuando
+        múltiples usuarios intentan facturar al mismo cliente simultáneamente.
+
+        Args:
+            invoice_amount: Monto de la nueva factura a validar
+
+        Returns:
+            tuple: (is_valid: bool, message: str, available_credit: Decimal)
+
+        Usage:
+            with transaction.atomic():
+                is_valid, msg, available = client.validate_credit_for_invoice(1000)
+                if not is_valid:
+                    raise ValidationError(msg)
+                # Proceder con la facturación...
+        """
+        from apps.orders.models import Invoice
+        from decimal import Decimal
+        from django.db import transaction
+
+        if self.payment_condition != 'credito':
+            return True, "Cliente de contado, no requiere validación de crédito", Decimal('0.00')
+
+        # Obtener lock sobre las facturas del cliente para prevenir race condition
+        with transaction.atomic():
+            # Sumar saldos pendientes con lock
+            pending_balance = Invoice.objects.select_for_update().filter(
+                service_order__client=self,
+                balance__gt=0
+            ).exclude(
+                status='cancelled'
+            ).aggregate(
+                total=models.Sum('balance')
+            )['total'] or Decimal('0.00')
+
+            credit_available = self.credit_limit - pending_balance
+            new_balance_after = pending_balance + Decimal(str(invoice_amount))
+
+            if new_balance_after > self.credit_limit:
+                return (
+                    False,
+                    f"El cliente excedería su límite de crédito. "
+                    f"Límite: ${self.credit_limit}, Usado: ${pending_balance}, "
+                    f"Disponible: ${credit_available}, Monto solicitado: ${invoice_amount}",
+                    credit_available
+                )
+
+            return True, "Crédito disponible", credit_available

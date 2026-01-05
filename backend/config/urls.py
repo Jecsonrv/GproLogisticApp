@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/orders/', include('apps.orders.urls')),
     path('api/transfers/', include('apps.transfers.urls')),
     path('api/dashboard/', include('apps.dashboard.urls')),
+    path('api/petty-cash/', include('apps.petty_cash.urls')),
     
     # Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

@@ -16,7 +16,18 @@ import {
 import { formatCurrency, getTodayDate, cn } from "../lib/utils";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { Check, AlertCircle, Calendar, CreditCard, Info, FileText, Building2 } from "lucide-react";
+import {
+    Check,
+    AlertCircle,
+    Calendar,
+    CreditCard,
+    Info,
+    FileText,
+    Building2,
+    TrendingUp,
+    Package,
+    Receipt,
+} from "lucide-react";
 
 /**
  * Calcula la fecha de vencimiento basándose en días de crédito
@@ -72,7 +83,8 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
 
             // Determinar tipo de factura por defecto
             // Si es internacional -> FEX, si no -> DTE (CCF/Factura)
-            const defaultInvoiceType = serviceOrder.client_type === 'internacional' ? "FEX" : "DTE";
+            const defaultInvoiceType =
+                serviceOrder.client_type === "internacional" ? "FEX" : "DTE";
 
             setFormData({
                 invoice_number: "",
@@ -111,7 +123,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             setSelectedChargeIds(items.map((c) => c.id));
         } catch (error) {
             console.error("Error fetching charges:", error);
-            toast.error("No se pudieron cargar los cargos pendientes. Intente recargar.");
+            toast.error(
+                "No se pudieron cargar los cargos pendientes. Intente recargar."
+            );
         } finally {
             setLoading(false);
         }
@@ -134,6 +148,13 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         let iva = 0;
         let total = 0;
 
+        // NUEVO: Cálculos de rentabilidad
+        let costoDirectoTotal = 0;
+        let gananciaBruta = 0;
+        let serviciosPropios = [];
+        let serviciosTercerizados = [];
+        let reembolsos = [];
+
         // Validar que charges sea un array
         if (Array.isArray(charges)) {
             charges.forEach((charge) => {
@@ -142,26 +163,61 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                     let ivaAmount = parseFloat(charge.iva);
 
                     // Si es Factura de Exportación (FEX) o Internacional (INTL), el IVA es 0
-                    const isExport = formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL';
+                    const isExport =
+                        formData.invoice_type === "FEX" ||
+                        formData.invoice_type === "INTL";
                     if (isExport) {
                         ivaAmount = 0;
                     }
 
                     // Separar servicios de gastos de terceros
-                    if (charge.type === 'service') {
+                    if (charge.type === "service") {
                         subtotalServicios += amount;
                         // Acumular base gravada solo si el servicio es gravado
-                        // NOTA: Si es FEX, el IVA será forzado a 0 arriba, pero mantenemos la base
-                        // para que si cambian a DTE se recalcule correctamente.
-                        if (charge.iva_type === 'gravado') {
+                        if (charge.iva_type === "gravado") {
                             baseGravadaServicios += amount;
                         }
-                    } else if (charge.type === 'expense') {
+
+                        // NUEVO: Calcular rentabilidad por servicio
+                        const costAmount = parseFloat(charge.cost_amount || 0);
+                        const profit = amount - costAmount;
+
+                        if (charge.is_third_party_service) {
+                            costoDirectoTotal += costAmount;
+                            serviciosTercerizados.push({
+                                ...charge,
+                                cost: costAmount,
+                                sale: amount,
+                                profit: profit,
+                                margin:
+                                    costAmount > 0
+                                        ? (profit / costAmount) * 100
+                                        : 100,
+                            });
+                        } else {
+                            serviciosPropios.push({
+                                ...charge,
+                                cost: 0,
+                                sale: amount,
+                                profit: amount,
+                                margin: 100,
+                            });
+                        }
+                        gananciaBruta += profit;
+                    } else if (charge.type === "expense") {
                         subtotalTerceros += amount;
+                        // Reembolsos no tienen ganancia
+                        reembolsos.push({
+                            ...charge,
+                            cost: amount,
+                            sale: amount,
+                            profit: 0,
+                            margin: 0,
+                        });
                     }
 
                     iva += ivaAmount;
-                    
+
                     // Recalcular total de línea considerando el IVA ajustado
                     total += amount + ivaAmount;
                 }
@@ -171,19 +227,29 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         const subtotal = subtotalServicios + subtotalTerceros;
 
         // Calcular retención del 1% para Gran Contribuyente
-        // SOLO sobre la BASE GRAVADA de servicios (NO sobre montos no sujetos/exentos ni gastos de terceros)
-        const RETENCION_THRESHOLD = 100.00;
+        const RETENCION_THRESHOLD = 100.0;
         const RETENCION_RATE = 0.01;
 
-        const isGranContribuyente = serviceOrder?.client_is_gran_contribuyente || false;
-        const isDTE = formData.invoice_type === 'DTE';
+        const isGranContribuyente =
+            serviceOrder?.client_is_gran_contribuyente || false;
+        const isDTE = formData.invoice_type === "DTE";
 
         let retencion = 0;
-        if (isGranContribuyente && isDTE && baseGravadaServicios > RETENCION_THRESHOLD) {
+        if (
+            isGranContribuyente &&
+            isDTE &&
+            baseGravadaServicios > RETENCION_THRESHOLD
+        ) {
             retencion = baseGravadaServicios * RETENCION_RATE;
         }
 
         const totalAPagar = total - retencion;
+
+        // NUEVO: Calcular margen de rentabilidad total
+        const margenRentabilidad =
+            subtotalServicios > 0
+                ? (gananciaBruta / subtotalServicios) * 100
+                : 0;
 
         return {
             subtotalServicios,
@@ -193,13 +259,27 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             iva,
             retencion,
             total,
-            totalAPagar
+            totalAPagar,
+            // NUEVO: Datos de rentabilidad
+            costoDirectoTotal,
+            gananciaBruta,
+            margenRentabilidad,
+            serviciosPropios,
+            serviciosTercerizados,
+            reembolsos,
         };
-    }, [charges, selectedChargeIds, serviceOrder?.client_is_gran_contribuyente, formData.invoice_type]);
+    }, [
+        charges,
+        selectedChargeIds,
+        serviceOrder?.client_is_gran_contribuyente,
+        formData.invoice_type,
+    ]);
 
     const handleCreateInvoice = async () => {
         if (selectedChargeIds.length === 0) {
-            toast.error("Debe seleccionar al menos un cargo para generar la factura.");
+            toast.error(
+                "Debe seleccionar al menos un cargo para generar la factura."
+            );
             return;
         }
 
@@ -257,7 +337,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                             }`;
                         })
                         .join("\n");
-                    toast.error(errorMessages || "No se pudo generar la factura.");
+                    toast.error(
+                        errorMessages || "No se pudo generar la factura."
+                    );
                 } else {
                     toast.error(
                         errors.error ||
@@ -266,7 +348,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                     );
                 }
             } else {
-                toast.error("No se pudo generar la factura. Intente nuevamente.");
+                toast.error(
+                    "No se pudo generar la factura. Intente nuevamente."
+                );
             }
         } finally {
             setLoading(false);
@@ -316,15 +400,19 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                             checked={
                                                                 selectedChargeIds.length ===
                                                                     charges.length &&
-                                                                charges.length > 0
+                                                                charges.length >
+                                                                    0
                                                             }
                                                             onChange={(e) => {
                                                                 if (
-                                                                    e.target.checked
+                                                                    e.target
+                                                                        .checked
                                                                 ) {
                                                                     setSelectedChargeIds(
                                                                         charges.map(
-                                                                            (c) =>
+                                                                            (
+                                                                                c
+                                                                            ) =>
                                                                                 c.id
                                                                         )
                                                                     );
@@ -355,74 +443,131 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                 {charges.map((charge) => {
                                                     // Ajuste visual dinámico según tipo de factura
                                                     // Si es FEX/INTL, mostrar IVA como 0 aunque el cargo tenga IVA
-                                                    const isExport = formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL';
-                                                    const displayIva = isExport ? 0 : parseFloat(charge.iva);
-                                                    const displayTotal = parseFloat(charge.amount) + displayIva;
+                                                    const isExport =
+                                                        formData.invoice_type ===
+                                                            "FEX" ||
+                                                        formData.invoice_type ===
+                                                            "INTL";
+                                                    const displayIva = isExport
+                                                        ? 0
+                                                        : parseFloat(
+                                                              charge.iva
+                                                          );
+                                                    const displayTotal =
+                                                        parseFloat(
+                                                            charge.amount
+                                                        ) + displayIva;
 
                                                     return (
-                                                    <tr
-                                                        key={charge.id}
-                                                        className={cn(
-                                                            "transition-colors cursor-pointer group",
-                                                            selectedChargeIds.includes(
-                                                                charge.id
-                                                            )
-                                                                ? "bg-blue-50/40"
-                                                                : "hover:bg-slate-50"
-                                                        )}
-                                                        onClick={() => handleChargeToggle(charge.id)}
-                                                    >
-                                                        <td className="px-4 py-2.5 text-center">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedChargeIds.includes(
+                                                        <tr
+                                                            key={charge.id}
+                                                            className={cn(
+                                                                "transition-colors cursor-pointer group",
+                                                                selectedChargeIds.includes(
                                                                     charge.id
-                                                                )}
-                                                                onChange={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleChargeToggle(charge.id);
-                                                                }}
-                                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-2.5">
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge
-                                                                    variant={
-                                                                        charge.type ===
+                                                                )
+                                                                    ? "bg-blue-50/40"
+                                                                    : "hover:bg-slate-50"
+                                                            )}
+                                                            onClick={() =>
+                                                                handleChargeToggle(
+                                                                    charge.id
+                                                                )
+                                                            }
+                                                        >
+                                                            <td className="px-4 py-2.5 text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={selectedChargeIds.includes(
+                                                                        charge.id
+                                                                    )}
+                                                                    onChange={(
+                                                                        e
+                                                                    ) => {
+                                                                        e.stopPropagation();
+                                                                        handleChargeToggle(
+                                                                            charge.id
+                                                                        );
+                                                                    }}
+                                                                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-2.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge
+                                                                        variant={
+                                                                            charge.type ===
+                                                                            "service"
+                                                                                ? charge.is_third_party_service
+                                                                                    ? "secondary" // Tercerizado
+                                                                                    : "default" // Propio
+                                                                                : "outline" // Gasto -> Cargo a Cliente
+                                                                        }
+                                                                        className={`text-[10px] px-1.5 py-0 uppercase ${
+                                                                            charge.type ===
+                                                                            "expense"
+                                                                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                                                                : ""
+                                                                        }`}
+                                                                    >
+                                                                        {charge.type ===
                                                                         "service"
-                                                                            ? "default"
-                                                                            : "secondary"
-                                                                    }
-                                                                    className="text-[10px] px-1.5 py-0 uppercase"
-                                                                >
-                                                                    {charge.type === "service" ? "Servicio" : "Gasto"}
-                                                                </Badge>
-                                                                <span className="font-medium text-slate-700">{charge.description}</span>
-                                                            </div>
-                                                            {charge.notes && (
-                                                                <div className="text-[11px] text-slate-500 mt-0.5 ml-14 truncate max-w-md">
-                                                                    {charge.notes}
+                                                                            ? charge.is_third_party_service
+                                                                                ? "Servicio Tercerizado"
+                                                                                : "Servicio Propio"
+                                                                            : "Cargo a Cliente"}
+                                                                    </Badge>
+                                                                    <span className="font-medium text-slate-700">
+                                                                        {
+                                                                            charge.description
+                                                                        }
+                                                                    </span>
                                                                 </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
-                                                            {formatCurrency(
-                                                                charge.amount
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
-                                                            {formatCurrency(
-                                                                displayIva
-                                                            )}
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-right tabular-nums font-bold text-slate-900">
-                                                            {formatCurrency(
-                                                                displayTotal
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                )})}
+                                                                {charge.notes && (
+                                                                    <div className="text-[11px] text-slate-500 mt-0.5 ml-14 truncate max-w-md">
+                                                                        {
+                                                                            charge.notes
+                                                                        }
+                                                                    </div>
+                                                                )}
+                                                                {/* Info de costo/margen para servicios tercerizados */}
+                                                                {charge.type ===
+                                                                    "service" &&
+                                                                    charge.is_third_party_service &&
+                                                                    charge.cost_amount >
+                                                                        0 && (
+                                                                        <div className="text-[11px] text-slate-500 mt-0.5 ml-14">
+                                                                            Costo:{" "}
+                                                                            {formatCurrency(
+                                                                                charge.cost_amount
+                                                                            )}{" "}
+                                                                            |
+                                                                            Margen:{" "}
+                                                                            {charge.margin_percentage.toFixed(
+                                                                                2
+                                                                            )}
+                                                                            %
+                                                                        </div>
+                                                                    )}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
+                                                                {formatCurrency(
+                                                                    charge.amount
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                                                                {formatCurrency(
+                                                                    displayIva
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-right tabular-nums font-bold text-slate-900">
+                                                                {formatCurrency(
+                                                                    displayTotal
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                             <tfoot className="bg-slate-50 border-t border-slate-200">
                                                 <tr>
@@ -466,7 +611,10 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                         Resumen de Facturación
                                     </h3>
                                     <span className="text-[10px] text-slate-500 font-medium">
-                                        {selectedChargeIds.length} {selectedChargeIds.length === 1 ? 'item' : 'items'}
+                                        {selectedChargeIds.length}{" "}
+                                        {selectedChargeIds.length === 1
+                                            ? "item"
+                                            : "items"}
                                     </span>
                                 </div>
 
@@ -474,39 +622,64 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     {/* Subtotales detallados */}
                                     {selectedTotals.subtotalServicios > 0 && (
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Servicios</span>
+                                            <span className="text-slate-500">
+                                                Servicios
+                                            </span>
                                             <span className="text-slate-700 tabular-nums">
-                                                {formatCurrency(selectedTotals.subtotalServicios)}
+                                                {formatCurrency(
+                                                    selectedTotals.subtotalServicios
+                                                )}
                                             </span>
                                         </div>
                                     )}
                                     {selectedTotals.subtotalTerceros > 0 && (
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Gastos Reembolsables</span>
+                                            <span className="text-slate-500">
+                                                Gastos Reembolsables
+                                            </span>
                                             <span className="text-slate-700 tabular-nums">
-                                                {formatCurrency(selectedTotals.subtotalTerceros)}
+                                                {formatCurrency(
+                                                    selectedTotals.subtotalTerceros
+                                                )}
                                             </span>
                                         </div>
                                     )}
 
                                     <div className="flex justify-between text-sm pt-1">
-                                        <span className="text-slate-600 font-medium">Subtotal</span>
+                                        <span className="text-slate-600 font-medium">
+                                            Subtotal
+                                        </span>
                                         <span className="text-slate-800 tabular-nums font-medium">
-                                            {formatCurrency(selectedTotals.subtotal)}
+                                            {formatCurrency(
+                                                selectedTotals.subtotal
+                                            )}
                                         </span>
                                     </div>
 
                                     {/* IVA */}
                                     <div className="flex justify-between text-sm">
                                         <div className="flex items-center gap-1.5">
-                                            <span className="text-slate-500">IVA 13%</span>
-                                            {(formData.invoice_type === 'FEX' || formData.invoice_type === 'INTL') && (
-                                                <Badge variant="outline" className="text-[9px] px-1 h-4 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                            <span className="text-slate-500">
+                                                IVA 13%
+                                            </span>
+                                            {(formData.invoice_type === "FEX" ||
+                                                formData.invoice_type ===
+                                                    "INTL") && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="text-[9px] px-1 h-4 bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                >
                                                     EXENTO (EXPORTACIÓN)
                                                 </Badge>
                                             )}
                                         </div>
-                                        <span className={`tabular-nums ${selectedTotals.iva === 0 ? "text-slate-400" : "text-slate-700"}`}>
+                                        <span
+                                            className={`tabular-nums ${
+                                                selectedTotals.iva === 0
+                                                    ? "text-slate-400"
+                                                    : "text-slate-700"
+                                            }`}
+                                        >
                                             {formatCurrency(selectedTotals.iva)}
                                         </span>
                                     </div>
@@ -514,9 +687,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     {/* Retención si aplica */}
                                     {selectedTotals.retencion > 0 && (
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Retención 1%</span>
+                                            <span className="text-slate-500">
+                                                Retención 1%
+                                            </span>
                                             <span className="text-slate-600 tabular-nums">
-                                                − {formatCurrency(selectedTotals.retencion)}
+                                                −{" "}
+                                                {formatCurrency(
+                                                    selectedTotals.retencion
+                                                )}
                                             </span>
                                         </div>
                                     )}
@@ -526,14 +704,272 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                 <div className="mt-4 pt-3 border-t border-slate-200">
                                     <div className="flex justify-between items-baseline">
                                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                            {selectedTotals.retencion > 0 ? 'Total a Cobrar' : 'Total Factura'}
+                                            {selectedTotals.retencion > 0
+                                                ? "Total a Cobrar"
+                                                : "Total Factura"}
                                         </span>
                                         <span className="text-xl font-bold text-slate-900 tabular-nums">
-                                            {formatCurrency(selectedTotals.retencion > 0 ? selectedTotals.totalAPagar : selectedTotals.total)}
+                                            {formatCurrency(
+                                                selectedTotals.retencion > 0
+                                                    ? selectedTotals.totalAPagar
+                                                    : selectedTotals.total
+                                            )}
                                         </span>
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Tabla Detallada de Análisis de Items */}
+                            {selectedChargeIds.length > 0 && (
+                                <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-lg p-5 border border-slate-200">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                                        <h3 className="text-sm font-semibold text-slate-700">
+                                            Análisis por Items
+                                        </h3>
+                                    </div>
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                                        <table className="min-w-full divide-y divide-slate-200 text-xs">
+                                            <thead className="bg-slate-50">
+                                                <tr>
+                                                    <th className="px-3 py-2.5 text-left font-bold text-slate-600 uppercase text-[10px] tracking-wider">
+                                                        Servicio
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-center font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                                        Tipo
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                                        Cant.
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
+                                                        Costo
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
+                                                        Precio
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-28">
+                                                        Ganancia
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-20">
+                                                        Margen
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-center font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                                        Tipo IVA
+                                                    </th>
+                                                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase text-[10px] tracking-wider w-24">
+                                                        IVA
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-100">
+                                                {charges
+                                                    .filter((charge) =>
+                                                        selectedChargeIds.includes(
+                                                            charge.id
+                                                        )
+                                                    )
+                                                    .map((charge) => {
+                                                        const isTercerizado =
+                                                            charge.is_third_party_service;
+                                                        const hasCost =
+                                                            charge.cost_amount >
+                                                            0;
+
+                                                        return (
+                                                            <tr
+                                                                key={charge.id}
+                                                                className="hover:bg-slate-50"
+                                                            >
+                                                                <td className="px-3 py-2 text-slate-700">
+                                                                    {charge.service_name ||
+                                                                        charge.description}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    {charge.type ===
+                                                                    "expense" ? (
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="text-[10px] px-1.5 py-0.5 font-medium bg-orange-50 text-orange-700 border-orange-200"
+                                                                        >
+                                                                            Cargo
+                                                                            a
+                                                                            Cliente
+                                                                        </Badge>
+                                                                    ) : charge.is_third_party_service ? (
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 text-slate-600 border-slate-300"
+                                                                        >
+                                                                            Servicio
+                                                                            Tercerizado
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="text-[10px] px-1.5 py-0.5 font-medium bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                                        >
+                                                                            Servicio
+                                                                            Propio
+                                                                        </Badge>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
+                                                                    {charge.quantity ||
+                                                                        1}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right tabular-nums">
+                                                                    {hasCost ? (
+                                                                        <span className="text-slate-700">
+                                                                            {formatCurrency(
+                                                                                charge.cost_amount
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right text-slate-700 tabular-nums font-medium">
+                                                                    {formatCurrency(
+                                                                        charge.amount
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right tabular-nums">
+                                                                    {hasCost ? (
+                                                                        <span
+                                                                            className={`font-medium ${
+                                                                                charge.profit >=
+                                                                                0
+                                                                                    ? "text-emerald-700"
+                                                                                    : "text-red-700"
+                                                                            }`}
+                                                                        >
+                                                                            {formatCurrency(
+                                                                                charge.profit
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right tabular-nums">
+                                                                    {hasCost ? (
+                                                                        <span
+                                                                            className={`text-[11px] ${
+                                                                                charge.margin_percentage >=
+                                                                                0
+                                                                                    ? "text-slate-600"
+                                                                                    : "text-red-700"
+                                                                            }`}
+                                                                        >
+                                                                            {charge.margin_percentage.toFixed(
+                                                                                1
+                                                                            )}
+                                                                            %
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-300 text-[11px]">
+                                                                            N/A
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={`text-[10px] px-1.5 py-0.5 font-medium ${
+                                                                            charge.iva_type ===
+                                                                            "gravado"
+                                                                                ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                                : "bg-slate-50 text-slate-600 border-slate-200"
+                                                                        }`}
+                                                                    >
+                                                                        {charge.iva_type ===
+                                                                        "gravado"
+                                                                            ? "Gravado 13%"
+                                                                            : charge.iva_type ===
+                                                                              "exento"
+                                                                            ? "Exento"
+                                                                            : "No Sujeto"}
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                                                                    {charge.iva_amount >
+                                                                    0 ? (
+                                                                        formatCurrency(
+                                                                            charge.iva_amount
+                                                                        )
+                                                                    ) : (
+                                                                        <span className="text-slate-300">
+                                                                            -
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                            <tfoot className="bg-slate-100 border-t-2 border-slate-300">
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        className="px-3 py-3 text-right font-semibold text-slate-700 text-sm"
+                                                    >
+                                                        Subtotal (sin IVA):
+                                                    </td>
+                                                    <td
+                                                        colSpan={2}
+                                                        className="px-3 py-3 text-right font-semibold text-slate-800 tabular-nums text-sm"
+                                                    >
+                                                        {formatCurrency(
+                                                            selectedTotals.subtotal
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        className="px-3 py-2 text-right font-medium text-slate-700 text-sm"
+                                                    >
+                                                        IVA (13%):
+                                                    </td>
+                                                    <td
+                                                        colSpan={2}
+                                                        className="px-3 py-2 text-right font-medium text-slate-700 tabular-nums text-sm"
+                                                    >
+                                                        {formatCurrency(
+                                                            selectedTotals.iva
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                                <tr className="border-t border-slate-300">
+                                                    <td
+                                                        colSpan={7}
+                                                        className="px-3 py-3 text-right font-bold text-slate-800 text-sm uppercase tracking-wide"
+                                                    >
+                                                        Total a Pagar:
+                                                    </td>
+                                                    <td
+                                                        colSpan={2}
+                                                        className="px-3 py-3 text-right font-bold text-slate-900 tabular-nums text-base"
+                                                    >
+                                                        {formatCurrency(
+                                                            selectedTotals.total
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600 flex items-center gap-1.5">
+                                        <Info className="w-3.5 h-3.5" />
+                                        Esta información es solo para uso
+                                        interno y no se incluye en la factura.
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Información del Cliente */}
                             {(clientPaymentCondition ||
@@ -543,14 +979,16 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     <p className="text-sm text-slate-700">
                                         <span className="font-semibold">
                                             {serviceOrder?.client_name ||
-                                                "Cliente"}:
+                                                "Cliente"}
+                                            :
                                         </span>{" "}
                                         {clientPaymentCondition ===
                                         "contado" ? (
                                             "Pago al contado"
                                         ) : (
                                             <>
-                                                {clientCreditDays} días de crédito
+                                                {clientCreditDays} dias de
+                                                credito
                                             </>
                                         )}
                                     </p>
@@ -559,12 +997,23 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <Label className="mb-1.5 block">Tipo de Factura</Label>
+                                    <Label className="mb-1.5 block">
+                                        Tipo de Factura
+                                    </Label>
                                     <SelectERP
                                         options={[
-                                            { id: "DTE", name: "DTE (Documento Tributario Electrónico)" },
-                                            { id: "FEX", name: "FEX (Factura de Exportación)" },
-                                            { id: "INTL", name: "Factura Internacional" },
+                                            {
+                                                id: "DTE",
+                                                name: "DTE (Documento Tributario Electrónico)",
+                                            },
+                                            {
+                                                id: "FEX",
+                                                name: "FEX (Factura de Exportación)",
+                                            },
+                                            {
+                                                id: "INTL",
+                                                name: "Factura Internacional",
+                                            },
                                         ]}
                                         value={formData.invoice_type}
                                         onChange={(val) =>
@@ -576,15 +1025,19 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                         getOptionLabel={(opt) => opt.name}
                                         getOptionValue={(opt) => opt.id}
                                     />
-                                    {formData.invoice_type === 'DTE' && serviceOrder?.client_is_gran_contribuyente && selectedTotals.retencion > 0 && (
-                                        <p className="text-xs text-slate-600 mt-1.5 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
-                                            <AlertCircle className="w-3 h-3" />
-                                            Se aplicará retención del 1%
-                                        </p>
-                                    )}
+                                    {formData.invoice_type === "DTE" &&
+                                        serviceOrder?.client_is_gran_contribuyente &&
+                                        selectedTotals.retencion > 0 && (
+                                            <p className="text-xs text-slate-600 mt-1.5 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
+                                                <AlertCircle className="w-3 h-3" />
+                                                Se aplicará retención del 1%
+                                            </p>
+                                        )}
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block">No. DTE / Factura (Opcional)</Label>
+                                    <Label className="mb-1.5 block">
+                                        No. DTE / Factura (Opcional)
+                                    </Label>
                                     <Input
                                         value={formData.invoice_number}
                                         onChange={(e) =>
@@ -604,7 +1057,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     </p>
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block">Condición de Pago</Label>
+                                    <Label className="mb-1.5 block">
+                                        Condición de Pago
+                                    </Label>
                                     <SelectERP
                                         options={[
                                             { id: "contado", name: "Contado" },
@@ -622,7 +1077,9 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                     />
                                 </div>
                                 <div>
-                                    <Label className="mb-1.5 block">Fecha de Emisión</Label>
+                                    <Label className="mb-1.5 block">
+                                        Fecha de Emisión
+                                    </Label>
                                     <Input
                                         type="date"
                                         value={formData.issue_date}
@@ -637,11 +1094,13 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                 <div>
                                     <Label className="mb-1.5 block">
                                         Fecha de Vencimiento
-                                        {formData.payment_condition === "credito" && clientCreditDays > 0 && (
-                                            <span className="text-xs font-normal text-slate-400 ml-1">
-                                                (+{clientCreditDays} días)
-                                            </span>
-                                        )}
+                                        {formData.payment_condition ===
+                                            "credito" &&
+                                            clientCreditDays > 0 && (
+                                                <span className="text-xs font-normal text-slate-400 ml-1">
+                                                    (+{clientCreditDays} días)
+                                                </span>
+                                            )}
                                     </Label>
                                     <Input
                                         type="date"
@@ -653,14 +1112,17 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             })
                                         }
                                     />
-                                    {formData.payment_condition === "contado" && (
+                                    {formData.payment_condition ===
+                                        "contado" && (
                                         <p className="text-xs text-slate-500 mt-1">
                                             Vence el mismo día de emisión
                                         </p>
                                     )}
                                 </div>
                                 <div className="md:col-span-2">
-                                    <Label className="mb-1.5 block">Notas / Observaciones</Label>
+                                    <Label className="mb-1.5 block">
+                                        Notas / Observaciones
+                                    </Label>
                                     <Input
                                         value={formData.notes}
                                         onChange={(e) =>

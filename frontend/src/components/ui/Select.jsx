@@ -72,9 +72,9 @@ const Select = ({
                         leaveFrom="opacity-100"
                         leaveTo="opacity-0"
                     >
-                        <Listbox.Options className="absolute z-dropdown mt-1 max-h-60 w-full overflow-auto rounded-sm bg-white py-1 text-sm shadow-dropdown border border-slate-200 focus:outline-none">
+                        <Listbox.Options className="absolute z-popover mt-1 max-h-60 w-full overflow-auto rounded-sm bg-white py-1 text-sm shadow-dropdown border border-slate-200 focus:outline-none">
                             {searchable && (
-                                <div className="px-2 py-2 sticky top-0 bg-white border-b border-slate-200">
+                                <div className="px-2 py-2 sticky top-0 bg-white border-b border-slate-200 z-10 shadow-sm">
                                     <input
                                         type="text"
                                         className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-sm transition-colors duration-150 focus:outline-none focus:border-slate-900 hover:border-slate-400 placeholder:text-slate-400"

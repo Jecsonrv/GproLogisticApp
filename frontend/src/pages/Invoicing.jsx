@@ -28,6 +28,12 @@ import {
     Info,
     MoreHorizontal,
     ArrowUpRight,
+    ListChecks,
+    Briefcase,
+    Truck,
+    FileMinus,
+    Hash,
+    TrendingDown,
 } from "lucide-react";
 import {
     Card,
@@ -44,12 +50,27 @@ import Modal, { ModalFooter } from "../components/ui/Modal";
 import DataTable from "../components/ui/DataTable";
 import EmptyState from "../components/ui/EmptyState";
 import ExportButton from "../components/ui/ExportButton";
-import { FileUpload, SelectERP, ConfirmDialog, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, Skeleton, SkeletonTable } from "../components/ui";
+import {
+    FileUpload,
+    SelectERP,
+    ConfirmDialog,
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    Skeleton,
+    SkeletonTable,
+} from "../components/ui";
 import api from "../lib/axios";
-import { cn, formatCurrency, formatDate, getTodayDate } from "../lib/utils";
+import { cn, formatCurrency, formatDate } from "../lib/utils";
 import toast from "react-hot-toast";
 import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
 import BillingWizard from "../components/BillingWizard";
+import PaymentItemsModal from "../components/PaymentItemsModal";
+import PaymentDetailModal from "../components/PaymentDetailModal";
+import CreditNoteModal from "../components/CreditNoteModal";
 
 // ============================================
 // HELPERS
@@ -71,7 +92,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
@@ -81,7 +102,6 @@ const formatDateSafe = (dateStr, variant = "short") => {
  * Design System Corporativo GPRO - REDISEÑADO FINAL
  * Bloque Estratégico (Arriba) | Bloque Operativo (Abajo)
  */
-
 
 // Configuración de estados de factura - Paleta Mate Profesional
 const INVOICE_STATUS_CONFIG = {
@@ -119,7 +139,8 @@ const INVOICE_STATUS_CONFIG = {
 
 // Componente de Badge de Estado - Estilo Sobrio
 const InvoiceStatusBadge = ({ status }) => {
-    const config = INVOICE_STATUS_CONFIG[status] || INVOICE_STATUS_CONFIG.pending;
+    const config =
+        INVOICE_STATUS_CONFIG[status] || INVOICE_STATUS_CONFIG.pending;
     const Icon = config.icon;
     return (
         <span
@@ -144,13 +165,27 @@ const INVOICE_TYPE_OPTIONS = [
 // Badge de Tipo de Factura - Estilo Minimalista
 const InvoiceTypeBadge = ({ type }) => {
     const config = {
-        DTE: { label: "DTE", className: "text-slate-600 bg-slate-100 border-transparent" },
-        FEX: { label: "FEX", className: "text-indigo-600 bg-indigo-50 border-indigo-100" },
-        INTL: { label: "INTL", className: "text-teal-600 bg-teal-50 border-teal-100" },
+        DTE: {
+            label: "DTE",
+            className: "text-slate-600 bg-slate-100 border-transparent",
+        },
+        FEX: {
+            label: "FEX",
+            className: "text-indigo-600 bg-indigo-50 border-indigo-100",
+        },
+        INTL: {
+            label: "INTL",
+            className: "text-teal-600 bg-teal-50 border-teal-100",
+        },
     };
     const c = config[type] || config.DTE;
     return (
-        <span className={cn("inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border", c.className)}>
+        <span
+            className={cn(
+                "inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border",
+                c.className
+            )}
+        >
             {c.label}
         </span>
     );
@@ -159,16 +194,14 @@ const InvoiceTypeBadge = ({ type }) => {
 // ============================================
 // KPI CARD - REFINED
 // ============================================
-const KPICard = ({
-    label,
-    value,
-    subtext,
-    icon: Icon,
-}) => {
+const KPICard = ({ label, value, subtext, icon: Icon }) => {
     return (
         <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
+                <p
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
+                    title={label}
+                >
                     {label}
                 </p>
                 <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
@@ -181,12 +214,13 @@ const KPICard = ({
                 )}
             </div>
             <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
             </div>
         </div>
     );
 };
-
 
 const Invoicing = () => {
     const navigate = useNavigate();
@@ -206,6 +240,8 @@ const Invoicing = () => {
         total_pending: "0",
         total_collected: "0",
         total_overdue: "0",
+        total_services: "0",
+        total_third_party_expenses: "0",
         pending_count: 0,
         paid_count: 0,
         overdue_count: 0,
@@ -213,28 +249,28 @@ const Invoicing = () => {
     });
 
     // UI State
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isPaymentItemsModalOpen, setIsPaymentItemsModalOpen] =
+        useState(false);
+    const [isPaymentDetailModalOpen, setIsPaymentDetailModalOpen] =
+        useState(false);
+    const [selectedPayment, setSelectedPayment] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
     const [isBillingWizardOpen, setIsBillingWizardOpen] = useState(false);
-    const [selectedServiceOrderForBilling, setSelectedServiceOrderForBilling] = useState(null);
+    const [selectedServiceOrderForBilling, setSelectedServiceOrderForBilling] =
+        useState(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
-    const [isEditingCN, setIsEditingCN] = useState(false);
-    const [editingCNId, setEditingCNId] = useState(null);
+    const [editingCreditNote, setEditingCreditNote] = useState(null);
+    const [isSelectInvoiceForNCOpen, setIsSelectInvoiceForNCOpen] =
+        useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
         open: false,
         id: null,
         type: null, // 'invoice' | 'credit-note'
     });
-
-    // Billable items state
-    const [billableItems, setBillableItems] = useState([]);
-    const [selectedItemIds, setSelectedItemIds] = useState([]);
-    const [loadingItems, setLoadingItems] = useState(false);
 
     // Search and Filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -245,30 +281,6 @@ const Invoicing = () => {
         dateTo: "",
         dueDateFrom: "",
         dueDateTo: "",
-    });
-
-    // Payment form
-    const [paymentForm, setPaymentForm] = useState({
-        amount: "",
-        payment_date: getTodayDate(),
-        payment_method: "transferencia",
-        bank: "",
-        reference: "",
-        notes: "",
-        receipt_file: null,
-    });
-
-    // Generate invoice form
-    const [generateForm, setGenerateForm] = useState({
-        service_order: "",
-        client: "",
-        client_name: "",
-        invoice_date: getTodayDate(),
-        due_date: "",
-        invoice_number: "",
-        invoice_type: "DTE", // DTE, FEX, CCF
-        total_amount: "",
-        invoice_file: null,
     });
 
     // Edit invoice form
@@ -283,15 +295,6 @@ const Invoicing = () => {
         pdf_file: null,
         client_name: "",
         service_order_number: "",
-    });
-
-    // Credit Note form
-    const [creditNoteForm, setCreditNoteForm] = useState({
-        amount: "",
-        note_number: "",
-        reason: "",
-        issue_date: getTodayDate(),
-        pdf_file: null,
     });
 
     // Data fetching
@@ -437,189 +440,44 @@ const Invoicing = () => {
         return count;
     }, [filters]);
 
-    // Calculate totals based on selected items (for invoice generation)
-    const selectedTotals = useMemo(() => {
-        let subtotal = 0;
-        let iva = 0;
-        let total = 0;
-
-        billableItems.forEach((item) => {
-            if (selectedItemIds.includes(item.id)) {
-                subtotal += parseFloat(item.amount || 0);
-                iva += parseFloat(item.iva || 0);
-                total += parseFloat(item.total || 0);
-            }
-        });
-
-        return { subtotal, iva, total };
-    }, [billableItems, selectedItemIds]);
-
-    // Auto-update total amount when selected items change
-    useEffect(() => {
-        if (billableItems.length > 0 && selectedItemIds.length > 0) {
-            const roundedTotal = Math.round(selectedTotals.total * 100) / 100;
-            setGenerateForm((prev) => ({
-                ...prev,
-                total_amount: roundedTotal.toFixed(2),
-            }));
-        }
-    }, [selectedTotals, billableItems.length, selectedItemIds.length]);
-
-    // Fetch billable items for a service order
-    const fetchBillableItems = async (orderId) => {
-        if (!orderId) {
-            setBillableItems([]);
-            setSelectedItemIds([]);
-            return;
-        }
-
-        try {
-            setLoadingItems(true);
-            const response = await api.get(
-                `/orders/service-orders/${orderId}/billable_items/`
-            );
-            // El endpoint devuelve {items: [], summary: {}}
-            const items = response.data.items || [];
-            setBillableItems(items);
-            // Select all items by default
-            setSelectedItemIds(items.map((item) => item.id));
-        } catch (error) {
-            console.error("Error fetching billable items:", error);
-            toast.error("No se pudieron cargar los items facturables.");
-            setBillableItems([]);
-            setSelectedItemIds([]);
-        } finally {
-            setLoadingItems(false);
-        }
-    };
-
-    // Handlers
-    const handleServiceOrderSelect = (orderId) => {
-        const selectedOrder = allServiceOrders.find((o) => o.id === orderId);
-        if (!selectedOrder) {
-            setGenerateForm({
-                ...generateForm,
-                service_order: "",
-                client: "",
-                client_name: "",
-                total_amount: "",
-                due_date: "",
-            });
-            setBillableItems([]);
-            setSelectedItemIds([]);
-            return;
-        }
-
-        const client = clients.find((c) => c.id === selectedOrder.client);
-        let dueDate = "";
-        if (client && client.credit_days > 0) {
-            const invoiceDate = new Date(generateForm.invoice_date);
-            invoiceDate.setDate(invoiceDate.getDate() + client.credit_days);
-            dueDate = invoiceDate.toISOString().split("T")[0];
-        }
-
-        setGenerateForm({
-            ...generateForm,
-            service_order: orderId,
-            client: selectedOrder.client,
-            client_name: selectedOrder.client_name || client?.name || "",
-            total_amount: selectedOrder.total_amount || "",
-            due_date: dueDate,
-        });
-
-        // Fetch billable items for this order
-        fetchBillableItems(orderId);
-    };
-
     const handleOpenEditCNModal = (nc) => {
         setLoading(true);
         api.get(`/orders/invoices/${nc.invoice_id}/`)
             .then((res) => {
                 setSelectedInvoice(res.data);
-                setCreditNoteForm({
-                    amount: nc.amount,
-                    note_number: nc.note_number,
-                    reason: nc.reason,
-                    issue_date: nc.issue_date,
-                    pdf_file: null,
-                });
-                setEditingCNId(nc.id);
-                setIsEditingCN(true);
+                setEditingCreditNote(nc);
                 setIsCreditNoteModalOpen(true);
             })
-            .catch(() => toast.error("No se pudieron cargar los datos para edición."))
+            .catch(() =>
+                toast.error("No se pudieron cargar los datos para edición.")
+            )
             .finally(() => setLoading(false));
     };
 
-    const handleSubmitCreditNote = async (e) => {
-        e.preventDefault();
-        if (!selectedInvoice || isSubmitting) return;
+    // Abrir modal de NC para una factura (desde tabla de facturas)
+    const handleOpenCreditNoteModal = (invoice) => {
+        setSelectedInvoice(invoice);
+        setEditingCreditNote(null);
+        setIsCreditNoteModalOpen(true);
+    };
 
-        try {
-            setIsSubmitting(true);
-
-            const formData = new FormData();
-            formData.append("amount", creditNoteForm.amount);
-            formData.append("note_number", creditNoteForm.note_number);
-            formData.append("reason", creditNoteForm.reason);
-            formData.append("issue_date", creditNoteForm.issue_date);
-            if (creditNoteForm.pdf_file)
-                formData.append("pdf_file", creditNoteForm.pdf_file);
-
-            if (isEditingCN) {
-                await api.patch(
-                    `/orders/credit-notes/${editingCNId}/`,
-                    formData,
-                    {
-                        headers: { "Content-Type": "multipart/form-data" },
-                    }
-                );
-                toast.success("La nota de crédito ha sido actualizada correctamente.");
-            } else {
-                await api.post(
-                    `/orders/invoices/${selectedInvoice.id}/add_credit_note/`,
-                    formData,
-                    {
-                        headers: { "Content-Type": "multipart/form-data" },
-                    }
-                );
-                toast.success("La nota de crédito ha sido registrada correctamente.");
-            }
-
-            setIsCreditNoteModalOpen(false);
-            setCreditNoteForm({
-                amount: "",
-                note_number: "",
-                reason: "",
-                issue_date: getTodayDate(),
-                pdf_file: null,
-            });
-            setIsEditingCN(false);
-            setEditingCNId(null);
-            fetchInvoices();
-            fetchCreditNotes();
-            fetchSummary();
-            if (isDetailModalOpen && selectedInvoice) {
-                handleViewInvoiceDetails(selectedInvoice.id);
-            }
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
-        } finally {
-            setIsSubmitting(false);
+    const handleCreditNoteSuccess = () => {
+        fetchInvoices();
+        fetchCreditNotes();
+        fetchSummary();
+        if (isDetailModalOpen && selectedInvoice) {
+            handleViewInvoiceDetails(selectedInvoice.id);
         }
     };
 
-    const handleOpenPaymentModal = (invoice) => {
+    const handleOpenPaymentItemsModal = (invoice) => {
         setSelectedInvoice(invoice);
-        setPaymentForm({
-            amount: invoice.balance,
-            payment_date: getTodayDate(),
-            payment_method: "transferencia",
-            reference: "",
-            notes: "",
-            receipt_file: null,
-        });
-        setIsPaymentModalOpen(true);
+        setIsPaymentItemsModalOpen(true);
+    };
+
+    const handlePaymentItemsSuccess = () => {
+        fetchInvoices();
+        fetchSummary();
     };
 
     const handleOpenEditModal = (invoice) => {
@@ -627,6 +485,7 @@ const Invoicing = () => {
         setEditForm({
             id: invoice.id,
             invoice_number: invoice.invoice_number || "",
+            dte_number: invoice.dte_number || "",
             invoice_type: invoice.invoice_type || "DTE",
             issue_date: invoice.issue_date || "",
             due_date: invoice.due_date || "",
@@ -641,10 +500,7 @@ const Invoicing = () => {
     };
 
     const handleUpdateInvoice = async () => {
-        if (
-            !editForm.invoice_number ||
-            !editForm.issue_date
-        ) {
+        if (!editForm.invoice_number || !editForm.issue_date) {
             toast.error("Complete los campos requeridos");
             return;
         }
@@ -656,6 +512,9 @@ const Invoicing = () => {
             formData.append("issue_date", editForm.issue_date);
             formData.append("notes", editForm.notes);
 
+            if (editForm.dte_number) {
+                formData.append("dte_number", editForm.dte_number);
+            }
             if (editForm.due_date) {
                 formData.append("due_date", editForm.due_date);
             }
@@ -676,146 +535,6 @@ const Invoicing = () => {
         }
     };
 
-    const handleAddPayment = async () => {
-        if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
-            toast.error("Ingrese un monto válido");
-            return;
-        }
-
-        if (!paymentForm.receipt_file) {
-            toast.error("Debe adjuntar el comprobante de pago");
-            return;
-        }
-
-        try {
-            const formData = new FormData();
-            formData.append("amount", paymentForm.amount);
-            formData.append("payment_date", paymentForm.payment_date);
-            formData.append("payment_method", paymentForm.payment_method);
-            if (paymentForm.bank) {
-                formData.append("bank", paymentForm.bank);
-            }
-            if (paymentForm.reference) {
-                formData.append("reference", paymentForm.reference);
-            }
-            if (paymentForm.notes) {
-                formData.append("notes", paymentForm.notes);
-            }
-            if (paymentForm.receipt_file) {
-                formData.append("receipt_file", paymentForm.receipt_file);
-            }
-
-            await api.post(
-                `/orders/invoices/${selectedInvoice.id}/add_payment/`,
-                formData,
-                { headers: { "Content-Type": "multipart/form-data" } }
-            );
-            toast.success("El pago ha sido registrado correctamente.");
-            fetchInvoices();
-            fetchSummary();
-            setIsPaymentModalOpen(false);
-            // Reset form
-            setPaymentForm({
-                amount: "",
-                payment_date: getTodayDate(),
-                payment_method: "transferencia",
-                bank: "",
-                reference: "",
-                notes: "",
-                receipt_file: null,
-            });
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
-        }
-    };
-
-    const handleGenerateInvoice = async () => {
-        if (!generateForm.service_order) {
-            toast.error("Debe seleccionar una orden de servicio");
-            return;
-        }
-
-        if (selectedItemIds.length === 0) {
-            toast.error("Debe seleccionar al menos un item para facturar");
-            return;
-        }
-
-        try {
-            // Separate items by type
-            const selectedItems = billableItems.filter((item) =>
-                selectedItemIds.includes(item.id)
-            );
-            const chargeIds = selectedItems
-                .filter((item) => item.type === "service")
-                .map((item) => item.original_id);
-            const transferIds = selectedItems
-                .filter((item) => item.type === "expense")
-                .map((item) => item.original_id);
-
-            const formData = new FormData();
-            formData.append("service_order", generateForm.service_order);
-
-            // Only append invoice_number if it has a value
-            if (
-                generateForm.invoice_number &&
-                generateForm.invoice_number.trim() !== ""
-            ) {
-                formData.append(
-                    "invoice_number",
-                    generateForm.invoice_number.trim()
-                );
-            }
-
-            formData.append("invoice_type", generateForm.invoice_type);
-            formData.append("issue_date", generateForm.invoice_date);
-            formData.append("total_amount", generateForm.total_amount);
-
-            // Add selected item IDs - each as separate entries
-            chargeIds.forEach((id) => formData.append("charge_ids", id));
-            transferIds.forEach((id) => formData.append("transfer_ids", id));
-
-            if (generateForm.due_date) {
-                formData.append("due_date", generateForm.due_date);
-            }
-            if (generateForm.invoice_file) {
-                formData.append("pdf_file", generateForm.invoice_file);
-            }
-
-            const response = await api.post("/orders/invoices/", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-
-            const invoiceNumber = response.data.invoice_number || "sin número";
-            toast.success(
-                `La pre-factura ${invoiceNumber} ha sido registrada correctamente. Puede editarla antes de emitir el DTE.`,
-                { duration: 5000 }
-            );
-            fetchInvoices();
-            fetchSummary();
-            fetchAllServiceOrders();
-            setIsGenerateModalOpen(false);
-            resetGenerateForm();
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
-        }
-    };
-
-    const resetGenerateForm = () => {
-        setGenerateForm({
-            service_order: "",
-            client: "",
-            client_name: "",
-            invoice_date: getTodayDate(),
-            due_date: "",
-            invoice_number: "",
-            invoice_type: "DTE",
-            total_amount: "",
-            invoice_file: null,
-        });
-        setBillableItems([]);
-        setSelectedItemIds([]);
-    };
-
     const clearFilters = () => {
         setFilters({
             client: "",
@@ -829,7 +548,8 @@ const Invoicing = () => {
     };
 
     const handleExportExcel = async (exportType = "all") => {
-        const dataToExport = exportType === "filtered" ? filteredInvoices : invoices;
+        const dataToExport =
+            exportType === "filtered" ? filteredInvoices : invoices;
 
         if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
@@ -850,18 +570,20 @@ const Invoicing = () => {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toLocaleDateString("en-CA");
-            const filename = exportType === "filtered"
-                ? `GPRO_CXC_Filtradas_${timestamp}.xlsx`
-                : `GPRO_CXC_${timestamp}.xlsx`;
+            const filename =
+                exportType === "filtered"
+                    ? `GPRO_CXC_Filtradas_${timestamp}.xlsx`
+                    : `GPRO_CXC_${timestamp}.xlsx`;
             link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            const message = exportType === "filtered"
-                ? `${dataToExport.length} factura(s) exportada(s)`
-                : "Todas las facturas exportadas correctamente";
+            const message =
+                exportType === "filtered"
+                    ? `${dataToExport.length} factura(s) exportada(s)`
+                    : "Todas las facturas exportadas correctamente";
             toast.success(message);
         } catch (error) {
             toast.error("No se pudo exportar el archivo.");
@@ -911,20 +633,52 @@ const Invoicing = () => {
         }
     };
 
-    // Credit Note columns
+    // Calcular resumen de NC
+    const creditNotesSummary = useMemo(() => {
+        const total = creditNotes.reduce(
+            (sum, nc) => sum + parseFloat(nc.amount || 0),
+            0
+        );
+        const thisMonth = creditNotes.filter((nc) => {
+            const ncDate = new Date(nc.issue_date);
+            const now = new Date();
+            return (
+                ncDate.getMonth() === now.getMonth() &&
+                ncDate.getFullYear() === now.getFullYear()
+            );
+        });
+        const thisMonthTotal = thisMonth.reduce(
+            (sum, nc) => sum + parseFloat(nc.amount || 0),
+            0
+        );
+        return {
+            count: creditNotes.length,
+            total,
+            thisMonthCount: thisMonth.length,
+            thisMonthTotal,
+        };
+    }, [creditNotes]);
+
+    // Credit Note columns - Diseño Profesional ERP
     const ncColumns = [
         {
-            header: "No. Nota de Crédito",
+            header: "Nota de Crédito",
             accessor: "note_number",
             sortable: false,
             render: (row) => (
-                <div className="flex flex-col py-1">
-                    <span className="font-mono font-semibold text-slate-700 text-sm">
-                        {row.note_number}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium mt-0.5">
-                        {formatDateSafe(row.issue_date)}
-                    </span>
+                <div className="flex items-center gap-3 py-1.5">
+                    <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
+                        <FileMinus className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div>
+                        <span className="font-mono font-bold text-slate-800 text-sm block">
+                            {row.note_number}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {formatDateSafe(row.issue_date)}
+                        </span>
+                    </div>
                 </div>
             ),
         },
@@ -935,40 +689,61 @@ const Invoicing = () => {
             render: (row) => (
                 <div className="flex flex-col py-1">
                     <button
-                        onClick={() => handleViewInvoiceDetails(row.invoice_id)}
-                        className="font-mono text-xs font-semibold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewInvoiceDetails(row.invoice_id);
+                        }}
+                        className="font-mono text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit flex items-center gap-1"
                     >
                         {row.invoice_number}
+                        <ArrowUpRight className="w-3 h-3 opacity-50" />
                     </button>
-                    <span className="text-[11px] text-slate-500 font-medium truncate max-w-[180px] mt-0.5" title={row.client_name}>
+                    <span
+                        className="text-[11px] text-slate-500 font-medium truncate max-w-[200px] mt-0.5"
+                        title={row.client_name}
+                    >
                         {row.client_name}
                     </span>
                 </div>
             ),
         },
         {
-            header: "Motivo / Razón",
+            header: "Motivo",
             accessor: "reason",
             sortable: false,
             render: (row) => (
-                <div className="max-w-xs py-1">
+                <div className="max-w-[220px] py-1">
                     <span
-                        className="text-xs text-slate-600 font-medium line-clamp-2"
+                        className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed"
                         title={row.reason}
                     >
-                        {row.reason}
+                        {row.reason || "Sin especificar"}
                     </span>
                 </div>
             ),
         },
         {
-            header: "Monto",
+            header: "Monto Acreditado",
             accessor: "amount",
+            className: "text-right",
+            headerClassName: "text-right",
             sortable: false,
             render: (row) => (
                 <div className="text-right py-1">
-                    <span className="font-bold text-purple-700 tabular-nums text-sm">
+                    <span className="font-bold text-slate-700 tabular-nums text-sm bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
                         -{formatCurrency(row.amount)}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            header: "Registrado por",
+            accessor: "created_by_name",
+            sortable: false,
+            render: (row) => (
+                <div className="py-1">
+                    <span className="text-xs text-slate-600 font-medium">
+                        {row.created_by_name || "Sistema"}
                     </span>
                 </div>
             ),
@@ -976,55 +751,49 @@ const Invoicing = () => {
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-[120px] text-center",
+            className: "w-[110px] text-center",
             headerClassName: "text-center",
             sortable: false,
             render: (row) => (
-                <div className="grid grid-cols-3 gap-1 w-full max-w-[100px] mx-auto">
-                    <div className="flex justify-center">
-                        {row.pdf_file ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(row.pdf_file, "_blank");
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                                title="Ver PDF"
-                            >
-                                <FileText className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <div className="w-7" />
-                        )}
-                    </div>
-                    <div className="flex justify-center">
+                <div className="flex items-center justify-center gap-0.5">
+                    {row.pdf_file ? (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                handleOpenEditCNModal(row);
+                                window.open(row.pdf_file, "_blank");
                             }}
-                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                            title="Editar"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Ver documento"
                         >
-                            <Edit2 className="w-4 h-4" />
+                            <FileText className="w-4 h-4" />
                         </button>
-                    </div>
-                    <div className="flex justify-center">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({
-                                    open: true,
-                                    id: row.id,
-                                    type: "credit-note",
-                                });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                            title="Eliminar"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                    ) : (
+                        <div className="w-7" />
+                    )}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditCNModal(row);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                        title="Editar"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm({
+                                open: true,
+                                id: row.id,
+                                type: "credit-note",
+                            });
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                        title="Eliminar"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
             ),
         },
@@ -1048,7 +817,9 @@ const Invoicing = () => {
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/service-orders/${row.service_order}`);
+                                navigate(
+                                    `/service-orders/${row.service_order}`
+                                );
                             }}
                             className="text-[10px] text-slate-700 hover:text-slate-900 font-semibold flex items-center gap-1 mt-0.5"
                         >
@@ -1065,7 +836,10 @@ const Invoicing = () => {
             sortable: false,
             render: (row) => (
                 <div className="py-1 max-w-[200px]">
-                    <div className="font-medium text-slate-700 text-sm truncate" title={row.client_name}>
+                    <div
+                        className="font-medium text-slate-700 text-sm truncate"
+                        title={row.client_name}
+                    >
                         {row.client_name}
                     </div>
                     {row.ccf && (
@@ -1106,7 +880,9 @@ const Invoicing = () => {
                             </div>
                             {row.days_overdue > 0 && (
                                 <div className="text-[9px] text-red-600 font-bold uppercase tracking-tight">
-                                    {row.days_overdue === 1 ? 'Venció ayer' : `${row.days_overdue}d vencida`}
+                                    {row.days_overdue === 1
+                                        ? "Venció ayer"
+                                        : `${row.days_overdue}d vencida`}
                                 </div>
                             )}
                         </>
@@ -1145,11 +921,17 @@ const Invoicing = () => {
             sortable: false,
             render: (row) => (
                 <div className="flex flex-col items-end text-right">
-                    <div className={cn(
-                        "text-sm font-semibold tabular-nums tracking-tight",
-                        row.paid_amount > 0 ? "text-emerald-700" : "text-slate-300"
-                    )}>
-                        {row.paid_amount > 0 ? formatCurrency(row.paid_amount) : "—"}
+                    <div
+                        className={cn(
+                            "text-sm font-semibold tabular-nums tracking-tight",
+                            row.paid_amount > 0
+                                ? "text-emerald-700"
+                                : "text-slate-300"
+                        )}
+                    >
+                        {row.paid_amount > 0
+                            ? formatCurrency(row.paid_amount)
+                            : "—"}
                     </div>
                 </div>
             ),
@@ -1170,7 +952,13 @@ const Invoicing = () => {
                                 : "text-emerald-600"
                         )}
                     >
-                        {parseFloat(row.balance) > 0.01 ? formatCurrency(row.balance) : <span className="flex items-center justify-center gap-1"><CheckCircle className="w-3 h-3" /> $0.00</span>}
+                        {parseFloat(row.balance) > 0.01 ? (
+                            formatCurrency(row.balance)
+                        ) : (
+                            <span className="flex items-center justify-center gap-1">
+                                <CheckCircle className="w-3 h-3" /> $0.00
+                            </span>
+                        )}
                     </div>
                 </div>
             ),
@@ -1184,84 +972,95 @@ const Invoicing = () => {
         {
             header: "Acciones",
             accessor: "actions",
-            className: "w-[180px] text-center",
+            className: "w-[220px] text-center",
             headerClassName: "text-center",
             sortable: false,
             render: (row) => (
-                <div className="grid grid-cols-5 gap-1 w-full max-w-[160px] mx-auto">
+                <div className="flex items-center justify-center gap-0.5">
                     {/* Ver PDF */}
-                    <div className="flex justify-center">
-                        {row.pdf_file ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(row.pdf_file, "_blank");
-                                }}
-                                title="Ver PDF"
-                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                            >
-                                <FileText className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <div className="w-7" />
-                        )}
-                    </div>
-                    {/* Registrar Pago */}
-                    <div className="flex justify-center">
-                        {parseFloat(row.balance) > 0.01 && row.status !== "cancelled" ? (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenPaymentModal(row);
-                                }}
-                                title="Registrar Pago"
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
-                            >
-                                <Banknote className="w-4 h-4" />
-                            </button>
-                        ) : (
-                            <div className="w-7" />
-                        )}
-                    </div>
-                    {/* Ver Detalle */}
-                    <div className="flex justify-center">
+                    {row.pdf_file ? (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                handleViewInvoiceDetails(row.id);
+                                window.open(row.pdf_file, "_blank");
                             }}
-                            title="Ver Detalle"
+                            title="Ver PDF"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                        >
+                            <FileText className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <div className="w-7" />
+                    )}
+                    {/* Pago por Items */}
+                    {parseFloat(row.balance) > 0.01 &&
+                    row.status !== "cancelled" ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPaymentItemsModal(row);
+                            }}
+                            title="Registrar Pago"
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors"
+                        >
+                            <ListChecks className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <div className="w-7" />
+                    )}
+                    {/* Nota de Crédito */}
+                    {parseFloat(row.balance) > 0.01 &&
+                    row.status !== "cancelled" ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCreditNoteModal(row);
+                            }}
+                            title="Agregar Nota de Crédito"
                             className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
                         >
-                            <Eye className="w-4 h-4" />
+                            <FileMinus className="w-4 h-4" />
                         </button>
-                    </div>
+                    ) : (
+                        <div className="w-7" />
+                    )}
+                    {/* Ver Detalle */}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewInvoiceDetails(row.id);
+                        }}
+                        title="Ver Detalle"
+                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+                    >
+                        <Eye className="w-4 h-4" />
+                    </button>
                     {/* Editar */}
-                    <div className="flex justify-center">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenEditModal(row);
-                            }}
-                            title={row.is_dte_issued ? "Editar Factura (DTE Emitido)" : "Editar Factura"}
-                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditModal(row);
+                        }}
+                        title={
+                            row.is_dte_issued
+                                ? "Editar Factura (DTE Emitido)"
+                                : "Editar Factura"
+                        }
+                        className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </button>
                     {/* Eliminar */}
-                    <div className="flex justify-center">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({ open: true, id: row.id });
-                            }}
-                            title="Eliminar"
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirm({ open: true, id: row.id });
+                        }}
+                        title="Eliminar"
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
             ),
         },
@@ -1282,13 +1081,24 @@ const Invoicing = () => {
 
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
-
             {/* Bloque Estratégico (KPIs) - Responsive: 2 cols móvil, 3 tablet, 5 desktop */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total facturado"
                     value={formatCurrency(summary.total_invoiced)}
                     icon={Receipt}
+                />
+                <KPICard
+                    label="Facturación Servicios"
+                    value={formatCurrency(summary.total_services)}
+                    subtext="Propios y Tercerizados"
+                    icon={Briefcase}
+                />
+                <KPICard
+                    label="Gastos a Terceros"
+                    value={formatCurrency(summary.total_third_party_expenses)}
+                    subtext="Cargos a cliente"
+                    icon={Truck}
                 />
                 <KPICard
                     label="Por cobrar"
@@ -1302,29 +1112,37 @@ const Invoicing = () => {
                     subtext={`${summary.paid_count || 0} pagadas`}
                     icon={CheckCircle}
                 />
-                <KPICard
-                    label="Saldos Vencidos"
-                    value={formatCurrency(summary.total_overdue)}
-                    subtext={`${summary.overdue_count || 0} facturas`}
-                    icon={AlertTriangle}
-                />
-                <KPICard
-                    label="Pagos parciales"
-                    value={summary.partial_count || 0}
-                    subtext="En proceso"
-                    icon={CalendarClock}
-                />
             </div>
+
+            {/* Indicador de Notas de Crédito - Sutil y compacto */}
+            {(summary.total_credited > 0 || summary.credit_notes_count > 0) && (
+                <div className="flex items-center justify-end gap-4 px-1">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-md">
+                            <FileMinus className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="font-medium text-slate-700">
+                                {summary.credit_notes_count ||
+                                    creditNotes.length}{" "}
+                                NC
+                            </span>
+                            <span className="text-slate-600">
+                                -
+                                {formatCurrency(
+                                    summary.total_credited ||
+                                        creditNotesSummary.total
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Bloque Operativo (Tabla + Herramientas) */}
             <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
-
                 {/* Barra de Herramientas - Responsive */}
                 <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/30">
-
                     {/* Fila principal: Tabs + Búsqueda + Acciones (en desktop todo en una fila) */}
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-
                         {/* Izquierda: Tabs + Búsqueda + Filtros */}
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
                             {/* Tabs */}
@@ -1360,9 +1178,15 @@ const Invoicing = () => {
                                 <div className="relative flex-1 group">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                                     <input
-                                        placeholder={activeTab === "invoices" ? "Buscar factura, cliente, OS..." : "Buscar nota crédito..."}
+                                        placeholder={
+                                            activeTab === "invoices"
+                                                ? "Buscar factura, cliente, OS..."
+                                                : "Buscar nota crédito..."
+                                        }
                                         value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
                                         className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
                                     />
                                 </div>
@@ -1370,14 +1194,19 @@ const Invoicing = () => {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                                        onClick={() =>
+                                            setIsFiltersOpen(!isFiltersOpen)
+                                        }
                                         className={cn(
                                             "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
-                                            isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                            isFiltersOpen &&
+                                                "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
                                         )}
                                     >
                                         <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
-                                        <span className="hidden sm:inline">Filtros</span>
+                                        <span className="hidden sm:inline">
+                                            Filtros
+                                        </span>
                                         {activeFiltersCount > 0 && (
                                             <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
                                                 {activeFiltersCount}
@@ -1390,26 +1219,47 @@ const Invoicing = () => {
 
                         {/* Derecha: Acciones */}
                         <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
-                            <ExportButton
-                                onExportAll={() => handleExportExcel("all")}
-                                onExportFiltered={() => handleExportExcel("filtered")}
-                                filteredCount={filteredInvoices.length}
-                                totalCount={invoices.length}
-                                isExporting={isExporting}
-                                allLabel="Todas las Facturas"
-                                allDescription="Exportar registro completo"
-                                filteredLabel="Filtradas"
-                                filteredDescription="Solo visibles"
-                            />
+                            {activeTab === "invoices" ? (
+                                <>
+                                    <ExportButton
+                                        onExportAll={() =>
+                                            handleExportExcel("all")
+                                        }
+                                        onExportFiltered={() =>
+                                            handleExportExcel("filtered")
+                                        }
+                                        filteredCount={filteredInvoices.length}
+                                        totalCount={invoices.length}
+                                        isExporting={isExporting}
+                                        allLabel="Todas las Facturas"
+                                        allDescription="Exportar registro completo"
+                                        filteredLabel="Filtradas"
+                                        filteredDescription="Solo visibles"
+                                    />
 
-                            <Button
-                                size="sm"
-                                onClick={() => setIsGenerateModalOpen(true)}
-                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
-                            >
-                                <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
-                                Generar Factura
-                            </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={() =>
+                                            setIsGenerateModalOpen(true)
+                                        }
+                                        className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
+                                    >
+                                        <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                        Generar Factura
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    onClick={() =>
+                                        setIsSelectInvoiceForNCOpen(true)
+                                    }
+                                    className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
+                                >
+                                    <FileMinus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                    Nueva Nota de Crédito
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1421,7 +1271,9 @@ const Invoicing = () => {
                             <SelectERP
                                 label="Cliente"
                                 value={filters.client}
-                                onChange={(val) => setFilters({ ...filters, client: val })}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, client: val })
+                                }
                                 options={clients}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -1433,7 +1285,9 @@ const Invoicing = () => {
                             <SelectERP
                                 label="Estado"
                                 value={filters.status}
-                                onChange={(val) => setFilters({ ...filters, status: val })}
+                                onChange={(val) =>
+                                    setFilters({ ...filters, status: val })
+                                }
                                 options={[
                                     { id: "pending", name: "Pendiente" },
                                     { id: "partial", name: "Pago Parcial" },
@@ -1455,13 +1309,23 @@ const Invoicing = () => {
                                     <Input
                                         type="date"
                                         value={filters.dateFrom}
-                                        onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                        onChange={(e) =>
+                                            setFilters({
+                                                ...filters,
+                                                dateFrom: e.target.value,
+                                            })
+                                        }
                                         placeholder="Desde"
                                     />
                                     <Input
                                         type="date"
                                         value={filters.dateTo}
-                                        onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                        onChange={(e) =>
+                                            setFilters({
+                                                ...filters,
+                                                dateTo: e.target.value,
+                                            })
+                                        }
                                         placeholder="Hasta"
                                     />
                                 </div>
@@ -1489,332 +1353,146 @@ const Invoicing = () => {
                             columns={columns}
                             loading={loading}
                             searchable={false}
-                            onRowClick={(row) => handleViewInvoiceDetails(row.id)}
+                            onRowClick={(row) =>
+                                handleViewInvoiceDetails(row.id)
+                            }
                             emptyMessage="No se encontraron facturas registradas."
                         />
                     ) : (
-                        <DataTable
-                            data={creditNotes}
-                            columns={ncColumns}
-                            loading={loading}
-                            emptyMessage="No hay notas de crédito registradas."
-                            searchable={false} // Managed by global search
-                        />
+                        <div className="space-y-0">
+                            {/* Header de NC con estadísticas */}
+                            <div className="px-4 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                                            <FileMinus className="w-5 h-5 text-slate-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-bold text-slate-800">
+                                                Notas de Crédito Emitidas
+                                            </h3>
+                                            <p className="text-xs text-slate-500">
+                                                Ajustes y devoluciones aplicados
+                                                a facturas
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-center px-4 py-2 bg-white rounded-lg border border-slate-200 shadow-sm">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                Total NC
+                                            </p>
+                                            <p className="text-lg font-bold text-slate-800 tabular-nums">
+                                                {creditNotesSummary.count}
+                                            </p>
+                                        </div>
+                                        <div className="text-center px-4 py-2 bg-white rounded-lg border border-slate-200 shadow-sm">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                Este Mes
+                                            </p>
+                                            <p className="text-lg font-bold text-slate-700 tabular-nums">
+                                                {formatCurrency(
+                                                    creditNotesSummary.thisMonthTotal
+                                                )}
+                                            </p>
+                                        </div>
+                                        <div className="text-center px-4 py-2 bg-white rounded-lg border border-slate-200 shadow-sm">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                Acumulado
+                                            </p>
+                                            <p className="text-lg font-bold text-slate-800 tabular-nums">
+                                                {formatCurrency(
+                                                    creditNotesSummary.total
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <DataTable
+                                data={creditNotes}
+                                columns={ncColumns}
+                                loading={loading}
+                                emptyMessage={
+                                    <div className="py-12 text-center">
+                                        <FileMinus className="w-12 h-12 mx-auto text-slate-200 mb-3" />
+                                        <p className="text-slate-500 font-medium">
+                                            No hay notas de crédito registradas
+                                        </p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Las notas de crédito se crean desde
+                                            el detalle de cada factura
+                                        </p>
+                                    </div>
+                                }
+                                searchable={false}
+                            />
+                        </div>
                     )}
                 </div>
             </div>
 
             {/* ... Modals (Credit Note, Payment, Generate, Edit, Detail) ... */}
             {/* The rest of the modal code is preserved but hidden for brevity in this replace block since it wasn't modified stylistically beyond standard components */}
-            
-            {/* Credit Note Modal */}
+
+            {/* Select Invoice for Credit Note Modal */}
             <Modal
+                isOpen={isSelectInvoiceForNCOpen}
+                onClose={() => setIsSelectInvoiceForNCOpen(false)}
+                title="Seleccionar Factura"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-600">
+                        Seleccione la factura a la cual desea aplicar una nota
+                        de crédito. Solo se muestran facturas activas.
+                    </p>
+                    <SelectERP
+                        label="Factura"
+                        placeholder="Buscar por número de factura, cliente u orden de servicio..."
+                        options={invoices.filter(
+                            (inv) => inv.status !== "cancelled"
+                        )}
+                        getOptionLabel={(inv) => {
+                            const osInfo = inv.service_order_number
+                                ? ` | OS: ${inv.service_order_number}`
+                                : "";
+                            return `${inv.invoice_number} - ${
+                                inv.client_name
+                            }${osInfo} (${formatCurrency(inv.total_amount)})`;
+                        }}
+                        getOptionValue={(inv) => inv.id}
+                        onChange={(val) => {
+                            const invoice = invoices.find((i) => i.id === val);
+                            if (invoice) {
+                                setIsSelectInvoiceForNCOpen(false);
+                                handleOpenCreditNoteModal(invoice);
+                            }
+                        }}
+                        searchable
+                    />
+                </div>
+                <ModalFooter>
+                    <Button
+                        variant="ghost"
+                        onClick={() => setIsSelectInvoiceForNCOpen(false)}
+                    >
+                        Cancelar
+                    </Button>
+                </ModalFooter>
+            </Modal>
+
+            {/* Credit Note Modal Component */}
+            <CreditNoteModal
                 isOpen={isCreditNoteModalOpen}
                 onClose={() => {
                     setIsCreditNoteModalOpen(false);
-                    setSelectedInvoice(null);
-                    setIsEditingCN(false);
-                    setEditingCNId(null);
-                    setCreditNoteForm({
-                        amount: "",
-                        note_number: "",
-                        reason: "",
-                        issue_date: getTodayDate(),
-                        pdf_file: null,
-                    });
+                    setEditingCreditNote(null);
                 }}
-                title={isEditingCN ? "Editar Nota de Crédito" : "Registrar Nota de Crédito"}
-                size="2xl"
-            >
-                <form onSubmit={handleSubmitCreditNote} className="space-y-6">
-                    {selectedInvoice && (
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                                        <Receipt className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Factura Origen</p>
-                                        <p className="text-sm font-bold text-slate-700 font-mono">
-                                            {selectedInvoice.invoice_number}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo Pendiente</p>
-                                    <p className="text-2xl font-black text-slate-900 tabular-nums tracking-tight">
-                                        {formatCurrency(selectedInvoice.balance)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
-                            Detalle de la Nota de Crédito
-                        </h4>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <Label className="mb-1.5 block">Número de Nota de Crédito *</Label>
-                                <Input
-                                    value={creditNoteForm.note_number}
-                                    onChange={(e) => setCreditNoteForm({ ...creditNoteForm, note_number: e.target.value })}
-                                    placeholder="Ej: NC-00123"
-                                    className="font-mono"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <Label className="mb-1.5 block">Fecha de Emisión *</Label>
-                                <Input
-                                    type="date"
-                                    value={creditNoteForm.issue_date}
-                                    onChange={(e) => setCreditNoteForm({ ...creditNoteForm, issue_date: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            
-                            <div className="md:col-span-2">
-                                <Label className="mb-1.5 block">Monto a Acreditar *</Label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0.01"
-                                        max={isEditingCN ? undefined : selectedInvoice?.balance}
-                                        value={creditNoteForm.amount}
-                                        onChange={(e) => setCreditNoteForm({ ...creditNoteForm, amount: e.target.value })}
-                                        className="pl-7 font-mono font-bold text-slate-900"
-                                        placeholder="0.00"
-                                        required
-                                    />
-                                </div>
-                                <p className="text-[10px] text-slate-500 mt-1.5">
-                                    {isEditingCN 
-                                        ? "El monto no puede superar el saldo pendiente ajustable." 
-                                        : `Máximo acreditable: ${formatCurrency(selectedInvoice?.balance || 0)}`}
-                                </p>
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <Label className="mb-1.5 block">Motivo / Razón *</Label>
-                                <Input
-                                    value={creditNoteForm.reason}
-                                    onChange={(e) => setCreditNoteForm({ ...creditNoteForm, reason: e.target.value })}
-                                    placeholder="Ej: Devolución parcial de servicios, error en precio..."
-                                    required
-                                />
-                            </div>
-
-                            <div className="md:col-span-2">
-                                <Label className="mb-1.5 block">Documento Digital (PDF)</Label>
-                                <FileUpload
-                                    accept=".pdf"
-                                    onFileChange={(file) => setCreditNoteForm({ ...creditNoteForm, pdf_file: file })}
-                                    helperText="Suba la copia digital de la nota de crédito"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() => {
-                                setIsCreditNoteModalOpen(false);
-                                setSelectedInvoice(null);
-                                setIsEditingCN(false);
-                            }}
-                            className="text-slate-500 font-semibold"
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
-                        >
-                            {isSubmitting ? "Procesando..." : isEditingCN ? "Actualizar Nota" : "Registrar Nota"}
-                        </Button>
-                    </ModalFooter>
-                </form>
-            </Modal>
-
-            {/* Payment Modal */}
-            <Modal
-                isOpen={isPaymentModalOpen}
-                onClose={() => setIsPaymentModalOpen(false)}
-                title="Registrar Abono / Cancelación"
-                size="lg"
-            >
-                {selectedInvoice && (
-                    <div className="space-y-6">
-                        {/* Invoice Summary */}
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                                        <Building2 className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</p>
-                                        <p className="text-sm font-bold text-slate-700 truncate max-w-[240px]">
-                                            {selectedInvoice.client_name}
-                                        </p>
-                                        <p className="text-[10px] font-mono text-slate-400 mt-0.5">
-                                            DOC: {selectedInvoice.invoice_number}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="text-left sm:text-right">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saldo Pendiente</p>
-                                    <p className="text-2xl font-black text-red-600 tabular-nums tracking-tight">
-                                        {formatCurrency(selectedInvoice.balance)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                Detalles del Recibo
-                            </h4>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div>
-                                    <Label className="mb-1.5 block">Monto a Recibir *</Label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
-                                        <Input
-                                            type="number"
-                                            step="0.01"
-                                            min="0.01"
-                                            max={selectedInvoice.balance}
-                                            value={paymentForm.amount}
-                                            onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                                            className="pl-7 font-mono font-bold text-slate-900 text-lg"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <Label className="mb-1.5 block">Fecha de Cobro *</Label>
-                                    <Input
-                                        type="date"
-                                        value={paymentForm.payment_date}
-                                        onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <Label className="mb-1.5 block">Método de Pago *</Label>
-                                    <SelectERP
-                                        value={paymentForm.payment_method}
-                                        onChange={(value) => setPaymentForm({ ...paymentForm, payment_method: value })}
-                                        options={[
-                                            { id: "transferencia", name: "Transferencia Bancaria" },
-                                            { id: "efectivo", name: "Efectivo" },
-                                            { id: "cheque", name: "Cheque" },
-                                            { id: "deposito", name: "Depósito Bancario" },
-                                            { id: "tarjeta", name: "Tarjeta" },
-                                        ]}
-                                        getOptionLabel={(opt) => opt.name}
-                                        getOptionValue={(opt) => opt.id}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="mb-1.5 block">Referencia / Comprobante</Label>
-                                    <Input
-                                        value={paymentForm.reference}
-                                        onChange={(e) => setPaymentForm({ ...paymentForm, reference: e.target.value })}
-                                        placeholder="Ej: TRANS-9988"
-                                    />
-                                </div>
-
-                                {/* Banco - Solo para transferencia, cheque o depósito */}
-                                {['transferencia', 'cheque', 'deposito'].includes(paymentForm.payment_method) && (
-                                    <div className="md:col-span-2">
-                                        <Label className="mb-1.5 block">
-                                            Banco {['transferencia', 'cheque'].includes(paymentForm.payment_method) ? '*' : ''}
-                                        </Label>
-                                        <SelectERP
-                                            value={paymentForm.bank}
-                                            onChange={(val) => setPaymentForm({ ...paymentForm, bank: val || "" })}
-                                            options={banks}
-                                            getOptionLabel={(opt) => opt.name}
-                                            getOptionValue={(opt) => opt.id}
-                                            required={['transferencia', 'cheque'].includes(paymentForm.payment_method)}
-                                            clearable
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="md:col-span-2">
-                                    <Label className="mb-1.5 block">Observaciones</Label>
-                                    <Input
-                                        value={paymentForm.notes}
-                                        onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                                        placeholder="Detalles adicionales..."
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2">
-                                    <Label className="mb-1.5 block" required>Comprobante de Pago</Label>
-                                    <FileUpload
-                                        accept=".pdf,.jpg,.jpeg,.png"
-                                        onFileChange={(file) => setPaymentForm({ ...paymentForm, receipt_file: file })}
-                                        helperText="PDF o imagen del comprobante de transferencia/depósito (requerido)"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Payment Impact Preview */}
-                        {paymentForm.amount && parseFloat(paymentForm.amount) > 0 && (
-                            <div className="bg-slate-900 rounded-xl p-5 text-white shadow-lg">
-                                <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Nuevo Saldo Proyectado</span>
-                                    <span className="text-2xl font-black tabular-nums">
-                                        {formatCurrency(Math.max(0, parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0)))}
-                                    </span>
-                                </div>
-                                {parseFloat(selectedInvoice.balance) - parseFloat(paymentForm.amount || 0) <= 0.01 && (
-                                    <div className="flex items-center gap-2 text-emerald-400">
-                                        <CheckCircle className="w-4 h-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Factura será marcada como pagada</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <ModalFooter>
-                            <Button
-                                variant="ghost"
-                                onClick={() => setIsPaymentModalOpen(false)}
-                                className="text-slate-500 font-semibold"
-                            >
-                                Cancelar
-                            </Button>
-                            <Button 
-                                onClick={handleAddPayment}
-                                className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all active:scale-95 min-w-[160px]"
-                            >
-                                <Banknote className="w-4 h-4 mr-2" />
-                                Confirmar Cobro
-                            </Button>
-                        </ModalFooter>
-                    </div>
-                )}
-            </Modal>
+                invoice={selectedInvoice}
+                editingCreditNote={editingCreditNote}
+                onSuccess={handleCreditNoteSuccess}
+            />
 
             {/* Select Service Order Modal */}
             <Modal
@@ -1828,19 +1506,29 @@ const Invoicing = () => {
             >
                 <div className="space-y-5">
                     <p className="text-sm text-slate-600">
-                        Seleccione la orden de servicio para la cual desea generar una factura.
+                        Seleccione la orden de servicio para la cual desea
+                        generar una factura.
                     </p>
 
                     <div>
-                        <Label className="mb-1.5 block">Orden de Servicio</Label>
+                        <Label className="mb-1.5 block">
+                            Orden de Servicio
+                        </Label>
                         <SelectERP
                             value={selectedServiceOrderForBilling?.id || ""}
                             onChange={(val) => {
-                                const order = allServiceOrders.find(o => String(o.id) === String(val));
-                                setSelectedServiceOrderForBilling(order || null);
+                                const order = allServiceOrders.find(
+                                    (o) => String(o.id) === String(val)
+                                );
+                                setSelectedServiceOrderForBilling(
+                                    order || null
+                                );
                             }}
                             options={[
-                                { id: "", name: "Seleccionar orden de servicio..." },
+                                {
+                                    id: "",
+                                    name: "Seleccionar orden de servicio...",
+                                },
                                 ...allServiceOrders.map((o) => ({
                                     id: o.id,
                                     name: `${o.order_number} - ${o.client_name}`,
@@ -1861,13 +1549,25 @@ const Invoicing = () => {
                                         <Receipt className="w-5 h-5 text-slate-500" />
                                     </div>
                                     <div>
-                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Orden Seleccionada</p>
-                                        <p className="text-sm font-bold text-slate-900">{selectedServiceOrderForBilling.order_number}</p>
+                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                            Orden Seleccionada
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-900">
+                                            {
+                                                selectedServiceOrderForBilling.order_number
+                                            }
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs text-slate-500">Cliente</p>
-                                    <p className="text-sm font-semibold text-slate-700">{selectedServiceOrderForBilling.client_name}</p>
+                                    <p className="text-xs text-slate-500">
+                                        Cliente
+                                    </p>
+                                    <p className="text-sm font-semibold text-slate-700">
+                                        {
+                                            selectedServiceOrderForBilling.client_name
+                                        }
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -1917,7 +1617,11 @@ const Invoicing = () => {
             <Modal
                 isOpen={isEditModalOpen}
                 onClose={() => setIsEditModalOpen(false)}
-                title={editForm.is_dte_issued ? "Editar Factura (DTE Emitido)" : "Editar Factura"}
+                title={
+                    editForm.is_dte_issued
+                        ? "Editar Factura (DTE Emitido)"
+                        : "Editar Factura"
+                }
                 size="lg"
             >
                 <div className="space-y-6">
@@ -1928,9 +1632,13 @@ const Invoicing = () => {
                                 <Info className="w-4 h-4 text-slate-600" />
                             </div>
                             <div>
-                                <p className="text-sm font-semibold text-slate-800">Documento fiscal emitido</p>
+                                <p className="text-sm font-semibold text-slate-800">
+                                    Documento fiscal emitido
+                                </p>
                                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                                    Campos editables: número de factura, fecha de vencimiento, notas y archivo PDF.
+                                    Campos editables: número de factura, número
+                                    de DTE, fecha de vencimiento, notas y
+                                    archivo PDF.
                                 </p>
                             </div>
                         </div>
@@ -1945,14 +1653,18 @@ const Invoicing = () => {
                                         <Receipt className="w-5 h-5 text-slate-500" />
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Orden de Servicio</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                            Orden de Servicio
+                                        </p>
                                         <p className="text-sm font-bold text-slate-700">
                                             {editForm.service_order_number}
                                         </p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Cliente
+                                    </p>
                                     <p className="text-sm font-semibold text-slate-700 truncate max-w-[200px]">
                                         {editForm.client_name}
                                     </p>
@@ -1968,22 +1680,66 @@ const Invoicing = () => {
                         </h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
-                                <Label className="mb-1.5 block">Número de Factura *</Label>
+                                <Label className="mb-1.5 block">
+                                    Número de Factura *
+                                </Label>
                                 <Input
                                     value={editForm.invoice_number}
-                                    onChange={(e) => setEditForm({ ...editForm, invoice_number: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            invoice_number: e.target.value,
+                                        })
+                                    }
                                     className="font-mono uppercase"
                                     required
                                 />
                             </div>
+                            {editForm.is_dte_issued && (
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Número de DTE
+                                    </Label>
+                                    <Input
+                                        value={editForm.dte_number}
+                                        onChange={(e) =>
+                                            setEditForm({
+                                                ...editForm,
+                                                dte_number: e.target.value,
+                                            })
+                                        }
+                                        className="font-mono uppercase"
+                                        placeholder="DTE-12345678"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Número del documento tributario
+                                        electrónico
+                                    </p>
+                                </div>
+                            )}
                             <div>
-                                <Label className={cn("mb-1.5 block", editForm.is_dte_issued && "text-slate-400")}>
+                                <Label
+                                    className={cn(
+                                        "mb-1.5 block",
+                                        editForm.is_dte_issued &&
+                                            "text-slate-400"
+                                    )}
+                                >
                                     Tipo de Documento *
-                                    {editForm.is_dte_issued && <span className="text-[10px] ml-2">(bloqueado)</span>}
+                                    {editForm.is_dte_issued && (
+                                        <span className="text-[10px] ml-2">
+                                            (bloqueado)
+                                        </span>
+                                    )}
                                 </Label>
                                 <SelectERP
                                     value={editForm.invoice_type}
-                                    onChange={(val) => setEditForm({ ...editForm, invoice_type: val })}
+                                    onChange={(val) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            invoice_type: val,
+                                        })
+                                    }
                                     options={INVOICE_TYPE_OPTIONS}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -1992,25 +1748,51 @@ const Invoicing = () => {
                                 />
                             </div>
                             <div>
-                                <Label className={cn("mb-1.5 block", editForm.is_dte_issued && "text-slate-400")}>
+                                <Label
+                                    className={cn(
+                                        "mb-1.5 block",
+                                        editForm.is_dte_issued &&
+                                            "text-slate-400"
+                                    )}
+                                >
                                     Fecha de Emisión *
-                                    {editForm.is_dte_issued && <span className="text-[10px] ml-2">(bloqueado)</span>}
+                                    {editForm.is_dte_issued && (
+                                        <span className="text-[10px] ml-2">
+                                            (bloqueado)
+                                        </span>
+                                    )}
                                 </Label>
                                 <Input
                                     type="date"
                                     value={editForm.issue_date}
-                                    onChange={(e) => setEditForm({ ...editForm, issue_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            issue_date: e.target.value,
+                                        })
+                                    }
                                     disabled={editForm.is_dte_issued}
-                                    className={editForm.is_dte_issued ? "bg-slate-100 text-slate-500 cursor-not-allowed" : ""}
+                                    className={
+                                        editForm.is_dte_issued
+                                            ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                                            : ""
+                                    }
                                     required
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha de Vencimiento</Label>
+                                <Label className="mb-1.5 block">
+                                    Fecha de Vencimiento
+                                </Label>
                                 <Input
                                     type="date"
                                     value={editForm.due_date}
-                                    onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            due_date: e.target.value,
+                                        })
+                                    }
                                 />
                             </div>
                         </div>
@@ -2023,19 +1805,37 @@ const Invoicing = () => {
                         </h4>
                         <div className="space-y-4">
                             <div>
-                                <Label className="mb-1.5 block">Notas Internas</Label>
+                                <Label className="mb-1.5 block">
+                                    Notas Internas
+                                </Label>
                                 <Input
                                     value={editForm.notes}
-                                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            notes: e.target.value,
+                                        })
+                                    }
                                     placeholder="Observaciones sobre la factura..."
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Copia Digital (PDF)</Label>
+                                <Label className="mb-1.5 block">
+                                    Copia Digital (PDF)
+                                </Label>
                                 <FileUpload
                                     accept=".pdf"
-                                    onFileChange={(file) => setEditForm({ ...editForm, pdf_file: file })}
-                                    helperText={editForm.is_dte_issued ? "Puede actualizar el PDF del DTE emitido" : "Reemplazar archivo existente"}
+                                    onFileChange={(file) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            pdf_file: file,
+                                        })
+                                    }
+                                    helperText={
+                                        editForm.is_dte_issued
+                                            ? "Puede actualizar el PDF del DTE emitido"
+                                            : "Reemplazar archivo existente"
+                                    }
                                 />
                             </div>
                         </div>
@@ -2069,13 +1869,188 @@ const Invoicing = () => {
                 size="4xl"
             >
                 {selectedInvoice && (
-                    <InvoiceItemsEditor
-                        invoice={selectedInvoice}
-                        onUpdate={() => {
-                            fetchInvoices();
-                            fetchSummary();
-                        }}
-                    />
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="flex items-start justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <div>
+                                <div className="text-sm text-slate-500">
+                                    Factura
+                                </div>
+                                <div className="text-2xl font-bold font-mono text-slate-900">
+                                    {selectedInvoice.invoice_number ||
+                                        "Sin número"}
+                                </div>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="outline">
+                                        {selectedInvoice.invoice_type || "DTE"}
+                                    </Badge>
+                                    <Badge
+                                        variant={
+                                            selectedInvoice.status === "paid"
+                                                ? "success"
+                                                : selectedInvoice.status ===
+                                                  "partial"
+                                                ? "warning"
+                                                : selectedInvoice.status ===
+                                                  "overdue"
+                                                ? "danger"
+                                                : "default"
+                                        }
+                                    >
+                                        {selectedInvoice.status === "paid"
+                                            ? "Pagada"
+                                            : selectedInvoice.status ===
+                                              "partial"
+                                            ? "Pago Parcial"
+                                            : selectedInvoice.status ===
+                                              "overdue"
+                                            ? "Vencida"
+                                            : selectedInvoice.status ===
+                                              "cancelled"
+                                            ? "Anulada"
+                                            : "Pendiente"}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm text-slate-500">
+                                    Total
+                                </div>
+                                <div className="text-2xl font-semibold text-slate-700 tabular-nums">
+                                    {formatCurrency(
+                                        selectedInvoice.total_amount
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Orden de Servicio
+                                    </div>
+                                    {selectedInvoice.service_order_id ? (
+                                        <button
+                                            onClick={() =>
+                                                navigate(
+                                                    `/service-orders/${selectedInvoice.service_order_id}`
+                                                )
+                                            }
+                                            className="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 group"
+                                        >
+                                            {selectedInvoice.service_order_number ||
+                                                "—"}
+                                            <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                    ) : (
+                                        <div className="font-mono text-sm">
+                                            {selectedInvoice.service_order_number ||
+                                                "—"}
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Fecha de Emisión
+                                    </div>
+                                    <div className="text-sm">
+                                        {formatDateSafe(
+                                            selectedInvoice.issue_date,
+                                            "long"
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
+                                        Fecha de Vencimiento
+                                    </div>
+                                    <div className="text-sm">
+                                        {selectedInvoice.due_date
+                                            ? formatDateSafe(
+                                                  selectedInvoice.due_date,
+                                                  "long"
+                                              )
+                                            : "—"}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Monto Pagado
+                                    </div>
+                                    <div className="text-xl font-semibold text-slate-700 tabular-nums">
+                                        {formatCurrency(
+                                            selectedInvoice.paid_amount || 0
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                                        Saldo Pendiente
+                                    </div>
+                                    <div
+                                        className={cn(
+                                            "text-xl font-bold tabular-nums",
+                                            parseFloat(
+                                                selectedInvoice.balance
+                                            ) > 0
+                                                ? "text-red-600"
+                                                : "text-slate-900"
+                                        )}
+                                    >
+                                        {formatCurrency(
+                                            selectedInvoice.balance || 0
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-200">
+                            <InvoiceItemsEditor
+                                invoice={selectedInvoice}
+                                onUpdate={() => {
+                                    fetchInvoices();
+                                    fetchSummary();
+                                    if (selectedInvoice?.id) {
+                                        handleViewInvoiceDetails(
+                                            selectedInvoice.id
+                                        );
+                                    }
+                                }}
+                                onPaymentClick={(payment) => {
+                                    setSelectedPayment(payment);
+                                    setIsPaymentDetailModalOpen(true);
+                                }}
+                            />
+                        </div>
+                        <ModalFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsDetailModalOpen(false)}
+                            >
+                                Cerrar
+                            </Button>
+                            {selectedInvoice.status !== "paid" &&
+                                selectedInvoice.status !== "cancelled" && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setIsDetailModalOpen(false);
+                                            handleOpenPaymentItemsModal(
+                                                selectedInvoice
+                                            );
+                                        }}
+                                    >
+                                        <ListChecks className="w-4 h-4 mr-2" />
+                                        Pago por Items
+                                    </Button>
+                                )}
+                        </ModalFooter>
+                    </div>
                 )}
             </Modal>
 
@@ -2098,6 +2073,34 @@ const Invoicing = () => {
                 confirmText="Eliminar"
                 cancelText="Cancelar"
                 variant="danger"
+            />
+
+            {/* Payment Items Modal */}
+            <PaymentItemsModal
+                isOpen={isPaymentItemsModalOpen}
+                onClose={() => {
+                    setIsPaymentItemsModalOpen(false);
+                    setSelectedInvoice(null);
+                }}
+                invoice={selectedInvoice}
+                banks={banks}
+                onPaymentSuccess={handlePaymentItemsSuccess}
+            />
+
+            {/* Payment Detail Modal */}
+            <PaymentDetailModal
+                isOpen={isPaymentDetailModalOpen}
+                onClose={() => {
+                    setIsPaymentDetailModalOpen(false);
+                    setSelectedPayment(null);
+                }}
+                payment={selectedPayment}
+                onUpdate={() => {
+                    // Recargar el detalle de la factura para obtener el comprobante actualizado
+                    if (selectedInvoice) {
+                        handleViewInvoiceDetails(selectedInvoice.id);
+                    }
+                }}
             />
         </div>
     );

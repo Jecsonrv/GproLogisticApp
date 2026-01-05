@@ -150,6 +150,41 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         return super().partial_update(request, *args, **kwargs)
     
+    def create(self, request, *args, **kwargs):
+        """
+        Override create para agregar warning de margen negativo.
+
+        AUDITORÍA #8: Advertencia cuando el margen de utilidad es negativo
+        (pérdida), pero sin bloquear la operación.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        transfer = self.perform_create(serializer)
+
+        # Calcular si hay margen negativo
+        warning_message = None
+        profit = transfer.get_profit()
+        if profit < 0:
+            cost = transfer.amount * (transfer.exchange_rate or 1)
+            sale_price = transfer.get_customer_base_price()
+            markup = transfer.customer_markup_percentage or 0
+            warning_message = (
+                f'ADVERTENCIA: Margen negativo detectado. '
+                f'Costo: ${cost:.2f}, Precio venta: ${sale_price:.2f}, '
+                f'Pérdida: ${abs(profit):.2f}. '
+                f'Margen configurado: {markup}%. '
+                f'Verifique la configuración de cobro al cliente.'
+            )
+
+        response_data = self.get_serializer(transfer).data
+
+        if warning_message:
+            response_data['warning'] = warning_message
+            response_data['has_negative_margin'] = True
+
+        headers = self.get_success_headers(response_data)
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         """Asignar usuario que crea la transferencia con validación de OS cerrada"""
         from apps.orders.models import ServiceOrder
@@ -157,7 +192,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         # Obtener OS desde los datos validados del serializer
         service_order = serializer.validated_data.get('service_order')
-        
+
         # Si no está en validados (poco común), buscar en request data
         if not service_order:
             order_id = self.request.data.get('service_order')
@@ -269,20 +304,20 @@ class TransferViewSet(viewsets.ModelViewSet):
         ws.title = "Transferencias"
 
         # Estilos profesionales - Diseño GPRO
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+        header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=10)
-        title_font = Font(size=16, bold=True, color="1F4E79")
-        subtitle_font = Font(size=12, bold=True, color="2F5496")
+        title_font = Font(size=16, bold=True, color="0F2E4D")
+        subtitle_font = Font(size=12, bold=True, color="1A4C7A")
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
         )
-        currency_format = '#,##0.00'
+        currency_format = '"$"#,##0.00'
 
         # === ENCABEZADO ===
-        ws['A1'] = "TRANSFERENCIAS Y GASTOS"
+        ws['A1'] = "CUENTAS POR PAGAR (TRANSFERENCIAS)"
         ws['A1'].font = title_font
         ws.merge_cells('A1:J1')
 
@@ -1411,4 +1446,247 @@ class TransferPaymentViewSet(viewsets.ModelViewSet):
 
         # Eliminar el pago (el modelo se encarga de actualizar paid_amount del Transfer)
         payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ============================================
+# ViewSets para COSTOS DIRECTOS (ProviderInvoice)
+# ============================================
+
+from .models import ProviderInvoice, DirectCostAllocation
+from .serializers import (
+    ProviderInvoiceListSerializer, ProviderInvoiceDetailSerializer,
+    ProviderInvoiceCreateSerializer, DirectCostAllocationSerializer,
+    DirectCostAllocationCreateSerializer
+)
+
+
+class ProviderInvoiceFilter(filters.FilterSet):
+    """Filtros para facturas de proveedor"""
+    date_from = filters.DateFilter(field_name='issue_date', lookup_expr='gte')
+    date_to = filters.DateFilter(field_name='issue_date', lookup_expr='lte')
+
+    class Meta:
+        model = ProviderInvoice
+        fields = ['service_order', 'provider', 'status', 'payment_status']
+
+
+class ProviderInvoiceViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar Facturas de Proveedor (Costos Directos).
+
+    Estas facturas representan costos de servicios tercerizados que se
+    revenderán al cliente con margen de ganancia.
+
+    Acciones adicionales:
+    - allocate_cost: Asignar una porción del costo a un servicio
+    - get_available_charges: Obtener servicios disponibles para asignar
+    """
+    queryset = ProviderInvoice.objects.select_related(
+        'provider', 'service_order', 'created_by'
+    ).prefetch_related('allocations').all()
+    permission_classes = [IsAnyOperativo]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    filterset_class = ProviderInvoiceFilter
+    search_fields = ['invoice_number', 'provider__name', 'service_order__order_number']
+    ordering_fields = ['issue_date', 'total_amount', 'created_at']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ProviderInvoiceListSerializer
+        elif self.action == 'create':
+            return ProviderInvoiceCreateSerializer
+        return ProviderInvoiceDetailSerializer
+
+    @action(detail=True, methods=['post'])
+    def allocate_cost(self, request, pk=None):
+        """
+        Asignar una porción del costo de la factura a un servicio.
+
+        Body:
+        {
+            "order_charge_id": 123,
+            "cost_amount": 250.00,
+            "description": "Cuadrilla portuaria"
+        }
+        """
+        from apps.orders.models import OrderCharge
+        from decimal import Decimal
+
+        provider_invoice = self.get_object()
+
+        # Validar datos
+        order_charge_id = request.data.get('order_charge_id')
+        cost_amount = request.data.get('cost_amount')
+        description = request.data.get('description', '')
+
+        if not order_charge_id or not cost_amount:
+            return Response(
+                {'error': 'order_charge_id y cost_amount son requeridos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            cost_amount = Decimal(str(cost_amount))
+            if cost_amount <= 0:
+                return Response(
+                    {'error': 'El monto debe ser mayor a cero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except:
+            return Response(
+                {'error': 'Monto inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar disponibilidad
+        available = provider_invoice.total_amount - provider_invoice.allocated_amount
+        if cost_amount > available:
+            return Response(
+                {'error': f'El monto excede el disponible (${available})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Obtener el OrderCharge
+        try:
+            order_charge = OrderCharge.objects.get(
+                id=order_charge_id,
+                service_order=provider_invoice.service_order,
+                is_deleted=False
+            )
+        except OrderCharge.DoesNotExist:
+            return Response(
+                {'error': 'Servicio no encontrado o no pertenece a esta OS'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validar que no tenga ya una asignación
+        if hasattr(order_charge, 'cost_allocation') and order_charge.cost_allocation:
+            return Response(
+                {'error': 'Este servicio ya tiene un costo directo asignado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Advertencia si el precio de venta es menor al costo (margen negativo)
+        # Pero permitir la operación - el usuario puede tener sus razones
+        warning_message = None
+        if order_charge.subtotal < cost_amount:
+            profit = order_charge.subtotal - cost_amount
+            margin = ((profit / cost_amount) * 100) if cost_amount > 0 else 0
+            warning_message = (
+                f'Margen negativo: el precio de venta (${order_charge.subtotal}) '
+                f'es menor al costo (${cost_amount}). '
+                f'Pérdida: ${abs(profit)} ({margin:.1f}%). '
+                f'Revise si el margen de ganancia es correcto.'
+            )
+
+        # Crear la asignación
+        with transaction.atomic():
+            allocation = DirectCostAllocation.objects.create(
+                provider_invoice=provider_invoice,
+                order_charge=order_charge,
+                cost_amount=cost_amount,
+                description=description,
+                created_by=request.user
+            )
+
+        response_data = {
+            'message': 'Costo asignado exitosamente',
+            'allocation': DirectCostAllocationSerializer(allocation).data,
+            'provider_invoice': ProviderInvoiceDetailSerializer(provider_invoice).data
+        }
+        
+        if warning_message:
+            response_data['warning'] = warning_message
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def available_charges(self, request, pk=None):
+        """
+        Obtener los servicios de la OS que no tienen costo asignado.
+        """
+        from apps.orders.models import OrderCharge
+
+        provider_invoice = self.get_object()
+
+        # Servicios de la misma OS sin asignación de costo
+        charges = OrderCharge.objects.filter(
+            service_order=provider_invoice.service_order,
+            is_deleted=False,
+            is_third_party_service=False  # Solo los que no son tercerizados
+        ).select_related('service')
+
+        result = [{
+            'id': c.id,
+            'service_name': c.service.name,
+            'description': c.description,
+            'subtotal': float(c.subtotal),
+            'total': float(c.total),
+            'billing_status': c.billing_status
+        } for c in charges]
+
+        return Response({
+            'available_charges': result,
+            'unallocated_amount': float(provider_invoice.unallocated_amount)
+        })
+
+    @action(detail=False, methods=['get'])
+    def by_service_order(self, request):
+        """Obtener todas las facturas de proveedor de una OS"""
+        service_order_id = request.query_params.get('service_order')
+        if not service_order_id:
+            return Response(
+                {'error': 'service_order es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        invoices = self.queryset.filter(
+            service_order_id=service_order_id,
+            is_deleted=False
+        )
+
+        serializer = ProviderInvoiceListSerializer(invoices, many=True)
+        return Response(serializer.data)
+
+
+class DirectCostAllocationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar Asignaciones de Costo Directo.
+
+    Permite crear, editar y eliminar asignaciones de costo a servicios.
+    """
+    queryset = DirectCostAllocation.objects.select_related(
+        'provider_invoice', 'provider_invoice__provider',
+        'order_charge', 'order_charge__service',
+        'created_by'
+    ).all()
+    permission_classes = [IsAnyOperativo]
+    search_fields = ['description', 'provider_invoice__invoice_number']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return DirectCostAllocationCreateSerializer
+        return DirectCostAllocationSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar una asignación de costo.
+        No permite eliminar si el servicio ya fue facturado al cliente.
+        """
+        allocation = self.get_object()
+
+        # Validar que no esté facturado
+        if allocation.order_charge and allocation.order_charge.billing_status == 'facturado':
+            return Response(
+                {
+                    'error': 'No se puede eliminar porque el servicio ya fue facturado al cliente',
+                    'code': 'SERVICE_BILLED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        allocation.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

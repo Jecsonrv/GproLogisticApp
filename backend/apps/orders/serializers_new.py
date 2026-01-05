@@ -6,12 +6,13 @@ from django.db.models import Sum
 from decimal import Decimal
 from .models import (
     ServiceOrder, OrderDocument, OrderCharge,
-    Invoice, InvoicePayment, OrderHistory
+    Invoice, InvoicePayment, OrderHistory, PaymentItemAllocation
 )
 from apps.transfers.models import Transfer
 from apps.catalogs.models import Service
 from apps.clients.models import Client
 from apps.users.models import Notification
+
 
 
 class OrderDocumentSerializer(serializers.ModelSerializer):
@@ -63,6 +64,12 @@ class OrderChargeSerializer(serializers.ModelSerializer):
     invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True, allow_null=True)
     notes = serializers.CharField(source='description', read_only=True)
 
+    # NUEVO: Información de costo y rentabilidad
+    cost_amount = serializers.SerializerMethodField()
+    profit = serializers.SerializerMethodField()
+    margin_percentage = serializers.SerializerMethodField()
+    cost_allocation_info = serializers.SerializerMethodField()
+
     class Meta:
         model = OrderCharge
         fields = [
@@ -70,13 +77,32 @@ class OrderChargeSerializer(serializers.ModelSerializer):
             'description', 'notes', 'quantity', 'unit_price', 'discount',
             'iva_type', 'subtotal', 'amount', 'iva_amount', 'total',
             'invoice_id', 'invoice_number',
+            'is_third_party_service', 'cost_amount', 'profit', 'margin_percentage',
+            'cost_allocation_info', 'billing_status',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'subtotal', 'amount', 'iva_amount', 'total',
             'created_at', 'updated_at', 'service_name', 'service_code',
-            'invoice_id', 'invoice_number', 'notes'
+            'invoice_id', 'invoice_number', 'notes',
+            'cost_amount', 'profit', 'margin_percentage', 'cost_allocation_info'
         ]
+
+    def get_cost_amount(self, obj):
+        """Retorna el costo directo asignado al servicio"""
+        return float(obj.get_cost())
+
+    def get_profit(self, obj):
+        """Retorna la ganancia del servicio"""
+        return float(obj.get_profit())
+
+    def get_margin_percentage(self, obj):
+        """Retorna el margen de ganancia en porcentaje"""
+        return float(obj.get_margin_percentage())
+
+    def get_cost_allocation_info(self, obj):
+        """Retorna información de la asignación de costo"""
+        return obj.get_cost_allocation_info()
 
 
 class ServiceOrderListSerializer(serializers.ModelSerializer):
@@ -422,6 +448,31 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True, allow_null=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
     bank_name = serializers.CharField(source='bank.name', read_only=True, allow_null=True)
+    # Asignaciones por item
+    item_allocations = serializers.SerializerMethodField()
+
+    def get_item_allocations(self, obj):
+        """Obtener las asignaciones de este pago por item"""
+        allocations = obj.item_allocations.filter(is_deleted=False)
+        result = []
+        for alloc in allocations:
+            item_data = {
+                'id': alloc.id,
+                'amount': str(alloc.amount),
+                'notes': alloc.notes,
+            }
+            if alloc.charge:
+                item_data['item_type'] = 'service'
+                item_data['item_id'] = alloc.charge_id
+                item_data['item_name'] = alloc.charge.service.name
+                item_data['item_description'] = alloc.charge.description
+            elif alloc.expense:
+                item_data['item_type'] = 'expense'
+                item_data['item_id'] = alloc.expense_id
+                item_data['item_name'] = alloc.expense.description[:50]
+                item_data['item_description'] = alloc.expense.provider.name if alloc.expense.provider else ''
+            result.append(item_data)
+        return result
 
     class Meta:
         model = InvoicePayment
@@ -429,12 +480,14 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
             'id', 'invoice', 'payment_date', 'amount',
             'payment_method', 'payment_method_display',
             'reference_number', 'bank', 'bank_name', 'notes', 'receipt_file',
+            'item_allocations',
             'created_by', 'created_by_username', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at',
-            'created_by_username', 'created_by_name', 'payment_method_display', 'bank_name'
+            'created_by_username', 'created_by_name', 'payment_method_display', 'bank_name',
+            'item_allocations'
         ]
 
     def create(self, validated_data):
@@ -453,6 +506,8 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    hours_until_locked = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
@@ -461,8 +516,8 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'invoice_type', 'invoice_type_display',
             'issue_date', 'due_date', 'total_amount',
             'paid_amount', 'balance', 'status', 'status_display',
-            'is_dte_issued', 'dte_number', 'is_editable',
-            'days_overdue'
+            'is_dte_issued', 'dte_issued_at', 'dte_number', 'is_editable',
+            'can_delete', 'hours_until_locked', 'days_overdue'
         ]
 
     def get_days_overdue(self, obj):
@@ -479,12 +534,15 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     service_order_data = ServiceOrderListSerializer(source='service_order', read_only=True)
     client_name = serializers.CharField(source='service_order.client.name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
+    credit_notes = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     payment_condition_display = serializers.CharField(source='get_payment_condition_display', read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     days_overdue = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    hours_until_locked = serializers.SerializerMethodField()
     
     # Fiscal fields
     client_is_gran_contribuyente = serializers.BooleanField(source='service_order.client.is_gran_contribuyente', read_only=True)
@@ -506,9 +564,10 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'paid_amount', 'credited_amount', 'balance',
             'status', 'status_display',
             'payment_condition', 'payment_condition_display',
-            'is_dte_issued', 'dte_number', 'is_editable',
+            'is_dte_issued', 'dte_issued_at', 'dte_number', 'is_editable',
+            'can_delete', 'hours_until_locked',
             'dte_file', 'pdf_file', 'notes',
-            'payments', 'billed_charges', 'billed_expenses',
+            'payments', 'credit_notes', 'billed_charges', 'billed_expenses',
             'days_overdue',
             'created_by', 'created_by_username',
             'created_at', 'updated_at'
@@ -517,7 +576,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'id', 'balance',
             'service_order_number', 'service_order_data', 'client_name',
             'status_display', 'invoice_type_display', 'payment_condition_display',
-            'created_by_username', 'days_overdue', 'payments',
+            'created_by_username', 'days_overdue', 'payments', 'credit_notes',
             'billed_charges', 'billed_expenses', 'is_editable',
             'created_at', 'updated_at'
         ]
@@ -528,6 +587,27 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     def get_is_editable(self, obj):
         """Una factura es editable si no tiene DTE emitido"""
         return not obj.is_dte_issued
+    
+    def get_can_delete(self, obj):
+        """Indica si la factura puede eliminarse sin nota de crédito"""
+        return obj.can_delete_without_credit_note()
+    
+    def get_hours_until_locked(self, obj):
+        """Horas restantes hasta que se bloquee permanentemente"""
+        return obj.get_hours_until_locked()
+    
+    def get_credit_notes(self, obj):
+        """Obtener las notas de crédito aplicadas a esta factura"""
+        credit_notes = obj.credit_notes.all().select_related('created_by')
+        return [{
+            'id': nc.id,
+            'note_number': nc.note_number,
+            'issue_date': nc.issue_date,
+            'amount': str(nc.amount),
+            'reason': nc.reason,
+            'pdf_file': nc.pdf_file.url if nc.pdf_file else None,
+            'created_by_name': nc.created_by.get_full_name() if nc.created_by else None,
+        } for nc in credit_notes]
     
     def get_billed_charges(self, obj):
         """Obtener los cargos/servicios vinculados a esta factura"""
@@ -544,7 +624,11 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'iva_amount': str(c.iva_amount),
             'total': str(c.total),
             'iva_type': c.iva_type,
-            'applies_iva': c.iva_type == 'gravado'
+            'applies_iva': c.iva_type == 'gravado',
+            'is_third_party_service': c.is_third_party_service,
+            'cost_amount': str(c.get_cost()),
+            'profit': str(c.get_profit()),
+            'margin_percentage': str(c.get_margin_percentage()),
         } for c in charges]
     
     def get_billed_expenses(self, obj):
@@ -562,6 +646,9 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             else:
                 iva = Decimal('0.00')
             
+            # Obtener tipo de IVA, fallback a lógica antigua si no existe
+            iva_type = getattr(t, 'customer_iva_type', 'gravado' if t.customer_applies_iva else 'exento')
+            
             result.append({
                 'id': t.id,
                 'description': t.description,
@@ -569,6 +656,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
                 'cost': str(t.amount),
                 'markup_percentage': str(markup),
                 'applies_iva': t.customer_applies_iva,
+                'iva_type': iva_type,
                 'subtotal': str(base_price),
                 'iva_amount': str(iva),
                 'total': str(base_price + iva)
