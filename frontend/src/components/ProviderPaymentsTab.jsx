@@ -24,7 +24,7 @@ import {
 } from "./ui";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDate, getTodayDate } from "../lib/utils";
+import { formatCurrency, getTodayDate } from "../lib/utils";
 import usePermissionStore from "../stores/permissionStore";
 
 /**
@@ -36,7 +36,6 @@ import usePermissionStore from "../stores/permissionStore";
 const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
     const [payments, setPayments] = useState([]);
     const [providers, setProviders] = useState([]);
-    const [loading, setLoading] = useState(false);
 
     // RBAC: Verificar si el usuario puede aprobar pagos
     const canApprovePayments = usePermissionStore(
@@ -92,15 +91,12 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
 
     const fetchPayments = async () => {
         try {
-            setLoading(true);
             const response = await axios.get(
                 `/transfers/transfers/?service_order=${orderId}`
             );
             setPayments(Array.isArray(response.data) ? response.data : []);
         } catch {
             setPayments([]);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -226,9 +222,9 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
             if (onUpdate) onUpdate();
         } catch (error) {
             const errorData = error.response?.data;
-            const errorMsg = 
-                errorData?.transfer || 
-                errorData?.error || 
+            const errorMsg =
+                errorData?.transfer ||
+                errorData?.error ||
                 "Error al registrar pago";
             toast.error(errorMsg);
         }
@@ -436,7 +432,7 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                     window.URL.revokeObjectURL(url);
                                     toast.success("Descargando comprobante...");
                                 })
-                                .catch((error) => {
+                                .catch(() => {
                                     toast.error(
                                         "Error al descargar comprobante"
                                     );
@@ -649,7 +645,10 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         // Solo permitir valores positivos
-                                        if (value === '' || parseFloat(value) >= 0) {
+                                        if (
+                                            value === "" ||
+                                            parseFloat(value) >= 0
+                                        ) {
                                             setPaymentForm({
                                                 ...paymentForm,
                                                 amount: value,

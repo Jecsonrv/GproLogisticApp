@@ -65,7 +65,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
@@ -142,16 +142,14 @@ const StatusBadge = ({ status }) => {
 // ============================================
 // KPI CARD - REFINED
 // ============================================
-const KPICard = ({
-    label,
-    value,
-    icon: Icon,
-    trend,
-}) => {
+const KPICard = ({ label, value, icon: Icon }) => {
     return (
         <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate" title={label}>
+                <p
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
+                    title={label}
+                >
                     {label}
                 </p>
                 <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
@@ -159,7 +157,9 @@ const KPICard = ({
                 </p>
             </div>
             <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
             </div>
         </div>
     );
@@ -177,7 +177,6 @@ const ServiceOrders = () => {
     // UI state
     const [loading, setLoading] = useState(true);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -185,11 +184,11 @@ const ServiceOrders = () => {
     const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
         open: false,
         id: null,
-        orderNumber: ""
+        orderNumber: "",
     });
     const [confirmCloseDialog, setConfirmCloseDialog] = useState({
         open: false,
-        id: null
+        id: null,
     });
 
     // Search and filters
@@ -223,17 +222,19 @@ const ServiceOrders = () => {
     // Filtrar subclientes según el cliente seleccionado
     const availableSubClients = useMemo(() => {
         if (!formData.client) return [];
-        return subClients.filter(sc => sc.parent_client === formData.client);
+        return subClients.filter((sc) => sc.parent_client === formData.client);
     }, [formData.client, subClients]);
 
     // Limpiar subcliente cuando el cliente cambia
     useEffect(() => {
         if (formData.sub_client && formData.client) {
             const subClientBelongsToClient = subClients.find(
-                sc => sc.id === formData.sub_client && sc.parent_client === formData.client
+                (sc) =>
+                    sc.id === formData.sub_client &&
+                    sc.parent_client === formData.client
             );
             if (!subClientBelongsToClient) {
-                setFormData(prev => ({ ...prev, sub_client: null }));
+                setFormData((prev) => ({ ...prev, sub_client: null }));
             }
         }
     }, [formData.client, formData.sub_client, subClients]);
@@ -252,7 +253,14 @@ const ServiceOrders = () => {
 
     const fetchCatalogs = async () => {
         try {
-            const [clientsRes, subClientsRes, typesRes, providersRes, categoriesRes, customsRes] = await Promise.all([
+            const [
+                clientsRes,
+                subClientsRes,
+                typesRes,
+                providersRes,
+                categoriesRes,
+                customsRes,
+            ] = await Promise.all([
                 axios.get("/clients/active/"),
                 axios.get("/catalogs/sub-clients/"),
                 axios.get("/catalogs/shipment-types/"),
@@ -266,16 +274,23 @@ const ServiceOrders = () => {
             setCustoms(customsRes.data);
 
             // Filtrar proveedores: Naviera, Agencia de Carga y Aerolínea (Case Insensitive)
-            const allowedCategories = ['naviera', 'agencia de carga', 'aerolínea', 'aerolinea', 'transportista'];
-            
-            const validCategories = categoriesRes.data.filter(cat => 
+            const allowedCategories = [
+                "naviera",
+                "agencia de carga",
+                "aerolínea",
+                "aerolinea",
+                "transportista",
+            ];
+
+            const validCategories = categoriesRes.data.filter((cat) =>
                 allowedCategories.includes(cat.name.toLowerCase())
             );
-            
-            const validCategoryIds = validCategories.map(cat => cat.id);
-            
+
+            const validCategoryIds = validCategories.map((cat) => cat.id);
+
             const filteredProviders = providersRes.data.filter(
-                prov => prov.category && validCategoryIds.includes(prov.category)
+                (prov) =>
+                    prov.category && validCategoryIds.includes(prov.category)
             );
 
             setProviders(filteredProviders);
@@ -290,23 +305,30 @@ const ServiceOrders = () => {
             // Convertir array de ducas a string separado por comas (filtrar vacíos)
             const dataToSend = {
                 ...formData,
-                duca: formData.ducas.filter(d => d.trim()).join(", "),
+                duca: formData.ducas.filter((d) => d.trim()).join(", "),
             };
             delete dataToSend.ducas;
 
             if (selectedOrder) {
                 // Update logic
-                await axios.patch(`/orders/service-orders/${selectedOrder.id}/`, dataToSend);
-                toast.success("La orden de servicio ha sido actualizada correctamente.");
+                await axios.patch(
+                    `/orders/service-orders/${selectedOrder.id}/`,
+                    dataToSend
+                );
+                toast.success(
+                    "La orden de servicio ha sido actualizada correctamente."
+                );
             } else {
                 // Create logic
                 await axios.post("/orders/service-orders/", dataToSend);
-                toast.success("La orden de servicio ha sido creada correctamente.");
+                toast.success(
+                    "La orden de servicio ha sido creada correctamente."
+                );
             }
             fetchOrders();
             setIsCreateModalOpen(false);
             resetForm();
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         }
     };
@@ -321,7 +343,9 @@ const ServiceOrders = () => {
             purchase_order: order.purchase_order || "",
             bl_reference: order.bl_reference || "",
             eta: order.eta || "",
-            ducas: order.duca ? order.duca.split(",").map(d => d.trim()) : [""],
+            ducas: order.duca
+                ? order.duca.split(",").map((d) => d.trim())
+                : [""],
             customs: order.customs || "",
             notes: order.notes || "",
         });
@@ -361,16 +385,18 @@ const ServiceOrders = () => {
         setConfirmDeleteDialog({
             open: true,
             id: order.id,
-            orderNumber: order.order_number
+            orderNumber: order.order_number,
         });
     };
 
     const confirmDelete = async () => {
         try {
-            await axios.delete(`/orders/service-orders/${confirmDeleteDialog.id}/`);
+            await axios.delete(
+                `/orders/service-orders/${confirmDeleteDialog.id}/`
+            );
             toast.success("La orden de servicio ha sido eliminada.");
             fetchOrders();
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         } finally {
             setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" });
@@ -383,12 +409,15 @@ const ServiceOrders = () => {
 
     const confirmClose = async () => {
         try {
-            await axios.patch(`/orders/service-orders/${confirmCloseDialog.id}/`, {
-                status: "cerrada",
-            });
+            await axios.patch(
+                `/orders/service-orders/${confirmCloseDialog.id}/`,
+                {
+                    status: "cerrada",
+                }
+            );
             toast.success("La orden ha sido cerrada correctamente.");
             fetchOrders();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo cerrar la orden. Intente nuevamente.");
         } finally {
             setConfirmCloseDialog({ open: false, id: null });
@@ -396,7 +425,8 @@ const ServiceOrders = () => {
     };
 
     const handleExportExcel = async (exportType = "all") => {
-        const dataToExport = exportType === "filtered" ? filteredOrders : orders;
+        const dataToExport =
+            exportType === "filtered" ? filteredOrders : orders;
 
         if (dataToExport.length === 0) {
             toast.error("No hay datos para exportar");
@@ -420,20 +450,22 @@ const ServiceOrders = () => {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toLocaleDateString("en-CA");
-            const filename = exportType === "filtered"
-                ? `GPRO_Ordenes_Filtradas_${timestamp}.xlsx`
-                : `GPRO_Ordenes_${timestamp}.xlsx`;
+            const filename =
+                exportType === "filtered"
+                    ? `GPRO_Ordenes_Filtradas_${timestamp}.xlsx`
+                    : `GPRO_Ordenes_${timestamp}.xlsx`;
             link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            const message = exportType === "filtered"
-                ? `${dataToExport.length} orden(es) exportada(s)`
-                : "Todas las órdenes exportadas correctamente";
+            const message =
+                exportType === "filtered"
+                    ? `${dataToExport.length} orden(es) exportada(s)`
+                    : "Todas las órdenes exportadas correctamente";
             toast.success(message);
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar");
         } finally {
             setIsExporting(false);
@@ -488,7 +520,9 @@ const ServiceOrders = () => {
 
     const kpis = useMemo(() => {
         const total = orders.length;
-        const inTransit = orders.filter((o) => o.status === "en_transito").length;
+        const inTransit = orders.filter(
+            (o) => o.status === "en_transito"
+        ).length;
         const closed = orders.filter((o) => o.status === "cerrada").length;
         const invoiced = orders.filter((o) => o.facturado).length;
         const totalAmount = orders.reduce(
@@ -538,7 +572,10 @@ const ServiceOrders = () => {
             sortable: false,
             cell: (row) => (
                 <div>
-                    <div className="font-semibold text-slate-900 text-sm truncate max-w-[220px]" title={row.client_name}>
+                    <div
+                        className="font-semibold text-slate-900 text-sm truncate max-w-[220px]"
+                        title={row.client_name}
+                    >
                         {row.client_name}
                     </div>
                     {row.shipment_type_name && (
@@ -560,7 +597,10 @@ const ServiceOrders = () => {
                         {row.duca || "—"}
                     </div>
                     {row.bl_reference && (
-                        <div className="text-[10px] text-slate-400 mt-1 truncate max-w-[140px]" title={row.bl_reference}>
+                        <div
+                            className="text-[10px] text-slate-400 mt-1 truncate max-w-[140px]"
+                            title={row.bl_reference}
+                        >
                             BL: {row.bl_reference}
                         </div>
                     )}
@@ -587,17 +627,21 @@ const ServiceOrders = () => {
             cell: (row) => {
                 // Usar el total de transferencias para incluir TODOS los gastos (Cargos, Costos, Admin, etc.)
                 const totalCosts = row.total_transfers || 0;
-                
+
                 return (
                     <div className="flex flex-col gap-0.5">
                         <div className="flex justify-between items-center gap-2 text-xs w-full px-2">
-                            <span className="text-slate-500 font-semibold text-[10px]">Ingresos:</span>
+                            <span className="text-slate-500 font-semibold text-[10px]">
+                                Ingresos:
+                            </span>
                             <span className="font-semibold text-slate-700 tabular-nums">
                                 {formatCurrency(row.total_amount)}
                             </span>
                         </div>
                         <div className="flex justify-between items-center gap-2 text-[10px] w-full px-2">
-                            <span className="text-slate-400 font-semibold text-[10px]">Gastos:</span>
+                            <span className="text-slate-400 font-semibold text-[10px]">
+                                Gastos:
+                            </span>
                             <span className="font-medium text-slate-600 tabular-nums">
                                 {formatCurrency(totalCosts)}
                             </span>
@@ -699,7 +743,6 @@ const ServiceOrders = () => {
 
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
-
             {/* Bloque Superior (Estratégico): KPIs - Responsive */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
@@ -731,10 +774,8 @@ const ServiceOrders = () => {
 
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
             <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
-
                 {/* Barra de Herramientas - Responsive: columna en móvil, fila en desktop */}
                 <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-slate-50/30">
-
                     {/* Izquierda: Búsqueda y Filtros */}
                     <div className="flex items-center gap-2 sm:gap-3 flex-1 lg:max-w-xl">
                         <div className="relative flex-1 group">
@@ -753,7 +794,8 @@ const ServiceOrders = () => {
                             onClick={() => setIsFiltersOpen(!isFiltersOpen)}
                             className={cn(
                                 "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
-                                isFiltersOpen && "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                isFiltersOpen &&
+                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
                             )}
                         >
                             <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
@@ -770,7 +812,9 @@ const ServiceOrders = () => {
                     <div className="flex items-center gap-2 sm:gap-3 justify-end lg:justify-end">
                         <ExportButton
                             onExportAll={() => handleExportExcel("all")}
-                            onExportFiltered={() => handleExportExcel("filtered")}
+                            onExportFiltered={() =>
+                                handleExportExcel("filtered")
+                            }
                             filteredCount={filteredOrders.length}
                             totalCount={orders.length}
                             isExporting={isExporting}
@@ -804,10 +848,19 @@ const ServiceOrders = () => {
                                     }
                                     options={[
                                         { id: "pendiente", name: "Pendiente" },
-                                        { id: "en_transito", name: "En Tránsito" },
+                                        {
+                                            id: "en_transito",
+                                            name: "En Tránsito",
+                                        },
                                         { id: "en_puerto", name: "En Puerto" },
-                                        { id: "en_almacen", name: "En Almacenadora" },
-                                        { id: "finalizada", name: "Finalizada" },
+                                        {
+                                            id: "en_almacen",
+                                            name: "En Almacenadora",
+                                        },
+                                        {
+                                            id: "finalizada",
+                                            name: "Finalizada",
+                                        },
                                         { id: "cerrada", name: "Cerrada" },
                                     ]}
                                     getOptionLabel={(opt) => opt.name}
@@ -887,7 +940,11 @@ const ServiceOrders = () => {
                     setIsCreateModalOpen(false);
                     resetForm();
                 }}
-                title={selectedOrder ? `Editar Orden: ${selectedOrder.order_number}` : "Nueva Orden de Servicio"}
+                title={
+                    selectedOrder
+                        ? `Editar Orden: ${selectedOrder.order_number}`
+                        : "Nueva Orden de Servicio"
+                }
                 size="2xl"
             >
                 <form onSubmit={handleCreate} className="space-y-6">
@@ -904,7 +961,13 @@ const ServiceOrders = () => {
                                 <Label className="mb-1.5 block">Cliente</Label>
                                 <SelectERP
                                     value={formData.client}
-                                    onChange={(val) => setFormData({ ...formData, client: val, sub_client: null })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            client: val,
+                                            sub_client: null,
+                                        })
+                                    }
                                     options={clients}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -915,24 +978,32 @@ const ServiceOrders = () => {
                             </div>
 
                             {/* Subcliente (solo si el cliente tiene subclientes) */}
-                            {formData.client && availableSubClients.length > 0 && (
-                                <div className="col-span-2">
-                                    <Label className="mb-1.5 block">
-                                        Subcliente
-                                        <span className="text-slate-500 text-xs ml-2">(Opcional)</span>
-                                    </Label>
-                                    <SelectERP
-                                        value={formData.sub_client}
-                                        onChange={(val) => setFormData({ ...formData, sub_client: val })}
-                                        options={availableSubClients}
-                                        getOptionLabel={(opt) => opt.name}
-                                        getOptionValue={(opt) => opt.id}
-                                        searchable
-                                        clearable
-                                        placeholder="Selecciona un subcliente..."
-                                    />
-                                </div>
-                            )}
+                            {formData.client &&
+                                availableSubClients.length > 0 && (
+                                    <div className="col-span-2">
+                                        <Label className="mb-1.5 block">
+                                            Subcliente
+                                            <span className="text-slate-500 text-xs ml-2">
+                                                (Opcional)
+                                            </span>
+                                        </Label>
+                                        <SelectERP
+                                            value={formData.sub_client}
+                                            onChange={(val) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    sub_client: val,
+                                                })
+                                            }
+                                            options={availableSubClients}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                            searchable
+                                            clearable
+                                            placeholder="Selecciona un subcliente..."
+                                        />
+                                    </div>
+                                )}
                         </div>
                     </div>
 
@@ -946,10 +1017,17 @@ const ServiceOrders = () => {
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <Label className="mb-1.5 block">Tipo de Embarque</Label>
+                                <Label className="mb-1.5 block">
+                                    Tipo de Embarque
+                                </Label>
                                 <SelectERP
                                     value={formData.shipment_type}
-                                    onChange={(val) => setFormData({ ...formData, shipment_type: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            shipment_type: val,
+                                        })
+                                    }
                                     options={shipmentTypes}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -958,10 +1036,17 @@ const ServiceOrders = () => {
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Naviera / Aerolínea / Transportista</Label>
+                                <Label className="mb-1.5 block">
+                                    Naviera / Aerolínea / Transportista
+                                </Label>
                                 <SelectERP
                                     value={formData.provider}
-                                    onChange={(val) => setFormData({ ...formData, provider: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            provider: val,
+                                        })
+                                    }
                                     options={providers}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -973,7 +1058,12 @@ const ServiceOrders = () => {
                                 <Label className="mb-1.5 block">Aduana</Label>
                                 <SelectERP
                                     value={formData.customs}
-                                    onChange={(val) => setFormData({ ...formData, customs: val })}
+                                    onChange={(val) =>
+                                        setFormData({
+                                            ...formData,
+                                            customs: val,
+                                        })
+                                    }
                                     options={customs}
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
@@ -992,7 +1082,12 @@ const ServiceOrders = () => {
                                     <Label>DUCA(s)</Label>
                                     <button
                                         type="button"
-                                        onClick={() => setFormData({ ...formData, ducas: [...formData.ducas, ""] })}
+                                        onClick={() =>
+                                            setFormData({
+                                                ...formData,
+                                                ducas: [...formData.ducas, ""],
+                                            })
+                                        }
                                         className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
@@ -1001,23 +1096,41 @@ const ServiceOrders = () => {
                                 </div>
                                 <div className="space-y-2">
                                     {formData.ducas.map((duca, index) => (
-                                        <div key={index} className="flex items-center gap-2">
+                                        <div
+                                            key={index}
+                                            className="flex items-center gap-2"
+                                        >
                                             <Input
                                                 value={duca}
                                                 onChange={(e) => {
-                                                    const newDucas = [...formData.ducas];
-                                                    newDucas[index] = e.target.value;
-                                                    setFormData({ ...formData, ducas: newDucas });
+                                                    const newDucas = [
+                                                        ...formData.ducas,
+                                                    ];
+                                                    newDucas[index] =
+                                                        e.target.value;
+                                                    setFormData({
+                                                        ...formData,
+                                                        ducas: newDucas,
+                                                    });
                                                 }}
-                                                placeholder={`DUCA ${index + 1} - Ej: 4-12345`}
+                                                placeholder={`DUCA ${
+                                                    index + 1
+                                                } - Ej: 4-12345`}
                                                 className="font-mono uppercase bg-white flex-1"
                                             />
                                             {formData.ducas.length > 1 && (
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        const newDucas = formData.ducas.filter((_, i) => i !== index);
-                                                        setFormData({ ...formData, ducas: newDucas });
+                                                        const newDucas =
+                                                            formData.ducas.filter(
+                                                                (_, i) =>
+                                                                    i !== index
+                                                            );
+                                                        setFormData({
+                                                            ...formData,
+                                                            ducas: newDucas,
+                                                        });
                                                     }}
                                                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                                                     title="Eliminar DUCA"
@@ -1030,37 +1143,65 @@ const ServiceOrders = () => {
                                 </div>
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">BL / Guía</Label>
+                                <Label className="mb-1.5 block">
+                                    BL / Guía
+                                </Label>
                                 <Input
                                     value={formData.bl_reference}
-                                    onChange={(e) => setFormData({ ...formData, bl_reference: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            bl_reference: e.target.value,
+                                        })
+                                    }
                                     placeholder="Ej: MAEU123456789"
                                     className="font-mono uppercase bg-white"
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Fecha ETA</Label>
+                                <Label className="mb-1.5 block">
+                                    Fecha ETA
+                                </Label>
                                 <Input
                                     type="date"
                                     value={formData.eta}
-                                    onChange={(e) => setFormData({ ...formData, eta: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            eta: e.target.value,
+                                        })
+                                    }
                                     className="bg-white"
                                 />
                             </div>
                             <div>
-                                <Label className="mb-1.5 block">Orden de Compra (PO)</Label>
+                                <Label className="mb-1.5 block">
+                                    Orden de Compra (PO)
+                                </Label>
                                 <Input
                                     value={formData.purchase_order}
-                                    onChange={(e) => setFormData({ ...formData, purchase_order: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            purchase_order: e.target.value,
+                                        })
+                                    }
                                     placeholder="Ej: PO-998877"
                                     className="bg-white"
                                 />
                             </div>
                             <div className="sm:col-span-2">
-                                <Label className="mb-1.5 block">Notas / Información Adicional</Label>
+                                <Label className="mb-1.5 block">
+                                    Notas / Información Adicional
+                                </Label>
                                 <Textarea
                                     value={formData.notes}
-                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            notes: e.target.value,
+                                        })
+                                    }
                                     placeholder="Observaciones, instrucciones especiales, información relevante..."
                                     rows={3}
                                     className="bg-white resize-none"
@@ -1109,7 +1250,13 @@ const ServiceOrders = () => {
 
             <ConfirmDialog
                 open={confirmDeleteDialog.open}
-                onClose={() => setConfirmDeleteDialog({ open: false, id: null, orderNumber: "" })}
+                onClose={() =>
+                    setConfirmDeleteDialog({
+                        open: false,
+                        id: null,
+                        orderNumber: "",
+                    })
+                }
                 onConfirm={confirmDelete}
                 title={`¿Eliminar Orden ${confirmDeleteDialog.orderNumber}?`}
                 description="Esta acción eliminará la orden de servicio. Si tiene facturas o pagos asociados, es posible que no se pueda eliminar."

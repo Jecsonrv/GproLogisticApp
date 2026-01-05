@@ -20,10 +20,10 @@ export {
 } from "./Skeleton";
 
 // Badges
-export { Badge, StatusBadge, badgeVariants } from "./Badge";
+export { Badge, StatusBadge } from "./Badge";
 
 // Buttons
-export { Button, buttonVariants } from "./Button";
+export { Button } from "./Button";
 export { default as ExportButton } from "./ExportButton";
 
 // Cards

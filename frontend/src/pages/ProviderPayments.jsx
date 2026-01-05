@@ -72,7 +72,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
@@ -290,15 +290,15 @@ function ProviderPayments() {
     const [serviceOrders, setServiceOrders] = useState([]);
     const [providers, setProviders] = useState([]);
     const [banks, setBanks] = useState([]);
-    const [clients, setClients] = useState([]);
 
     // UI state
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("gastos");
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    // Edición no implementada
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState(null);
+    const [, setPaymentToDelete] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
@@ -426,17 +426,14 @@ function ProviderPayments() {
 
     const fetchCatalogs = async () => {
         try {
-            const [ordersRes, providersRes, banksRes, clientsRes] =
-                await Promise.all([
-                    axios.get("/orders/service-orders/"),
-                    axios.get("/catalogs/providers/"),
-                    axios.get("/catalogs/banks/"),
-                    axios.get("/clients/active/"),
-                ]);
+            const [ordersRes, providersRes, banksRes] = await Promise.all([
+                axios.get("/orders/service-orders/"),
+                axios.get("/catalogs/providers/"),
+                axios.get("/catalogs/banks/"),
+            ]);
             setServiceOrders(ordersRes.data);
             setProviders(providersRes.data);
             setBanks(banksRes.data);
-            setClients(clientsRes.data);
         } catch {
             // Silencioso
         }
@@ -881,44 +878,21 @@ function ProviderPayments() {
             );
             setSelectedPayment(response.data);
             setIsDetailModalOpen(true);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar detalles");
         }
     };
 
-    const handleApprove = async (payment) => {
-        try {
-            await axios.patch(
-                `/transfers/transfers/${payment.id}/`,
-                { status: "aprobado" },
-                { _skipErrorToast: true }
-            );
-            toast.success("Gasto aprobado correctamente");
-            fetchPayments();
-            setIsDetailModalOpen(false);
-            setSelectedPayment(null);
-        } catch (error) {
-            const errorData = error.response?.data;
-            const errorMsg = errorData?.error || "Error al aprobar el gasto";
-            const errorDetail = errorData?.detail;
-
-            if (errorDetail) {
-                toast.error(
-                    <div>
-                        <p className="font-semibold">{errorMsg}</p>
-                        <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
-                    </div>,
-                    { duration: 5000 }
-                );
-            } else {
-                toast.error(errorMsg);
-            }
-        }
-    };
+    // handleApprove removido (no usado)
 
     const resetForm = () => {
         setFormData(initialFormData);
         setSelectedPayment(null);
+    };
+
+    const openPaymentModal = (payment) => {
+        setSelectedPayment(payment);
+        setIsPayModalOpen(true);
     };
 
     const handleExportExcel = async (exportType = "all") => {
@@ -962,7 +936,7 @@ function ProviderPayments() {
                     ? `${dataToExport.length} pago(s) exportado(s)`
                     : "Todos los pagos exportados exitosamente";
             toast.success(message);
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar archivo");
         } finally {
             setIsExporting(false);

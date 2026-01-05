@@ -33,8 +33,8 @@ import {
 } from "../components/ui";
 import { LoadingState } from "../components/ui/Spinner";
 import api from "../lib/axios";
-import { cn, formatCurrency } from "../lib/utils";
 import toast from "react-hot-toast";
+import { cn } from "../lib/utils";
 
 /**
  * ClientForm - Formulario completo para crear/editar clientes
@@ -84,14 +84,15 @@ function ClientForm() {
         if (isEditing) {
             fetchClient();
         }
-    }, [id]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id, isEditing]);
 
     const fetchClient = async () => {
         try {
             setLoading(true);
             const response = await api.get(`/clients/${id}/`);
             setFormData(response.data);
-        } catch (error) {
+        } catch {
             toast.error(
                 "No se pudo cargar la información del cliente. Intente nuevamente."
             );
@@ -121,6 +122,7 @@ function ClientForm() {
         ) {
             newErrors.email = "Email inválido";
         }
+
         if (formData.payment_condition === "credito") {
             if (!formData.credit_days || formData.credit_days <= 0) {
                 newErrors.credit_days =
@@ -219,7 +221,8 @@ function ClientForm() {
                                 {
                                     value: "nacional",
                                     label: "Nacional",
-                                    description: "Cliente local con NIT salvadoreño",
+                                    description:
+                                        "Cliente local con NIT salvadoreño",
                                 },
                                 {
                                     value: "internacional",
@@ -230,7 +233,12 @@ function ClientForm() {
                                 <button
                                     key={option.value}
                                     type="button"
-                                    onClick={() => handleChange("client_type", option.value)}
+                                    onClick={() =>
+                                        handleChange(
+                                            "client_type",
+                                            option.value
+                                        )
+                                    }
                                     className={cn(
                                         "p-3 rounded-sm border text-left transition-all outline-none",
                                         formData.client_type === option.value
@@ -242,12 +250,14 @@ function ClientForm() {
                                         <div
                                             className={cn(
                                                 "w-4 h-4 rounded-full border flex items-center justify-center",
-                                                formData.client_type === option.value
+                                                formData.client_type ===
+                                                    option.value
                                                     ? "border-slate-900"
                                                     : "border-slate-300"
                                             )}
                                         >
-                                            {formData.client_type === option.value && (
+                                            {formData.client_type ===
+                                                option.value && (
                                                 <div className="w-2 h-2 rounded-full bg-slate-900" />
                                             )}
                                         </div>

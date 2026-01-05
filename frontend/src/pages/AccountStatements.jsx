@@ -58,10 +58,9 @@ import PaymentItemsModal from "../components/PaymentItemsModal";
 import PaymentDetailModal from "../components/PaymentDetailModal";
 import CreditNoteModal from "../components/CreditNoteModal";
 import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
-import useAuthStore from "../stores/authStore";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
-import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+import { formatCurrency, formatDate, cn } from "../lib/utils";
 
 // ============================================
 // HELPERS
@@ -290,12 +289,23 @@ function AccountStatements() {
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
         open: false,
         id: null,
     });
     const [deletePaymentConfirm, setDeletePaymentConfirm] = useState(null); // {id, amount}
+
+    const clearFilters = () => {
+        setStatusFilter("");
+        setFilters({
+            dateFrom: "",
+            dateTo: "",
+            minAmount: "",
+            maxAmount: "",
+            invoiceType: "",
+        });
+        setSearchQuery("");
+    };
 
     useEffect(() => {
         fetchClients();
@@ -312,13 +322,15 @@ function AccountStatements() {
                 setSelectedClient(clientFromUrl);
             }
         }
-    }, [clientIdFromUrl, clients]);
+    }, [clientIdFromUrl, clients, selectedClient]);
 
     useEffect(() => {
         if (selectedClient) {
             fetchStatement(selectedClient.id);
             fetchInvoices(selectedClient.id);
         }
+        // fetchStatement deliberately omitted from deps to avoid recreating requests each render
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedClient, selectedYear]);
 
     const fetchClients = async () => {
@@ -349,9 +361,8 @@ function AccountStatements() {
                 })
             );
             setClients(enrichedClients);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar clientes");
-            console.error(error);
         } finally {
             setLoading(false);
         }
@@ -361,8 +372,8 @@ function AccountStatements() {
         try {
             const response = await axios.get("/catalogs/banks/");
             setBanks(response.data);
-        } catch (error) {
-            console.error("Error al cargar bancos:", error);
+        } catch {
+            toast.error("Error al cargar bancos");
         }
     };
 
@@ -375,7 +386,7 @@ function AccountStatements() {
                 }
             );
             setStatement(response.data);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar estado de cuenta");
             setStatement(null);
         }
@@ -387,8 +398,7 @@ function AccountStatements() {
                 params: { client: clientId },
             });
             setInvoices(response.data || []);
-        } catch (error) {
-            console.error("Error fetching invoices:", error);
+        } catch {
             setInvoices([]);
         }
     };
@@ -397,7 +407,7 @@ function AccountStatements() {
         try {
             const response = await axios.get(`/orders/invoices/${invoiceId}/`);
             setSelectedInvoice(response.data);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar detalle de factura");
         }
     };
@@ -504,7 +514,6 @@ function AccountStatements() {
 
     const handleDeletePayment = async (paymentId) => {
         try {
-            setIsSubmitting(true);
             await axios.delete(`/orders/invoice-payments/${paymentId}/`);
             toast.success("Pago eliminado correctamente");
             if (selectedClient) {
@@ -518,22 +527,20 @@ function AccountStatements() {
         } catch {
             // El interceptor de axios ya muestra el toast de error
         } finally {
-            setIsSubmitting(false);
             setDeletePaymentConfirm(null);
         }
     };
 
     // Filtered clients
     const filteredClients = useMemo(() => {
+        if (!clientSearchQuery) return clients;
+        const query = clientSearchQuery.toLowerCase();
         return clients.filter((client) => {
-            if (clientSearchQuery) {
-                const query = clientSearchQuery.toLowerCase();
-                return (
-                    client.name?.toLowerCase().includes(query) ||
-                    client.nit?.toLowerCase().includes(query)
-                );
-            }
-            return true;
+            return (
+                client.name?.toLowerCase().includes(query) ||
+                client.commercial_name?.toLowerCase().includes(query) ||
+                client.nit?.toLowerCase().includes(query)
+            );
         });
     }, [clients, clientSearchQuery]);
 
@@ -594,7 +601,7 @@ function AccountStatements() {
 
             return true;
         });
-    }, [invoices, searchQuery, statusFilter, filters]);
+    }, [invoices, searchQuery, statusFilter, filters, selectedYear]);
 
     // Active filters count
     const activeFiltersCount = useMemo(() => {
@@ -607,75 +614,6 @@ function AccountStatements() {
         if (filters.invoiceType) count++;
         return count;
     }, [statusFilter, filters]);
-
-    const clearFilters = () => {
-        setStatusFilter("");
-        setFilters({
-            dateFrom: "",
-            dateTo: "",
-            minAmount: "",
-            maxAmount: "",
-            invoiceType: "",
-        });
-        setIsFiltersOpen(false);
-    };
-
-    // Aging Analysis (Antigüedad de Cuentas por Cobrar)
-    const agingData = useMemo(() => {
-        // Usar fecha local sin hora para evitar problemas de zona horaria
-        const now = new Date();
-        const today = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate()
-        );
-        const aging = {
-            current: { count: 0, amount: 0, invoices: [] }, // 0-30 días
-            days30: { count: 0, amount: 0, invoices: [] }, // 31-60 días
-            days60: { count: 0, amount: 0, invoices: [] }, // 61-90 días
-            days90: { count: 0, amount: 0, invoices: [] }, // 91+ días
-        };
-
-        invoices
-            .filter(
-                (inv) =>
-                    inv.status !== "paid" &&
-                    inv.status !== "cancelled" &&
-                    parseFloat(inv.balance) > 0
-            )
-            .forEach((inv) => {
-                // Parsear fecha sin problemas de zona horaria
-                const [year, month, day] = inv.due_date.split("-").map(Number);
-                const dueDate = new Date(year, month - 1, day);
-                const diffTime = today - dueDate;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                const balance = parseFloat(inv.balance);
-
-                if (diffDays <= 0) {
-                    // Facturas al corriente (aún no vencidas)
-                    aging.current.count++;
-                    aging.current.amount += balance;
-                    aging.current.invoices.push(inv);
-                } else if (diffDays <= 30) {
-                    // Vencidas hace 1-30 días
-                    aging.days30.count++;
-                    aging.days30.amount += balance;
-                    aging.days30.invoices.push(inv);
-                } else if (diffDays <= 60) {
-                    // Vencidas hace 31-60 días
-                    aging.days60.count++;
-                    aging.days60.amount += balance;
-                    aging.days60.invoices.push(inv);
-                } else {
-                    // Vencidas hace más de 60 días
-                    aging.days90.count++;
-                    aging.days90.amount += balance;
-                    aging.days90.invoices.push(inv);
-                }
-            });
-
-        return aging;
-    }, [invoices]);
 
     // Client KPIs
     const clientKPIs = useMemo(() => {

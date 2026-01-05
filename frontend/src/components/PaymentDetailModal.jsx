@@ -52,13 +52,12 @@ const formatDate = (dateStr) => {
             });
         }
         return dateStr;
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
 
 export function PaymentDetailModal({ isOpen, onClose, payment, onUpdate }) {
-    const [isLoading, setIsLoading] = useState(false);
     const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
     const [receiptFile, setReceiptFile] = useState(null);
 

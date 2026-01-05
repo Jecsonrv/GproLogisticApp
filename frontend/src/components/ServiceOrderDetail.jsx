@@ -49,7 +49,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     // Data for dropdowns
     const [services, setServices] = useState([]);
-    const [providers, setProviders] = useState([]);
+    const [, setProviders] = useState([]); // catálogos no usados directamente
     const [clientPrices, setClientPrices] = useState([]);
     const [providerInvoices, setProviderInvoices] = useState([]); // Costos directos disponibles
 
@@ -81,7 +81,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     });
 
     // Third Party Expenses
-    const [expenses, setExpenses] = useState([]);
+    const [, setExpenses] = useState([]); // se mantiene para compatibilidad
 
     // Confirm Dialog
     const [confirmDialog, setConfirmDialog] = useState({
@@ -118,7 +118,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
     const executeStatusChange = async (newStatus) => {
         try {
             // Optimistic update
-            const oldStatus = order.status;
             setOrder({ ...order, status: newStatus });
 
             await api.patch(`/orders/service-orders/${orderId}/`, {
@@ -131,7 +130,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 }`
             );
             if (onUpdate) onUpdate();
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
             fetchOrderDetail(false); // Revert on error
         }
@@ -141,26 +140,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         await executeStatusChange(confirmCloseDialog.newStatus);
         setConfirmCloseDialog({ open: false, newStatus: null });
     };
-
-    useEffect(() => {
-        const controller = new AbortController();
-        if (orderId) {
-            fetchOrderDetail(true, controller.signal);
-            fetchServices(controller.signal);
-            fetchProviders(controller.signal);
-            fetchProviderInvoices(controller.signal);
-        }
-        return () => controller.abort();
-    }, [orderId]);
-
-    // Fetch client prices when order is loaded (and we know the client)
-    useEffect(() => {
-        const controller = new AbortController();
-        if (order?.client) {
-            fetchClientPrices(order.client, controller.signal);
-        }
-        return () => controller.abort();
-    }, [order?.client]);
 
     const fetchOrderDetail = async (showLoader = true, signal) => {
         try {
@@ -179,6 +158,28 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             if (showLoader) setLoading(false);
         }
     };
+
+    useEffect(() => {
+        const controller = new AbortController();
+        if (orderId) {
+            fetchOrderDetail(true, controller.signal);
+            fetchServices(controller.signal);
+            fetchProviders(controller.signal);
+            fetchProviderInvoices(controller.signal);
+        }
+        return () => controller.abort();
+        // fetch* functions are stable enough; omit from deps intentionally
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [orderId]);
+
+    // Fetch client prices when order is loaded (and we know the client)
+    useEffect(() => {
+        const controller = new AbortController();
+        if (order?.client) {
+            fetchClientPrices(order.client, controller.signal);
+        }
+        return () => controller.abort();
+    }, [order?.client]);
 
     const fetchServices = async (signal) => {
         try {
@@ -353,7 +354,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchProviderInvoices(); // Refrescar facturas
             setIsAddingCharge(false);
             resetChargeForm();
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         }
     };
@@ -372,7 +373,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             fetchOrderDetail(false);
             fetchProviderInvoices(); // Refrescar facturas disponibles
             if (onUpdate) onUpdate(); // Update parent list totals
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         }
     };
@@ -409,7 +410,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
     const handleSaveEditCharge = async () => {
         try {
-            const response = await api.patch(
+            await api.patch(
                 `/orders/service-orders/${orderId}/update_charge/`,
                 {
                     charge_id: editingChargeId,
@@ -424,7 +425,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             toast.success("Servicio actualizado correctamente");
             setEditingChargeId(null);
             fetchOrderDetail(false); // Refresh sin loader
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         }
     };
@@ -438,20 +439,6 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             notes: "",
             iva_type: "gravado",
         });
-    };
-
-    const getServicePrice = (serviceId) => {
-        // 1. Check if there is a custom price for this client
-        const customPrice = clientPrices.find(
-            (cp) => cp.service === parseInt(serviceId)
-        );
-        if (customPrice) {
-            return parseFloat(customPrice.custom_price);
-        }
-
-        // 2. Fallback to default service price
-        const service = services.find((s) => s.id === parseInt(serviceId));
-        return service ? parseFloat(service.default_price) : 0;
     };
 
     const tabs = [
@@ -2419,7 +2406,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             {/* Confirm Close Dialog */}
             <ConfirmDialog
                 open={confirmCloseDialog.open}
-                onClose={() => setConfirmCloseDialog({ open: false, newStatus: null })}
+                onClose={() =>
+                    setConfirmCloseDialog({ open: false, newStatus: null })
+                }
                 onConfirm={confirmClose}
                 title="¿Cerrar Orden de Servicio?"
                 description="Al cerrar la orden, se bloqueará la edición de costos y precios. Solo podrá reabrirse por un administrador."

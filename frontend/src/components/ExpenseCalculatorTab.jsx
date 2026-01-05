@@ -25,7 +25,12 @@ import { formatCurrency } from "../lib/utils";
  * - El Monto Base (costo) NO es editable (viene del pago a proveedor)
  * - Solo se permite editar: Margen de Utilidad y Tipo de IVA
  */
-const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) => {
+const ExpenseCalculatorTab = ({
+    orderId,
+    orderStatus,
+    clientType,
+    onUpdate,
+}) => {
     const [expenses, setExpenses] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -83,19 +88,19 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
                 // Inicializar ajustes con valores guardados en el transfer
                 const initialAdjustments = {};
                 billableExpenses.forEach((exp) => {
-                    // Determinar tipo de IVA: 
+                    // Determinar tipo de IVA:
                     // 1. Si ya tiene customer_iva_type guardado, usarlo.
                     // 2. Si es cliente internacional, default a 'no_sujeto'.
                     // 3. Si no, derivar de applies_iva (legacy) o default a 'no_sujeto'
                     let ivaType = exp.customer_iva_type;
-                    
+
                     if (!ivaType) {
-                        if (clientType === 'internacional') {
-                            ivaType = 'no_sujeto';
+                        if (clientType === "internacional") {
+                            ivaType = "no_sujeto";
                         } else if (exp.customer_applies_iva) {
-                            ivaType = 'gravado';
+                            ivaType = "gravado";
                         } else {
-                            ivaType = 'no_sujeto';
+                            ivaType = "no_sujeto";
                         }
                     }
 
@@ -121,7 +126,7 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
         if (orderId) {
             fetchData();
         }
-    }, [orderId]);
+    }, [orderId, clientType]);
 
     const summary = useMemo(() => {
         let totalCost = 0;
@@ -159,7 +164,8 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
         expenses.forEach((exp) => {
             resetAdjustments[exp.id] = {
                 markup_percentage: 0,
-                iva_type: clientType === "internacional" ? "no_sujeto" : "no_sujeto", // Default seguro
+                iva_type:
+                    clientType === "internacional" ? "no_sujeto" : "no_sujeto", // Default seguro
                 amount_locked: exp.amount_locked || false,
                 is_billed: !!exp.invoice_id,
             };
@@ -265,8 +271,12 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
                             <Lock className="h-3 w-3 text-slate-500" />
                         </div>
                         <div className="text-sm text-slate-600">
-                            <span className="font-semibold text-slate-800 uppercase tracking-wide text-xs block mb-0.5">Restricciones de Edición</span>
-                            El costo base es inmutable (proviene de cuentas por pagar). Solo se permite modificar el margen de utilidad y la configuración fiscal.
+                            <span className="font-semibold text-slate-800 uppercase tracking-wide text-xs block mb-0.5">
+                                Restricciones de Edición
+                            </span>
+                            El costo base es inmutable (proviene de cuentas por
+                            pagar). Solo se permite modificar el margen de
+                            utilidad y la configuración fiscal.
                         </div>
                     </div>
                 </div>
@@ -313,10 +323,10 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
                                         ivaAmount,
                                         total,
                                         profit,
-                                        ivaType,
                                     } = calculateValues(expense, adjustment);
                                     const isBilled =
-                                        expense.is_billed || !!expense.invoice_id;
+                                        expense.is_billed ||
+                                        !!expense.invoice_id;
                                     const isAmountLocked =
                                         expense.amount_locked ||
                                         expense.paid_amount > 0;
@@ -393,8 +403,14 @@ const ExpenseCalculatorTab = ({ orderId, orderStatus, clientType, onUpdate }) =>
                                                             ""
                                                         }
                                                         onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            if (val === '' || parseFloat(val) >= 0) {
+                                                            const val =
+                                                                e.target.value;
+                                                            if (
+                                                                val === "" ||
+                                                                parseFloat(
+                                                                    val
+                                                                ) >= 0
+                                                            ) {
                                                                 updateAdjustment(
                                                                     expense.id,
                                                                     "markup_percentage",

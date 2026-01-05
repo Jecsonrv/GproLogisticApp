@@ -6,7 +6,10 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import { usePersistentPageSize, PAGE_SIZE_OPTIONS } from "../../hooks/usePersistentPageSize";
+import {
+    usePersistentPageSize,
+    PAGE_SIZE_OPTIONS,
+} from "../../hooks/usePersistentPageSize";
 
 /**
  * DataTable - Tabla Corporativa Enterprise con Responsive Design
@@ -33,10 +36,6 @@ const DataTable = ({
     compact = false,
     stickyHeader = true,
     showPageSizeSelector = true,
-    // Nuevas props para responsive
-    mobileColumns = [], // Columnas prioritarias para mostrar en móvil
-    cardTitle, // Accessor para el título de la tarjeta móvil
-    cardSubtitle, // Accessor para el subtítulo de la tarjeta móvil
 }) => {
     const [searchTerm, setSearchTerm] = useState("");
     const [sortColumn, setSortColumn] = useState(null);
@@ -131,7 +130,10 @@ const DataTable = ({
                 {/* Mobile skeleton */}
                 <div className="lg:hidden space-y-3">
                     {[...Array(3)].map((_, i) => (
-                        <div key={i} className="bg-white border border-slate-200 rounded-lg p-4 animate-pulse">
+                        <div
+                            key={i}
+                            className="bg-white border border-slate-200 rounded-lg p-4 animate-pulse"
+                        >
                             <div className="h-4 bg-slate-200 rounded w-3/4 mb-3" />
                             <div className="h-3 bg-slate-200 rounded w-1/2 mb-2" />
                             <div className="h-3 bg-slate-200 rounded w-1/3" />
@@ -147,14 +149,6 @@ const DataTable = ({
     const headerPadding = compact ? "px-3 py-2" : "px-3 py-2.5";
 
     // Determinar columnas para móvil (las primeras 3 o las especificadas)
-    const visibleMobileColumns = mobileColumns.length > 0
-        ? columns.filter(col => mobileColumns.includes(col.accessor))
-        : columns.slice(0, 3);
-
-    // Obtener título y subtítulo para tarjetas
-    const getTitleColumn = () => cardTitle || columns[0]?.accessor;
-    const getSubtitleColumn = () => cardSubtitle || columns[1]?.accessor;
-
     // Renderizar valor de celda
     const renderCellValue = (row, column, rowIndex) => {
         if (column.cell) return column.cell(row, rowIndex);
@@ -241,9 +235,11 @@ const DataTable = ({
                                             </span>
                                             {column.sortable !== false &&
                                                 column.accessor &&
-                                                sortColumn === column.accessor && (
+                                                sortColumn ===
+                                                    column.accessor && (
                                                     <span className="text-slate-700 flex-shrink-0">
-                                                        {sortDirection === "asc" ? (
+                                                        {sortDirection ===
+                                                        "asc" ? (
                                                             <ChevronUpIcon className="h-3 w-3" />
                                                         ) : (
                                                             <ChevronDownIcon className="h-3 w-3" />
@@ -264,7 +260,8 @@ const DataTable = ({
                                         className="px-4 py-12 text-center text-slate-500 text-sm"
                                     >
                                         <div className="flex flex-col items-center gap-2">
-                                            {typeof emptyMessage === "string" && (
+                                            {typeof emptyMessage ===
+                                                "string" && (
                                                 <svg
                                                     className="w-10 h-10 text-slate-300"
                                                     fill="none"
@@ -297,7 +294,8 @@ const DataTable = ({
                                         {columns.map((column) => (
                                             <td
                                                 key={
-                                                    column.accessor || column.header
+                                                    column.accessor ||
+                                                    column.header
                                                 }
                                                 className={`${cellPadding} text-slate-700 ${
                                                     column.wrap
@@ -305,7 +303,11 @@ const DataTable = ({
                                                         : "whitespace-nowrap"
                                                 } ${column.className || ""}`}
                                             >
-                                                {renderCellValue(row, column, rowIndex)}
+                                                {renderCellValue(
+                                                    row,
+                                                    column,
+                                                    rowIndex
+                                                )}
                                             </td>
                                         ))}
                                     </tr>
@@ -344,7 +346,9 @@ const DataTable = ({
                                 key={row.id || rowIndex}
                                 onClick={() => onRowClick && onRowClick(row)}
                                 className={`bg-white border border-slate-200 rounded-lg p-4 shadow-sm ${
-                                    onRowClick ? "cursor-pointer active:bg-slate-50" : ""
+                                    onRowClick
+                                        ? "cursor-pointer active:bg-slate-50"
+                                        : ""
                                 } transition-colors`}
                             >
                                 {/* Título principal de la tarjeta */}
@@ -352,18 +356,45 @@ const DataTable = ({
                                     <div className="flex items-start justify-between gap-3 mb-3">
                                         <div className="flex-1 min-w-0">
                                             <div className="font-semibold text-slate-900 text-base truncate">
-                                                {renderCellValue(row, columns[0], rowIndex)}
+                                                {renderCellValue(
+                                                    row,
+                                                    columns[0],
+                                                    rowIndex
+                                                )}
                                             </div>
                                             {columns[1] && (
                                                 <div className="text-sm text-slate-500 mt-0.5 truncate">
-                                                    {renderCellValue(row, columns[1], rowIndex)}
+                                                    {renderCellValue(
+                                                        row,
+                                                        columns[1],
+                                                        rowIndex
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
                                         {/* Estado o badge si existe */}
-                                        {columns.find(c => c.accessor === 'status' || c.header?.toLowerCase().includes('estado')) && (
+                                        {columns.find(
+                                            (c) =>
+                                                c.accessor === "status" ||
+                                                c.header
+                                                    ?.toLowerCase()
+                                                    .includes("estado")
+                                        ) && (
                                             <div className="flex-shrink-0">
-                                                {renderCellValue(row, columns.find(c => c.accessor === 'status' || c.header?.toLowerCase().includes('estado')), rowIndex)}
+                                                {renderCellValue(
+                                                    row,
+                                                    columns.find(
+                                                        (c) =>
+                                                            c.accessor ===
+                                                                "status" ||
+                                                            c.header
+                                                                ?.toLowerCase()
+                                                                .includes(
+                                                                    "estado"
+                                                                )
+                                                    ),
+                                                    rowIndex
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -371,26 +402,60 @@ const DataTable = ({
 
                                 {/* Grid de campos adicionales */}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                    {columns.slice(2).filter(col =>
-                                        col.accessor !== 'status' &&
-                                        !col.header?.toLowerCase().includes('estado') &&
-                                        !col.header?.toLowerCase().includes('acciones')
-                                    ).slice(0, 4).map((column) => (
-                                        <div key={column.accessor || column.header}>
-                                            <span className="text-xs text-slate-400 uppercase tracking-wide block mb-0.5">
-                                                {column.header}
-                                            </span>
-                                            <span className="text-slate-700 font-medium">
-                                                {renderCellValue(row, column, rowIndex)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                    {columns
+                                        .slice(2)
+                                        .filter(
+                                            (col) =>
+                                                col.accessor !== "status" &&
+                                                !col.header
+                                                    ?.toLowerCase()
+                                                    .includes("estado") &&
+                                                !col.header
+                                                    ?.toLowerCase()
+                                                    .includes("acciones")
+                                        )
+                                        .slice(0, 4)
+                                        .map((column) => (
+                                            <div
+                                                key={
+                                                    column.accessor ||
+                                                    column.header
+                                                }
+                                            >
+                                                <span className="text-xs text-slate-400 uppercase tracking-wide block mb-0.5">
+                                                    {column.header}
+                                                </span>
+                                                <span className="text-slate-700 font-medium">
+                                                    {renderCellValue(
+                                                        row,
+                                                        column,
+                                                        rowIndex
+                                                    )}
+                                                </span>
+                                            </div>
+                                        ))}
                                 </div>
 
                                 {/* Acciones (si existen) */}
-                                {columns.find(c => c.header?.toLowerCase().includes('acciones') || c.accessor === 'actions') && (
+                                {columns.find(
+                                    (c) =>
+                                        c.header
+                                            ?.toLowerCase()
+                                            .includes("acciones") ||
+                                        c.accessor === "actions"
+                                ) && (
                                     <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
-                                        {renderCellValue(row, columns.find(c => c.header?.toLowerCase().includes('acciones') || c.accessor === 'actions'), rowIndex)}
+                                        {renderCellValue(
+                                            row,
+                                            columns.find(
+                                                (c) =>
+                                                    c.header
+                                                        ?.toLowerCase()
+                                                        .includes("acciones") ||
+                                                    c.accessor === "actions"
+                                            ),
+                                            rowIndex
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -407,7 +472,9 @@ const DataTable = ({
                         {/* Info de resultados */}
                         <div className="flex flex-col xs:flex-row xs:items-center gap-2 xs:gap-4">
                             <div className="text-xs sm:text-sm text-slate-500">
-                                <span className="hidden xs:inline">Mostrando </span>
+                                <span className="hidden xs:inline">
+                                    Mostrando{" "}
+                                </span>
                                 <span className="font-medium text-slate-700">
                                     {(currentPage - 1) * pageSize + 1}
                                 </span>
@@ -427,13 +494,20 @@ const DataTable = ({
                             {/* Selector de items por página */}
                             {showPageSizeSelector && (
                                 <div className="flex items-center gap-2">
-                                    <label htmlFor="pageSize" className="text-xs text-slate-500 hidden sm:inline">
+                                    <label
+                                        htmlFor="pageSize"
+                                        className="text-xs text-slate-500 hidden sm:inline"
+                                    >
                                         Ver:
                                     </label>
                                     <select
                                         id="pageSize"
                                         value={pageSize}
-                                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                                        onChange={(e) =>
+                                            handlePageSizeChange(
+                                                Number(e.target.value)
+                                            )
+                                        }
                                         className="text-xs sm:text-sm border border-slate-300 rounded-md bg-white px-2 py-1.5 text-slate-700 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors duration-150"
                                     >
                                         {PAGE_SIZE_OPTIONS.map((size) => (
@@ -442,7 +516,9 @@ const DataTable = ({
                                             </option>
                                         ))}
                                     </select>
-                                    <span className="text-xs text-slate-500 hidden md:inline">por página</span>
+                                    <span className="text-xs text-slate-500 hidden md:inline">
+                                        por página
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -451,7 +527,9 @@ const DataTable = ({
                         {totalPages > 1 && (
                             <div className="flex items-center justify-center xs:justify-end gap-1">
                                 <button
-                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    onClick={() =>
+                                        handlePageChange(currentPage - 1)
+                                    }
                                     disabled={currentPage === 1}
                                     className="p-2 sm:p-1.5 border border-slate-300 rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
                                     aria-label="Página anterior"
@@ -464,20 +542,33 @@ const DataTable = ({
                                     {[...Array(totalPages)].map((_, i) => {
                                         const page = i + 1;
                                         // En móvil, mostrar menos páginas
-                                        const showInMobile = page === 1 || page === totalPages || page === currentPage;
-                                        const showInDesktop = page === 1 || page === totalPages ||
-                                            (page >= currentPage - 1 && page <= currentPage + 1);
+                                        const showInMobile =
+                                            page === 1 ||
+                                            page === totalPages ||
+                                            page === currentPage;
+                                        const showInDesktop =
+                                            page === 1 ||
+                                            page === totalPages ||
+                                            (page >= currentPage - 1 &&
+                                                page <= currentPage + 1);
 
                                         if (showInMobile || showInDesktop) {
                                             return (
                                                 <button
                                                     key={page}
-                                                    onClick={() => handlePageChange(page)}
+                                                    onClick={() =>
+                                                        handlePageChange(page)
+                                                    }
                                                     className={`min-w-[36px] sm:min-w-[28px] h-9 sm:h-7 px-2 text-sm sm:text-xs font-medium rounded-md border transition-colors duration-150 ${
                                                         currentPage === page
                                                             ? "bg-slate-900 text-white border-slate-900"
                                                             : "border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400"
-                                                    } ${!showInMobile && showInDesktop ? 'hidden sm:flex items-center justify-center' : ''}`}
+                                                    } ${
+                                                        !showInMobile &&
+                                                        showInDesktop
+                                                            ? "hidden sm:flex items-center justify-center"
+                                                            : ""
+                                                    }`}
                                                 >
                                                     {page}
                                                 </button>
@@ -500,7 +591,9 @@ const DataTable = ({
                                 </div>
 
                                 <button
-                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    onClick={() =>
+                                        handlePageChange(currentPage + 1)
+                                    }
                                     disabled={currentPage === totalPages}
                                     className="p-2 sm:p-1.5 border border-slate-300 rounded-md text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 hover:border-slate-400 transition-colors duration-150"
                                     aria-label="Página siguiente"

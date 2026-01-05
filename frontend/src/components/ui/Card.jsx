@@ -87,8 +87,6 @@ const StatCard = React.forwardRef(
             icon: Icon,
             trend,
             trendValue,
-            variant = "default",
-            compact = false, // Modo compacto para móviles
             ...props
         },
         ref

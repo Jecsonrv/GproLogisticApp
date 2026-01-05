@@ -107,4 +107,4 @@ function StatusBadge({ status, className, ...props }) {
     );
 }
 
-export { Badge, StatusBadge, badgeVariants };
+export { Badge, StatusBadge };

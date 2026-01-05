@@ -42,7 +42,9 @@ const useAuthStore = create((set) => ({
             return true;
         } catch (error) {
             set({
-                error: error.response?.data?.detail || "Error al iniciar sesión. Por favor, intente nuevamente.",
+                error:
+                    error.response?.data?.detail ||
+                    "Error al iniciar sesión. Por favor, intente nuevamente.",
                 loading: false,
             });
             return false;
@@ -83,7 +85,7 @@ const useAuthStore = create((set) => ({
                     isAuthenticated: true,
                     isCheckingAuth: false,
                 });
-            } catch (error) {
+            } catch {
                 // Token invalid or expired
                 localStorage.removeItem("access_token");
                 localStorage.removeItem("refresh_token");

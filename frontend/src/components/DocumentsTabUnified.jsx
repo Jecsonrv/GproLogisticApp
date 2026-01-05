@@ -32,7 +32,12 @@ import JSZip from "jszip";
  * Diseño ERP corporativo con exportación masiva ZIP
  * Refactorizado para UX/UI limpia y sobria
  */
-const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false }) => {
+const DocumentsTabUnified = ({
+    orderId,
+    orderNumber,
+    onUpdate,
+    isClosed = false,
+}) => {
     const [allDocuments, setAllDocuments] = useState([]);
     const [categoriesSummary, setCategoriesSummary] = useState({});
     const [totalDocuments, setTotalDocuments] = useState(0);
@@ -48,7 +53,7 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
     const [uploadForm, setUploadForm] = useState({
         document_type: "tramite",
         description: "",
-        file: null,
+        files: [],
     });
     const [dragOver, setDragOver] = useState(false);
     const [expandedCategories, setExpandedCategories] = useState({});
@@ -213,7 +218,7 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
     const generateFileName = (doc, index, categoryPrefix) => {
         const osNumber = orderNumber || `OS${orderId}`;
         const cleanDescription = (doc.description || "documento")
-            .replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s\-]/g, "") // Limpiar caracteres especiales
+            .replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s-]/g, "") // Limpiar caracteres especiales
             .trim()
             .substring(0, 50);
 
@@ -300,22 +305,35 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
         }
     };
 
-    const handleFileSelect = (file) => {
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error("El archivo no debe superar los 5MB");
-            return;
-        }
+    const handleFileSelect = (files) => {
         const validTypes = [
             "application/pdf",
             "image/jpeg",
             "image/png",
             "image/jpg",
         ];
-        if (!validTypes.includes(file.type)) {
-            toast.error("Solo se permiten archivos PDF, JPG o PNG");
-            return;
+        const validFiles = [];
+
+        for (const file of files) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error(`${file.name}: El archivo no debe superar los 5MB`);
+                continue;
+            }
+            if (!validTypes.includes(file.type)) {
+                toast.error(
+                    `${file.name}: Solo se permiten archivos PDF, JPG o PNG`
+                );
+                continue;
+            }
+            validFiles.push(file);
         }
-        setUploadForm({ ...uploadForm, file });
+
+        if (validFiles.length > 0) {
+            setUploadForm({
+                ...uploadForm,
+                files: [...uploadForm.files, ...validFiles],
+            });
+        }
     };
 
     const handleDragOver = (e) => {
@@ -331,40 +349,63 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
     const handleDrop = (e) => {
         e.preventDefault();
         setDragOver(false);
-        const file = e.dataTransfer.files[0];
-        if (file) handleFileSelect(file);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) handleFileSelect(files);
     };
 
     const handleUpload = async (e) => {
         e.preventDefault();
-        if (!uploadForm.file) {
-            toast.error("Selecciona un archivo");
+        if (uploadForm.files.length === 0) {
+            toast.error("Selecciona al menos un archivo");
             return;
         }
 
         try {
             setIsUploading(true);
-            const formData = new FormData();
-            formData.append("order", orderId);
-            formData.append("document_type", uploadForm.document_type);
-            formData.append("description", uploadForm.description);
-            formData.append("file", uploadForm.file);
+            let successCount = 0;
+            let errorCount = 0;
 
-            await axios.post("/orders/documents/", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
+            for (const file of uploadForm.files) {
+                try {
+                    // Obtener el nombre del archivo sin extensión como descripción
+                    const fileName = file.name;
+                    const fileNameWithoutExt =
+                        fileName.substring(0, fileName.lastIndexOf(".")) ||
+                        fileName;
 
-            toast.success("Documento subido exitosamente");
+                    const formData = new FormData();
+                    formData.append("order", orderId);
+                    formData.append("document_type", uploadForm.document_type);
+                    formData.append("description", fileNameWithoutExt);
+                    formData.append("file", file);
+
+                    await axios.post("/orders/documents/", formData, {
+                        headers: { "Content-Type": "multipart/form-data" },
+                    });
+                    successCount++;
+                } catch (error) {
+                    errorCount++;
+                    console.error(`Error al subir ${file.name}:`, error);
+                }
+            }
+
+            if (successCount > 0) {
+                toast.success(
+                    `${successCount} documento(s) subido(s) exitosamente`
+                );
+            }
+            if (errorCount > 0) {
+                toast.error(
+                    `${errorCount} documento(s) no pudieron ser subidos`
+                );
+            }
+
             resetForm();
             setShowUploadForm(false);
             fetchAllDocuments();
             if (onUpdate) onUpdate();
-        } catch (error) {
-            const errorMessage =
-                error.response?.data?.error ||
-                error.response?.data?.detail ||
-                "Error al subir documento";
-            toast.error(errorMessage);
+        } catch {
+            toast.error("Error al subir documentos");
         } finally {
             setIsUploading(false);
         }
@@ -402,7 +443,7 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
         setUploadForm({
             document_type: "tramite",
             description: "",
-            file: null,
+            files: [],
         });
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -585,13 +626,14 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
                                 ref={fileInputRef}
                                 type="file"
                                 accept=".pdf,.jpg,.jpeg,.png"
+                                multiple
                                 onChange={(e) =>
-                                    handleFileSelect(e.target.files[0])
+                                    handleFileSelect(Array.from(e.target.files))
                                 }
                                 className="hidden"
                             />
 
-                            {!uploadForm.file ? (
+                            {uploadForm.files.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center gap-2">
                                     <div className="p-3 bg-slate-100 rounded-full mb-2">
                                         <Upload className="w-6 h-6 text-slate-500" />
@@ -609,39 +651,59 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
                                         o arrastra y suelta aquí
                                     </p>
                                     <p className="text-xs text-slate-500">
-                                        Soporta PDF, JPG, PNG (Max 5MB)
+                                        Soporta múltiples archivos: PDF, JPG,
+                                        PNG (Max 5MB c/u)
                                     </p>
                                 </div>
                             ) : (
-                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md p-3 max-w-lg mx-auto">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className="p-2 bg-white rounded shadow-sm">
-                                            <FileText className="w-5 h-5 text-slate-700" />
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {uploadForm.files.map((file, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md p-3"
+                                        >
+                                            <div className="flex items-center gap-3 overflow-hidden flex-1">
+                                                <div className="p-2 bg-white rounded shadow-sm">
+                                                    <FileText className="w-5 h-5 text-slate-700" />
+                                                </div>
+                                                <div className="text-left overflow-hidden flex-1">
+                                                    <p className="text-sm font-medium text-slate-900 truncate w-full">
+                                                        {file.name}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {formatFileSize(
+                                                            file.size
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newFiles =
+                                                        uploadForm.files.filter(
+                                                            (_, i) =>
+                                                                i !== index
+                                                        );
+                                                    setUploadForm({
+                                                        ...uploadForm,
+                                                        files: newFiles,
+                                                    });
+                                                }}
+                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors ml-2"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
                                         </div>
-                                        <div className="text-left overflow-hidden">
-                                            <p className="text-sm font-medium text-slate-900 truncate w-full">
-                                                {uploadForm.file.name}
-                                            </p>
-                                            <p className="text-xs text-slate-500">
-                                                {formatFileSize(
-                                                    uploadForm.file.size
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
+                                    ))}
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setUploadForm({
-                                                ...uploadForm,
-                                                file: null,
-                                            });
-                                            if (fileInputRef.current)
-                                                fileInputRef.current.value = "";
-                                        }}
-                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                        onClick={() =>
+                                            fileInputRef.current?.click()
+                                        }
+                                        className="w-full text-sm text-slate-600 hover:text-slate-900 font-medium py-2 border border-dashed border-slate-300 rounded-md hover:border-slate-400 hover:bg-slate-50 transition-colors"
                                     >
-                                        <X className="w-4 h-4" />
+                                        + Agregar más archivos
                                     </button>
                                 </div>
                             )}
@@ -651,7 +713,9 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
                             <Button
                                 type="submit"
                                 className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]"
-                                disabled={!uploadForm.file || isUploading}
+                                disabled={
+                                    uploadForm.files.length === 0 || isUploading
+                                }
                             >
                                 {isUploading ? (
                                     <>
@@ -659,7 +723,11 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
                                         Subiendo...
                                     </>
                                 ) : (
-                                    "Confirmar Subida"
+                                    `Subir ${
+                                        uploadForm.files.length > 0
+                                            ? `(${uploadForm.files.length})`
+                                            : ""
+                                    }`
                                 )}
                             </Button>
                         </div>
@@ -1033,7 +1101,8 @@ const DocumentsTabUnified = ({ orderId, orderNumber, onUpdate, isClosed = false 
                                 : "No se han cargado documentos para esta orden"
                         }
                         action={
-                            activeFilter === "all" && !isClosed && (
+                            activeFilter === "all" &&
+                            !isClosed && (
                                 <Button
                                     size="sm"
                                     variant="outline"

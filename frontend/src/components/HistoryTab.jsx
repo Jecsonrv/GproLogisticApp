@@ -1,123 +1,166 @@
-import React, { useState, useEffect, useMemo } from "react";
-import {
-    Clock,
-    User,
-    Filter,
-    FileText,
-    DollarSign,
-    AlertCircle,
-    CheckCircle,
-    XCircle,
-    Upload,
-    Trash2,
-    Edit,
-    Play,
-    Pause,
-    RefreshCw,
-    ChevronDown,
-    ChevronRight,
-    History,
-    ArrowRight,
-} from "lucide-react";
-import { EmptyState, Button } from "./ui";
-import axios from "../lib/axios";
-import { formatDate, cn } from "../lib/utils";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+    const EVENT_CONFIG = useMemo(
+        () => ({
+            created: {
+                icon: Play,
+                label: "OS Creada",
+                color: "text-emerald-700",
+                bgColor: "bg-white",
+                borderColor: "border-slate-200",
+                category: "status",
+            },
+            updated: {
+                icon: Edit,
+                label: "OS Actualizada",
+                color: "text-blue-700",
+                bgColor: "bg-white",
+                borderColor: "border-slate-200",
+                category: "status",
+            },
+            const STATUS_LABELS = {
+                pendiente: "Pendiente",
+                en_transito: "En Tránsito",
+                en_puerto: "En Puerto",
+                en_almacen: "En Almacenadora",
+                finalizada: "Finalizada",
+                cerrada: "Cerrada",
+                cancelada: "Cancelada",
+                abierta: "Abierta", // Legacy
+            };
 
-/**
- * HistoryTab - Vista de historial de auditoría corporativo
- * Diseño ERP profesional con timeline compacto y denso
- */
-const HistoryTab = ({ orderId }) => {
-    const [history, setHistory] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [filterType, setFilterType] = useState("all");
-    const [expandedEvents, setExpandedEvents] = useState({});
-
-    const STATUS_LABELS = {
-        pendiente: "Pendiente",
-        en_transito: "En Tránsito",
-        en_puerto: "En Puerto",
-        en_almacen: "En Almacenadora",
-        finalizada: "Finalizada",
-        cerrada: "Cerrada",
-        cancelada: "Cancelada",
-        abierta: "Abierta", // Legacy
-    };
-
-    useEffect(() => {
-        fetchHistory();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [orderId]);
-
-    const fetchHistory = async () => {
-        try {
-            setLoading(true);
-            const response = await axios.get(
-                `/orders/history/?service_order=${orderId}`
+            const EVENT_CONFIG = useMemo(
+                () => ({
+                    created: {
+                        icon: Play,
+                        label: "OS Creada",
+                        color: "text-emerald-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "status",
+                    },
+                    updated: {
+                        icon: Edit,
+                        label: "OS Actualizada",
+                        color: "text-blue-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "status",
+                    },
+                    status_changed: {
+                        icon: RefreshCw,
+                        label: "Cambio de Estado",
+                        color: "text-violet-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "status",
+                    },
+                    document_uploaded: {
+                        icon: Upload,
+                        label: "Documento Subido",
+                        color: "text-indigo-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "documents",
+                    },
+                    document_deleted: {
+                        icon: Trash2,
+                        label: "Documento Eliminado",
+                        color: "text-rose-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "documents",
+                    },
+                    charge_added: {
+                        icon: DollarSign,
+                        label: "Cargo Agregado",
+                        color: "text-emerald-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "charges",
+                    },
+                    charge_deleted: {
+                        icon: XCircle,
+                        label: "Cargo Eliminado",
+                        color: "text-rose-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "charges",
+                    },
+                    payment_added: {
+                        icon: DollarSign,
+                        label: "Pago Registrado",
+                        color: "text-orange-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "payments",
+                    },
+                    payment_updated: {
+                        icon: Edit,
+                        label: "Pago Actualizado",
+                        color: "text-amber-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "payments",
+                    },
+                    payment_approved: {
+                        icon: CheckCircle,
+                        label: "Pago Aprobado",
+                        color: "text-teal-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "payments",
+                    },
+                    payment_paid: {
+                        icon: CheckCircle,
+                        label: "Pago Ejecutado",
+                        color: "text-emerald-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "payments",
+                    },
+                    payment_deleted: {
+                        icon: Trash2,
+                        label: "Pago Eliminado",
+                        color: "text-red-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "payments",
+                    },
+                    invoice_generated: {
+                        icon: FileText,
+                        label: "Factura Generada",
+                        color: "text-blue-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "invoices",
+                    },
+                    invoice_payment: {
+                        icon: DollarSign,
+                        label: "Pago de Factura",
+                        color: "text-green-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "invoices",
+                    },
+                    closed: {
+                        icon: Pause,
+                        label: "OS Cerrada",
+                        color: "text-slate-700",
+                        bgColor: "bg-slate-50",
+                        borderColor: "border-slate-300",
+                        category: "status",
+                    },
+                    reopened: {
+                        icon: RefreshCw,
+                        label: "OS Reabierta",
+                        color: "text-amber-700",
+                        bgColor: "bg-white",
+                        borderColor: "border-slate-200",
+                        category: "status",
+                    },
+                }),
+                []
             );
-            setHistory(response.data);
-        } catch (error) {
-            // Error silencioso para producción
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const EVENT_CONFIG = {
-        created: {
-            icon: Play,
-            label: "OS Creada",
-            color: "text-emerald-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "status",
-        },
-        updated: {
-            icon: Edit,
-            label: "OS Actualizada",
-            color: "text-blue-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "status",
-        },
-        status_changed: {
-            icon: RefreshCw,
-            label: "Cambio de Estado",
-            color: "text-violet-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "status",
-        },
-        charge_added: {
-            icon: DollarSign,
-            label: "Cargo Agregado",
-            color: "text-green-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "charges",
-        },
-        charge_deleted: {
-            icon: XCircle,
-            label: "Cargo Eliminado",
-            color: "text-red-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "charges",
-        },
-        payment_added: {
-            icon: DollarSign,
-            label: "Pago Registrado",
-            color: "text-orange-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
-            category: "payments",
-        },
-        payment_updated: {
-            icon: Edit,
-            label: "Pago Actualizado",
-            color: "text-amber-700",
-            bgColor: "bg-white",
-            borderColor: "border-slate-200",
             category: "payments",
         },
         payment_approved: {
@@ -194,18 +237,21 @@ const HistoryTab = ({ orderId }) => {
         },
     };
 
-    const getEventConfig = (eventType) => {
-        return (
-            EVENT_CONFIG[eventType] || {
-                icon: AlertCircle,
-                label: eventType,
-                color: "text-slate-600",
-                bgColor: "bg-white",
-                borderColor: "border-slate-200",
-                category: "other",
-            }
-        );
-    };
+    const getEventConfig = useCallback(
+        (eventType) => {
+            return (
+                EVENT_CONFIG[eventType] || {
+                    icon: AlertCircle,
+                    label: eventType,
+                    color: "text-slate-600",
+                    bgColor: "bg-white",
+                    borderColor: "border-slate-200",
+                    category: "other",
+                }
+            );
+        },
+        [EVENT_CONFIG]
+    );
 
     const METADATA_LABELS = {
         order_number: "N° Orden",
@@ -236,13 +282,13 @@ const HistoryTab = ({ orderId }) => {
     const getVisibleMetadata = (event) => {
         if (!event.metadata) return {};
         const visible = { ...event.metadata };
-        
+
         // Filter out redundant keys for specific event types
-        if (event.event_type === 'status_changed') {
+        if (event.event_type === "status_changed") {
             delete visible.previous_status;
             delete visible.new_status;
         }
-        
+
         return visible;
     };
 
@@ -250,11 +296,14 @@ const HistoryTab = ({ orderId }) => {
         if (value === null || value === undefined || value === "") return "—";
 
         // Try to parse stringified JSON if it looks like an array/object
-        if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+        if (
+            typeof value === "string" &&
+            (value.startsWith("[") || value.startsWith("{"))
+        ) {
             try {
                 const parsed = JSON.parse(value);
                 value = parsed;
-            } catch (e) {
+            } catch {
                 // Not valid JSON, treat as string
             }
         }
@@ -292,25 +341,35 @@ const HistoryTab = ({ orderId }) => {
         // Handle list of changes (JSON Array)
         if (key === "changes" && Array.isArray(value)) {
             if (value.length === 0) return "Sin cambios";
-            return value.map(change => {
-                const parts = [];
-                // Handle different change formats
-                if (typeof change === 'string') return change;
-                
-                if (change.description) parts.push(change.description);
-                
-                // Formateo inteligente de cambios
-                if (change.field) {
-                     // Formato genérico {field, old, new}
-                     parts.push(`${change.field}: ${change.old} → ${change.new}`);
-                } else {
-                    // Formatos específicos (ej: markup)
-                    if (change.old_markup !== undefined) parts.push(`Margen: ${change.old_markup}% → ${change.new_markup}%`);
-                    if (change.old_iva_type) parts.push(`IVA: ${change.old_iva_type} → ${change.new_iva_type}`);
-                }
-                
-                return parts.join(" | ");
-            }).join("\n");
+            return value
+                .map((change) => {
+                    const parts = [];
+                    // Handle different change formats
+                    if (typeof change === "string") return change;
+
+                    if (change.description) parts.push(change.description);
+
+                    // Formateo inteligente de cambios
+                    if (change.field) {
+                        // Formato genérico {field, old, new}
+                        parts.push(
+                            `${change.field}: ${change.old} → ${change.new}`
+                        );
+                    } else {
+                        // Formatos específicos (ej: markup)
+                        if (change.old_markup !== undefined)
+                            parts.push(
+                                `Margen: ${change.old_markup}% → ${change.new_markup}%`
+                            );
+                        if (change.old_iva_type)
+                            parts.push(
+                                `IVA: ${change.old_iva_type} → ${change.new_iva_type}`
+                            );
+                    }
+
+                    return parts.join(" | ");
+                })
+                .join("\n");
         }
 
         if (typeof value === "object") {
@@ -334,7 +393,7 @@ const HistoryTab = ({ orderId }) => {
             const config = getEventConfig(event.event_type);
             return config.category === filterType;
         });
-    }, [history, filterType]);
+    }, [history, filterType, getEventConfig]);
 
     // Estadísticas por categoría
     const stats = useMemo(() => {
@@ -353,7 +412,7 @@ const HistoryTab = ({ orderId }) => {
             }
         });
         return counts;
-    }, [history]);
+    }, [history, getEventConfig]);
 
     const FILTER_OPTIONS = [
         { value: "all", label: "Todos", icon: History },
@@ -446,10 +505,11 @@ const HistoryTab = ({ orderId }) => {
                             const config = getEventConfig(event.event_type);
                             const Icon = config.icon;
                             const isExpanded = expandedEvents[event.id];
-                            
+
                             // Determine visible metadata
                             const visibleMetadata = getVisibleMetadata(event);
-                            const hasVisibleMetadata = Object.keys(visibleMetadata).length > 0;
+                            const hasVisibleMetadata =
+                                Object.keys(visibleMetadata).length > 0;
 
                             return (
                                 <div
@@ -461,7 +521,8 @@ const HistoryTab = ({ orderId }) => {
                                             : ""
                                     )}
                                     onClick={() =>
-                                        hasVisibleMetadata && toggleEvent(event.id)
+                                        hasVisibleMetadata &&
+                                        toggleEvent(event.id)
                                     }
                                 >
                                     {/* Fila principal compacta */}
@@ -502,18 +563,47 @@ const HistoryTab = ({ orderId }) => {
                                             {/* Smart Description Logic */}
                                             {(() => {
                                                 // Si es cambio de estado, construimos una frase amigable
-                                                if (event.event_type === 'status_changed' && event.metadata?.previous_status && event.metadata?.new_status) {
+                                                if (
+                                                    event.event_type ===
+                                                        "status_changed" &&
+                                                    event.metadata
+                                                        ?.previous_status &&
+                                                    event.metadata?.new_status
+                                                ) {
                                                     return (
                                                         <p className="text-xs text-slate-500 truncate">
-                                                            Cambio de <span className="font-medium text-slate-700">{STATUS_LABELS[event.metadata.previous_status] || event.metadata.previous_status}</span> a <span className="font-medium text-slate-900">{STATUS_LABELS[event.metadata.new_status] || event.metadata.new_status}</span>
+                                                            Cambio de{" "}
+                                                            <span className="font-medium text-slate-700">
+                                                                {STATUS_LABELS[
+                                                                    event
+                                                                        .metadata
+                                                                        .previous_status
+                                                                ] ||
+                                                                    event
+                                                                        .metadata
+                                                                        .previous_status}
+                                                            </span>{" "}
+                                                            a{" "}
+                                                            <span className="font-medium text-slate-900">
+                                                                {STATUS_LABELS[
+                                                                    event
+                                                                        .metadata
+                                                                        .new_status
+                                                                ] ||
+                                                                    event
+                                                                        .metadata
+                                                                        .new_status}
+                                                            </span>
                                                         </p>
                                                     );
                                                 }
                                                 // Default description fallback
-                                                return event.description && (
-                                                    <p className="text-xs text-slate-500 truncate">
-                                                        {event.description}
-                                                    </p>
+                                                return (
+                                                    event.description && (
+                                                        <p className="text-xs text-slate-500 truncate">
+                                                            {event.description}
+                                                        </p>
+                                                    )
                                                 );
                                             })()}
                                         </div>
@@ -541,18 +631,33 @@ const HistoryTab = ({ orderId }) => {
                                         <div className="px-4 pb-3">
                                             <div className="ml-11 p-3 bg-slate-50 rounded-lg border border-slate-200">
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                                                    {Object.entries(visibleMetadata)
-                                                        .map(([key, value]) => (
+                                                    {Object.entries(
+                                                        visibleMetadata
+                                                    ).map(([key, value]) => (
                                                         <div
                                                             key={key}
-                                                            className={cn("flex flex-col min-w-0", key === 'changes' ? "col-span-full" : "")}
+                                                            className={cn(
+                                                                "flex flex-col min-w-0",
+                                                                key ===
+                                                                    "changes"
+                                                                    ? "col-span-full"
+                                                                    : ""
+                                                            )}
                                                         >
                                                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                                                 {formatMetadataKey(
                                                                     key
                                                                 )}
                                                             </span>
-                                                            <span className={cn("text-sm font-medium text-slate-900 break-words", key === 'changes' ? "whitespace-pre-line font-mono text-xs bg-white p-2 rounded border border-slate-200" : "")}>
+                                                            <span
+                                                                className={cn(
+                                                                    "text-sm font-medium text-slate-900 break-words",
+                                                                    key ===
+                                                                        "changes"
+                                                                        ? "whitespace-pre-line font-mono text-xs bg-white p-2 rounded border border-slate-200"
+                                                                        : ""
+                                                                )}
+                                                            >
                                                                 {formatMetadataValue(
                                                                     key,
                                                                     value

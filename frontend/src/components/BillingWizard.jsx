@@ -96,6 +96,8 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             });
             fetchCharges();
         }
+        // fetchCharges intentionally omitted to avoid reloading when other deps change
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, serviceOrder]);
 
     // Recalcular fecha de vencimiento cuando cambia la condición de pago o fecha de emisión
@@ -769,8 +771,6 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         )
                                                     )
                                                     .map((charge) => {
-                                                        const isTercerizado =
-                                                            charge.is_third_party_service;
                                                         const hasCost =
                                                             charge.cost_amount >
                                                             0;

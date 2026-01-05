@@ -312,7 +312,7 @@ const Invoicing = () => {
             setLoading(true);
             const response = await api.get("/orders/invoices/");
             setInvoices(response.data);
-        } catch (error) {
+        } catch {
             toast.error("No se pudieron cargar las facturas.");
         } finally {
             setLoading(false);
@@ -323,7 +323,7 @@ const Invoicing = () => {
         try {
             const response = await api.get("/orders/credit-notes/");
             setCreditNotes(response.data);
-        } catch (error) {
+        } catch {
             console.error("Error al cargar notas de crédito");
         }
     };
@@ -332,7 +332,7 @@ const Invoicing = () => {
         try {
             const response = await api.get("/orders/invoices/summary/");
             setSummary(response.data);
-        } catch (error) {
+        } catch {
             console.error("Error loading summary");
         }
     };
@@ -341,7 +341,7 @@ const Invoicing = () => {
         try {
             const response = await api.get("/clients/");
             setClients(response.data);
-        } catch (error) {
+        } catch {
             console.error("Error loading clients");
         }
     };
@@ -350,7 +350,7 @@ const Invoicing = () => {
         try {
             const response = await api.get("/catalogs/banks/");
             setBanks(response.data);
-        } catch (error) {
+        } catch {
             console.error("Error loading banks");
         }
     };
@@ -585,7 +585,7 @@ const Invoicing = () => {
                     ? `${dataToExport.length} factura(s) exportada(s)`
                     : "Todas las facturas exportadas correctamente";
             toast.success(message);
-        } catch (error) {
+        } catch {
             toast.error("No se pudo exportar el archivo.");
         } finally {
             setIsExporting(false);
@@ -628,7 +628,7 @@ const Invoicing = () => {
             const response = await api.get(`/orders/invoices/${invoiceId}/`);
             setSelectedInvoice(response.data);
             setIsDetailModalOpen(true);
-        } catch (error) {
+        } catch {
             toast.error("No se pudieron cargar los detalles de la factura.");
         }
     };

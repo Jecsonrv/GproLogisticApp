@@ -63,7 +63,9 @@ const KPICard = ({ label, value, icon: Icon }) => {
                 </p>
             </div>
             <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
             </div>
         </div>
     );
@@ -127,7 +129,7 @@ const Services = () => {
         if (tabParam !== activeTab) {
             setActiveTab(tabParam);
         }
-    }, [tabParam]);
+    }, [tabParam, activeTab]);
 
     const handleTabChange = (value) => {
         setActiveTab(value);
@@ -190,7 +192,7 @@ const Services = () => {
             setLoading(true);
             const response = await axios.get("/catalogs/services/");
             setServices(response.data);
-        } catch (error) {
+        } catch {
             toast.error("No se pudieron cargar los servicios.");
         } finally {
             setLoading(false);
@@ -205,7 +207,7 @@ const Services = () => {
                 "/catalogs/client-service-prices/"
             );
             setCustomPrices(response.data);
-        } catch (error) {
+        } catch {
             toast.error("No se pudieron cargar las tarifas personalizadas.");
         } finally {
             setLoadingCustom(false);
@@ -268,9 +270,9 @@ const Services = () => {
             }
             fetchServices();
             handleCloseModal();
-        } catch (error) {
+        } catch {
             toast.error(
-                error.response?.data?.message || "No se pudo guardar el servicio."
+                "No se pudo guardar el servicio."
             );
         }
     };
@@ -285,7 +287,7 @@ const Services = () => {
             await axios.delete(`/catalogs/services/${id}/`);
             toast.success("El servicio ha sido eliminado correctamente.");
             fetchServices();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo eliminar el servicio.");
         }
     };
@@ -334,17 +336,21 @@ const Services = () => {
                     `/catalogs/client-service-prices/${editingCustomPrice.id}/`,
                     customFormData
                 );
-                toast.success("La tarifa personalizada ha sido actualizada correctamente.");
+                toast.success(
+                    "La tarifa personalizada ha sido actualizada correctamente."
+                );
             } else {
                 await axios.post(
                     "/catalogs/client-service-prices/",
                     customFormData
                 );
-                toast.success("La tarifa personalizada ha sido creada correctamente.");
+                toast.success(
+                    "La tarifa personalizada ha sido creada correctamente."
+                );
             }
             fetchCustomPrices();
             handleCloseCustomModal();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo guardar la tarifa personalizada.");
         }
     };
@@ -357,9 +363,11 @@ const Services = () => {
         const { id } = confirmCustomDialog;
         try {
             await axios.delete(`/catalogs/client-service-prices/${id}/`);
-            toast.success("La tarifa personalizada ha sido eliminada correctamente.");
+            toast.success(
+                "La tarifa personalizada ha sido eliminada correctamente."
+            );
             fetchCustomPrices();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo eliminar la tarifa personalizada.");
         }
     };

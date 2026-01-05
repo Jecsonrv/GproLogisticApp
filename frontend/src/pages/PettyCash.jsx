@@ -164,6 +164,8 @@ const CashCountModal = ({
             setCounts(initial);
             setNotes("");
         }
+        // DENOMINATIONS is static; omit from deps intentionally
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen]);
 
     const calculateTotal = () => {
@@ -184,7 +186,7 @@ const CashCountModal = ({
         setLoading(true);
         try {
             const details = Object.entries(counts)
-                .filter(([_, qty]) => qty && parseInt(qty) > 0)
+                .filter(([, qty]) => qty && parseInt(qty) > 0)
                 .map(([denom, qty]) => ({
                     denomination: parseFloat(denom),
                     quantity: parseInt(qty),
@@ -199,7 +201,7 @@ const CashCountModal = ({
             toast.success("Arqueo registrado correctamente");
             onSuccess();
             onClose();
-        } catch (error) {
+        } catch {
             toast.error("Error al guardar el arqueo");
         } finally {
             setLoading(false);
@@ -448,7 +450,7 @@ const EditTransactionModal = ({ isOpen, onClose, transaction, onSuccess }) => {
             toast.success("Movimiento actualizado correctamente");
             onSuccess();
             onClose();
-        } catch (error) {
+        } catch {
             toast.error("Error al actualizar movimiento");
         } finally {
             setLoading(false);
@@ -640,7 +642,7 @@ const PettyCash = () => {
             ]);
             setTransactions(txRes.data);
             setBalanceInfo(balanceRes.data);
-        } catch (error) {
+        } catch {
             toast.error("Error cargando datos");
         } finally {
             setLoading(false);
@@ -652,7 +654,7 @@ const PettyCash = () => {
         try {
             const response = await axios.get("/petty-cash/cash-counts/");
             setCashCounts(response.data);
-        } catch (error) {
+        } catch {
             toast.error("Error cargando arqueos");
         } finally {
             setLoadingCounts(false);
@@ -677,7 +679,7 @@ const PettyCash = () => {
             toast.success("Movimiento registrado");
             setIsModalOpen(false);
             fetchData();
-        } catch (error) {
+        } catch {
             toast.error("Error registrando movimiento");
         }
     };
@@ -710,7 +712,7 @@ const PettyCash = () => {
             fetchData();
             setIsDeleteDialogOpen(false);
             setTransactionToDelete(null);
-        } catch (error) {
+        } catch {
             toast.error("Error al eliminar movimiento");
         }
     };
@@ -731,7 +733,7 @@ const PettyCash = () => {
             fetchData(); // Refrescar balance también
             setIsDeleteCountDialogOpen(false);
             setCashCountToDelete(null);
-        } catch (error) {
+        } catch {
             toast.error("Error al eliminar arqueo");
         }
     };
@@ -766,7 +768,7 @@ const PettyCash = () => {
             link.remove();
 
             toast.success("Archivo exportado correctamente");
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar archivo");
         } finally {
             setIsExporting(false);
@@ -797,7 +799,7 @@ const PettyCash = () => {
             link.remove();
 
             toast.success("Archivo exportado correctamente");
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar archivo");
         } finally {
             setIsExporting(false);
@@ -827,7 +829,7 @@ const PettyCash = () => {
             link.remove();
 
             toast.success("Detalle de denominaciones exportado");
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar detalle");
         }
     };

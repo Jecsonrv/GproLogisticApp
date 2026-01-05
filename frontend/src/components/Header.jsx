@@ -12,7 +12,6 @@ import {
     DropdownMenuTrigger,
 } from "./ui/DropdownMenu";
 import { Button } from "./ui/Button";
-import { cn } from "../lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
 
 /**

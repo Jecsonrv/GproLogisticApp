@@ -57,7 +57,9 @@ const KPICard = ({ label, value, icon: Icon }) => {
                 </p>
             </div>
             <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
-                {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />}
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
             </div>
         </div>
     );
@@ -92,7 +94,7 @@ function Users() {
     });
     const [confirmDeleteDialog, setConfirmDeleteDialog] = useState({
         open: false,
-        id: null
+        id: null,
     });
 
     useEffect(() => {
@@ -123,7 +125,7 @@ function Users() {
             setLoading(true);
             const response = await axios.get("/users/");
             setUsers(response.data);
-        } catch (error) {
+        } catch {
             toast.error("No se pudieron cargar los usuarios.");
         } finally {
             setLoading(false);
@@ -145,10 +147,8 @@ function Users() {
             setIsCreateModalOpen(false);
             resetForm();
             fetchUsers();
-        } catch (error) {
-            toast.error(
-                error.response?.data?.message || "No se pudo crear el usuario."
-            );
+        } catch {
+            toast.error("No se pudo crear el usuario.");
         }
     };
 
@@ -163,7 +163,7 @@ function Users() {
             setIsEditModalOpen(false);
             resetForm();
             fetchUsers();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo actualizar el usuario.");
         }
     };
@@ -183,7 +183,7 @@ function Users() {
             toast.success("La contraseña ha sido actualizada correctamente.");
             setIsChangePasswordModalOpen(false);
             setPasswordData({ new_password: "", confirm_password: "" });
-        } catch (error) {
+        } catch {
             toast.error("No se pudo actualizar la contraseña.");
         }
     };
@@ -197,7 +197,7 @@ function Users() {
             await axios.delete(`/users/${confirmDeleteDialog.id}/`);
             toast.success("El usuario ha sido eliminado correctamente.");
             fetchUsers();
-        } catch (error) {
+        } catch {
             toast.error("No se pudo eliminar el usuario.");
         } finally {
             setConfirmDeleteDialog({ open: false, id: null });
@@ -374,7 +374,10 @@ function Users() {
                 {/* KPIs Skeleton */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
                     {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-16 sm:h-20 lg:h-24 rounded-lg sm:rounded-xl" />
+                        <Skeleton
+                            key={i}
+                            className="h-16 sm:h-20 lg:h-24 rounded-lg sm:rounded-xl"
+                        />
                     ))}
                 </div>
 
@@ -467,7 +470,9 @@ function Users() {
                                         loading && "animate-spin"
                                     )}
                                 />
-                                <span className="hidden sm:inline">Actualizar</span>
+                                <span className="hidden sm:inline">
+                                    Actualizar
+                                </span>
                             </Button>
                             <Button
                                 size="sm"
@@ -475,7 +480,9 @@ function Users() {
                                 className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-8 sm:h-9 px-2 sm:px-4 transition-all active:scale-95 text-xs sm:text-sm"
                             >
                                 <Plus className="w-3.5 h-3.5 sm:mr-2" />
-                                <span className="hidden xs:inline">Nuevo Usuario</span>
+                                <span className="hidden xs:inline">
+                                    Nuevo Usuario
+                                </span>
                                 <span className="xs:hidden">Nuevo</span>
                             </Button>
                         </div>
@@ -500,7 +507,10 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleCreate} className="space-y-3 sm:space-y-4">
+                    <form
+                        onSubmit={handleCreate}
+                        className="space-y-3 sm:space-y-4"
+                    >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <Label className="text-sm">Usuario *</Label>
@@ -598,7 +608,9 @@ function Users() {
                                 </div>
                             </div>
                             <div>
-                                <Label className="text-sm">Confirmar Contraseña *</Label>
+                                <Label className="text-sm">
+                                    Confirmar Contraseña *
+                                </Label>
                                 <div className="relative">
                                     <Input
                                         type={
@@ -704,7 +716,10 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Editar Usuario</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleEdit} className="space-y-3 sm:space-y-4">
+                    <form
+                        onSubmit={handleEdit}
+                        className="space-y-3 sm:space-y-4"
+                    >
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div>
                                 <Label className="text-sm">Usuario</Label>
@@ -837,9 +852,14 @@ function Users() {
                     <DialogHeader>
                         <DialogTitle>Cambiar Contraseña</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleChangePassword} className="space-y-3 sm:space-y-4">
+                    <form
+                        onSubmit={handleChangePassword}
+                        className="space-y-3 sm:space-y-4"
+                    >
                         <div>
-                            <Label className="text-sm">Nueva Contraseña *</Label>
+                            <Label className="text-sm">
+                                Nueva Contraseña *
+                            </Label>
                             <Input
                                 type="password"
                                 value={passwordData.new_password}
@@ -855,7 +875,9 @@ function Users() {
                             />
                         </div>
                         <div>
-                            <Label className="text-sm">Confirmar Contraseña *</Label>
+                            <Label className="text-sm">
+                                Confirmar Contraseña *
+                            </Label>
                             <Input
                                 type="password"
                                 value={passwordData.confirm_password}
@@ -899,7 +921,9 @@ function Users() {
 
             <ConfirmDialog
                 open={confirmDeleteDialog.open}
-                onClose={() => setConfirmDeleteDialog({ open: false, id: null })}
+                onClose={() =>
+                    setConfirmDeleteDialog({ open: false, id: null })
+                }
                 onConfirm={confirmDelete}
                 title="¿Eliminar Usuario?"
                 description="Esta acción eliminará permanentemente al usuario y no se podrá deshacer."

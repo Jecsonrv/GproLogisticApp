@@ -207,7 +207,7 @@ const usePermissionStore = create((set, get) => ({
         const { permissions } = get();
         if (!permissions?.modules) return [];
         return Object.entries(permissions.modules)
-            .filter(([_, hasAccess]) => hasAccess)
+            .filter(([, hasAccess]) => hasAccess)
             .map(([module]) => module);
     },
 }));

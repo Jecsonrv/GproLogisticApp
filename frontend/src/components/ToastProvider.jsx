@@ -1,4 +1,4 @@
-import { Toaster, toast } from "react-hot-toast";
+import { Toaster } from "react-hot-toast";
 
 /**
  * ToastProvider - Sistema de notificaciones corporativo
@@ -71,102 +71,6 @@ const ToastProvider = () => {
             }}
         />
     );
-};
-
-/**
- * Funciones helper para mostrar toasts con mensajes de error del backend
- */
-
-const ERROR_TRANSLATIONS = {
-    "Network Error": "Error de conexión. Por favor, verifique su internet.",
-    "Request failed with status code 404": "El recurso solicitado no fue encontrado.",
-    "Request failed with status code 500": "Error interno del servidor. Contacte a soporte.",
-    "Request failed with status code 403": "No tiene permisos para realizar esta acción.",
-    "No active account found with the given credentials": "Credenciales incorrectas. Verifique usuario y contraseña.",
-    "Token is invalid or expired": "Su sesión ha expirado. Por favor ingrese nuevamente.",
-    "Given token not valid for any token type": "Sesión inválida. Por favor ingrese nuevamente.",
-};
-
-const FIELD_TRANSLATIONS = {
-    new_password: "Nueva contraseña",
-    old_password: "", // Mostrar solo el mensaje (ej: "Contraseña incorrecta")
-    password: "",
-    email: "Correo electrónico",
-    username: "Usuario",
-    first_name: "Nombre",
-    last_name: "Apellido",
-    detail: "", 
-    non_field_errors: "",
-};
-
-export const showErrorToast = (
-    error,
-    fallbackMessage = "Ha ocurrido un error inesperado"
-) => {
-    // Extraer mensaje del error del backend
-    let message = fallbackMessage;
-
-    if (error?.response?.data) {
-        const data = error.response.data;
-        // Soportar múltiples formatos de error del backend
-        if (typeof data === "string") {
-            message = data;
-        } else if (data.error) {
-            message = data.error;
-        } else if (data.detail) {
-            message = data.detail;
-        } else if (data.message) {
-            message = data.message;
-        } else if (data.non_field_errors) {
-            message = data.non_field_errors.join(", ");
-        } else {
-            // Si es un objeto con errores de validación
-            const errors = Object.entries(data)
-                .map(([key, value]) => {
-                    const errorText = Array.isArray(value) ? value.join(", ") : value;
-                    const fieldName = FIELD_TRANSLATIONS[key];
-                    
-                    // Si el fieldName es explícitamente "" o el key contiene 'password', 
-                    // solo mostrar el error (ej: "Contraseña incorrecta")
-                    if (fieldName === "" || key.includes('password')) return errorText;
-                    
-                    // Si hay traducción, usarla
-                    if (fieldName) return `${fieldName}: ${errorText}`;
-                    
-                    // Fallback: usar key original (limpiando guiones bajos)
-                    const cleanKey = key.replace(/_/g, ' ');
-                    const capitalizedKey = cleanKey.charAt(0).toUpperCase() + cleanKey.slice(1);
-                    return `${capitalizedKey}: ${errorText}`;
-                })
-                .join(". ");
-            if (errors) message = errors;
-        }
-    } else if (error?.message) {
-        message = error.message;
-    }
-
-    // Traducir mensajes técnicos conocidos
-    if (ERROR_TRANSLATIONS[message]) {
-        message = ERROR_TRANSLATIONS[message];
-    }
-
-    toast.error(message, { duration: 6000 });
-};
-
-export const showSuccessToast = (message) => {
-    toast.success(message, { duration: 3000 });
-};
-
-export const showWarningToast = (message) => {
-    toast(message, {
-        duration: 5000,
-        icon: "⚠️",
-        style: {
-            borderLeft: "4px solid #f59e0b",
-            borderColor: "#fef3c7",
-            backgroundColor: "#fffbeb",
-        },
-    });
 };
 
 export default ToastProvider;

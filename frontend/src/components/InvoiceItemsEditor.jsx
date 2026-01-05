@@ -41,7 +41,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };

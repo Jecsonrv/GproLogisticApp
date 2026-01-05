@@ -56,7 +56,6 @@ const CostsTab = ({ orderId, onUpdate, isClosed = false }) => {
 
     // Catálogos
     const [providers, setProviders] = useState([]);
-    const [banks, setBanks] = useState([]);
 
     // Modales
     const [showAddCostModal, setShowAddCostModal] = useState(false);
@@ -105,13 +104,15 @@ const CostsTab = ({ orderId, onUpdate, isClosed = false }) => {
         if (orderId) {
             fetchData();
         }
+        // fetchData intentionally omitted to avoid recreating on every render
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orderId]);
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [invoicesRes, transfersRes, providersRes, banksRes] =
-                await Promise.all([
+            const [invoicesRes, transfersRes, providersRes] = await Promise.all(
+                [
                     api.get(
                         `/transfers/provider-invoices/by_service_order/?service_order=${orderId}`
                     ),
@@ -119,12 +120,11 @@ const CostsTab = ({ orderId, onUpdate, isClosed = false }) => {
                         `/transfers/transfers/?service_order=${orderId}&transfer_type=cargos`
                     ),
                     api.get("/catalogs/providers/"),
-                    api.get("/catalogs/banks/"),
-                ]);
+                ]
+            );
             setProviderInvoices(invoicesRes.data || []);
             setClientCharges(transfersRes.data || []);
             setProviders(providersRes.data || []);
-            setBanks(banksRes.data || []);
         } catch (error) {
             console.error("Error fetching data:", error);
         } finally {
@@ -752,7 +752,8 @@ const CostsTab = ({ orderId, onUpdate, isClosed = false }) => {
                                                                 className="gap-1.5"
                                                             >
                                                                 <Link2 className="w-3.5 h-3.5" />
-                                                                Vincular a Servicio
+                                                                Vincular a
+                                                                Servicio
                                                             </Button>
                                                         )}
                                                     </div>
@@ -839,7 +840,9 @@ const CostsTab = ({ orderId, onUpdate, isClosed = false }) => {
                                         <th className="text-center py-3 px-4 text-xs font-semibold text-slate-600 uppercase">
                                             Estado
                                         </th>
-                                        {!isClosed && <th className="w-16"></th>}
+                                        {!isClosed && (
+                                            <th className="w-16"></th>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">

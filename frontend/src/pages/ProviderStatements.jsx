@@ -62,7 +62,7 @@ const formatDateSafe = (dateStr, variant = "short") => {
             return dateObj.toLocaleDateString("es-SV", options);
         }
         return formatDate(dateStr, { format: variant });
-    } catch (e) {
+    } catch {
         return dateStr;
     }
 };
@@ -218,7 +218,8 @@ const ProviderStatements = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] = useState(false);
+    const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] =
+        useState(false);
     const [isCreditNoteModalOpen, setIsCreditNoteModalOpen] = useState(false);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -259,6 +260,8 @@ const ProviderStatements = () => {
     useEffect(() => {
         fetchProviders();
         fetchBanks();
+        // fetchProviders/fetchBanks stable enough; deps intentionally empty
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -266,6 +269,8 @@ const ProviderStatements = () => {
             fetchStatement(selectedProvider.id);
             setSelectedTransferIds([]); // Clear selection on provider change
         }
+        // fetchStatement intentionally omitted to avoid re-fetch loop
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProvider, selectedYear]);
 
     // ... (fetch functions remain the same)
@@ -326,7 +331,7 @@ const ProviderStatements = () => {
                 { params: { year: selectedYear } }
             );
             setStatement(response.data);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar estado de cuenta");
         } finally {
             setLoadingStatement(false);
@@ -339,12 +344,12 @@ const ProviderStatements = () => {
                 `/transfers/transfers/${transferId}/detail_with_payments/`
             );
             setSelectedTransfer(response.data);
-        } catch (error) {
+        } catch {
             toast.error("Error al cargar detalles");
         }
     };
 
-    const handleExportExcel = async (exportType = "full") => {
+    const handleExportExcel = async () => {
         if (!selectedProvider) {
             toast.error("Seleccione un proveedor primero");
             return;
@@ -372,31 +377,19 @@ const ProviderStatements = () => {
             window.URL.revokeObjectURL(url);
 
             toast.success("Estado de cuenta exportado exitosamente");
-        } catch (error) {
+        } catch {
             toast.error("Error al exportar");
-            console.error("Export error:", error);
         } finally {
             setIsExporting(false);
         }
     };
 
     // Selection Logic
-    const toggleSelectAll = (checked) => {
-        if (checked && statement?.transfers) {
-            const payableTransfers = statement.transfers
-                .filter(t => (t.status === "aprobado" || t.status === "parcial") && t.balance > 0)
-                .map(t => t.id);
-            setSelectedTransferIds(payableTransfers);
-        } else {
-            setSelectedTransferIds([]);
-        }
-    };
-
     const toggleSelectRow = (id, checked) => {
         if (checked) {
-            setSelectedTransferIds(prev => [...prev, id]);
+            setSelectedTransferIds((prev) => [...prev, id]);
         } else {
-            setSelectedTransferIds(prev => prev.filter(tid => tid !== id));
+            setSelectedTransferIds((prev) => prev.filter((tid) => tid !== id));
         }
     };
 
@@ -407,7 +400,9 @@ const ProviderStatements = () => {
         }
 
         // Validate all selected transfers are from the same provider
-        const selectedTransfers = statement.transfers.filter(t => selectedTransferIds.includes(t.id));
+        const selectedTransfers = statement.transfers.filter((t) =>
+            selectedTransferIds.includes(t.id)
+        );
 
         if (selectedTransfers.length === 0) {
             toast.error("No se encontraron las facturas seleccionadas");
@@ -415,14 +410,21 @@ const ProviderStatements = () => {
         }
 
         // Validate all have balance
-        const withoutBalance = selectedTransfers.filter(t => !t.balance || parseFloat(t.balance) <= 0);
+        const withoutBalance = selectedTransfers.filter(
+            (t) => !t.balance || parseFloat(t.balance) <= 0
+        );
         if (withoutBalance.length > 0) {
-            toast.error("Algunas facturas seleccionadas no tienen saldo pendiente");
+            toast.error(
+                "Algunas facturas seleccionadas no tienen saldo pendiente"
+            );
             return;
         }
 
         // Calculate total amount
-        const totalAmount = selectedTransfers.reduce((sum, t) => sum + parseFloat(t.balance || 0), 0);
+        const totalAmount = selectedTransfers.reduce(
+            (sum, t) => sum + parseFloat(t.balance || 0),
+            0
+        );
 
         if (totalAmount <= 0) {
             toast.error("El monto total a pagar debe ser mayor a cero");
@@ -447,9 +449,12 @@ const ProviderStatements = () => {
         try {
             setIsSubmitting(true);
             const formData = new FormData();
-            
+
             // Add basic fields
-            formData.append('transfer_ids', JSON.stringify(selectedTransferIds));
+            formData.append(
+                "transfer_ids",
+                JSON.stringify(selectedTransferIds)
+            );
             Object.keys(batchPaymentForm).forEach((key) => {
                 if (batchPaymentForm[key] !== null) {
                     formData.append(key, batchPaymentForm[key]);
@@ -459,7 +464,7 @@ const ProviderStatements = () => {
             await axios.post(
                 `/transfers/batch-payments/create_batch_payment/`,
                 formData,
-                { 
+                {
                     headers: { "Content-Type": "multipart/form-data" },
                     _skipErrorToast: true,
                 }
@@ -480,9 +485,8 @@ const ProviderStatements = () => {
                 notes: "",
                 proof_file: null,
             });
-        } catch (error) {
-            const errorMsg = error.response?.data?.error || error.response?.data?.message || "Error al registrar pago agrupado";
-            toast.error(errorMsg);
+        } catch {
+            toast.error("Error al registrar pago agrupado");
         } finally {
             setIsSubmitting(false);
         }
@@ -504,7 +508,7 @@ const ProviderStatements = () => {
             await axios.post(
                 `/transfers/transfers/${selectedTransfer.id}/register_payment/`,
                 formData,
-                { 
+                {
                     headers: { "Content-Type": "multipart/form-data" },
                     _skipErrorToast: true,
                 }
@@ -524,13 +528,8 @@ const ProviderStatements = () => {
                 notes: "",
                 proof_file: null,
             });
-        } catch (error) {
-            const errorData = error.response?.data;
-            const errorMsg = 
-                errorData?.transfer || 
-                errorData?.error || 
-                "Error al registrar pago";
-            toast.error(errorMsg);
+        } catch {
+            toast.error("Error al registrar pago");
         } finally {
             setIsSubmitting(false);
         }
@@ -540,15 +539,17 @@ const ProviderStatements = () => {
         if (!paymentToDelete) return;
 
         try {
-            await axios.delete(`/transfers/transfer-payments/${paymentToDelete.id}/`);
+            await axios.delete(
+                `/transfers/transfer-payments/${paymentToDelete.id}/`
+            );
             toast.success("Pago eliminado exitosamente");
             setPaymentToDelete(null);
 
             // Recargar el estado de cuenta
             if (selectedProvider) {
-                await loadProviderStatement(selectedProvider.id, selectedYear);
+                await fetchStatement(selectedProvider.id);
             }
-        } catch (error) {
+        } catch {
             // El interceptor ya maneja el error
         }
     };
@@ -569,13 +570,19 @@ const ProviderStatements = () => {
             formData.append("issue_date", creditNoteForm.issue_date);
             formData.append("received_date", creditNoteForm.received_date);
             formData.append("reason", creditNoteForm.reason);
-            if (creditNoteForm.reason_detail) formData.append("reason_detail", creditNoteForm.reason_detail);
-            if (creditNoteForm.pdf_file) formData.append("pdf_file", creditNoteForm.pdf_file);
+            if (creditNoteForm.reason_detail)
+                formData.append("reason_detail", creditNoteForm.reason_detail);
+            if (creditNoteForm.pdf_file)
+                formData.append("pdf_file", creditNoteForm.pdf_file);
 
-            const createResponse = await axios.post("/transfers/provider-credit-notes/", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-                _skipErrorToast: true,
-            });
+            const createResponse = await axios.post(
+                "/transfers/provider-credit-notes/",
+                formData,
+                {
+                    headers: { "Content-Type": "multipart/form-data" },
+                    _skipErrorToast: true,
+                }
+            );
 
             const creditNoteId = createResponse.data.id;
 
@@ -586,15 +593,21 @@ const ProviderStatements = () => {
             const amountToApply = Math.min(ncAmount, transferBalance);
 
             if (amountToApply > 0) {
-                await axios.post(`/transfers/provider-credit-notes/${creditNoteId}/apply/`, {
-                    applications: [{
-                        transfer_id: selectedTransfer.id,
-                        amount: amountToApply,
-                        notes: `Aplicación inmediata desde estado de cuenta`
-                    }]
-                }, {
-                    _skipErrorToast: true
-                });
+                await axios.post(
+                    `/transfers/provider-credit-notes/${creditNoteId}/apply/`,
+                    {
+                        applications: [
+                            {
+                                transfer_id: selectedTransfer.id,
+                                amount: amountToApply,
+                                notes: `Aplicación inmediata desde estado de cuenta`,
+                            },
+                        ],
+                    },
+                    {
+                        _skipErrorToast: true,
+                    }
+                );
             }
 
             toast.success("Nota de crédito registrada y aplicada exitosamente");
@@ -611,11 +624,8 @@ const ProviderStatements = () => {
                 received_date: getTodayDate(),
                 pdf_file: null,
             });
-        } catch (error) {
-            const errorMsg = error.response?.data?.error ||
-                error.response?.data?.note_number?.[0] ||
-                "Error al registrar nota de crédito";
-            toast.error(errorMsg);
+        } catch {
+            toast.error("Error al registrar nota de crédito");
         } finally {
             setIsSubmitting(false);
         }
@@ -632,7 +642,7 @@ const ProviderStatements = () => {
 
     const openCreditNoteModal = (transfer) => {
         setSelectedTransfer(transfer);
-        setCreditNoteForm(prev => ({
+        setCreditNoteForm((prev) => ({
             ...prev,
             amount: transfer.balance, // Sugerir el saldo pendiente
             note_number: "",
@@ -640,7 +650,7 @@ const ProviderStatements = () => {
             received_date: getTodayDate(),
             reason: "otro",
             reason_detail: "",
-            pdf_file: null
+            pdf_file: null,
         }));
         setIsCreditNoteModalOpen(true);
     };
@@ -668,7 +678,9 @@ const ProviderStatements = () => {
             sortable: false,
             cell: (row) => {
                 // Solo permitir selección si está aprobado o parcial y tiene saldo
-                const isPayable = (row.status === "aprobado" || row.status === "parcial") && row.balance > 0;
+                const isPayable =
+                    (row.status === "aprobado" || row.status === "parcial") &&
+                    row.balance > 0;
                 return (
                     <div
                         className="flex items-center justify-center py-2"
@@ -690,11 +702,15 @@ const ProviderStatements = () => {
                                     ? "border-gray-400 text-slate-700 hover:border-slate-900 focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 cursor-pointer hover:scale-110"
                                     : "border-gray-200 bg-gray-100 opacity-30 cursor-not-allowed"
                             )}
-                            title={isPayable ? "Seleccionar para pago múltiple" : "Esta factura ya está pagada o no tiene saldo pendiente"}
+                            title={
+                                isPayable
+                                    ? "Seleccionar para pago múltiple"
+                                    : "Esta factura ya está pagada o no tiene saldo pendiente"
+                            }
                         />
                     </div>
                 );
-            }
+            },
         },
         {
             header: "Fecha",
@@ -711,7 +727,7 @@ const ProviderStatements = () => {
         {
             header: "Orden de Servicio",
             accessor: "service_order",
-            cell: (row) => (
+            cell: (row) =>
                 row.service_order_id ? (
                     <button
                         onClick={(e) => {
@@ -726,8 +742,7 @@ const ProviderStatements = () => {
                     <span className="font-medium text-slate-500">
                         {row.service_order}
                     </span>
-                )
-            ),
+                ),
         },
         {
             header: "Tipo",
@@ -802,7 +817,8 @@ const ProviderStatements = () => {
                 <div className="flex items-center justify-end gap-1">
                     {row.status !== "pagado" && (
                         <>
-                            {(row.status === "aprobado" || row.status === "parcial") ? (
+                            {row.status === "aprobado" ||
+                            row.status === "parcial" ? (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -816,7 +832,10 @@ const ProviderStatements = () => {
                                     <Banknote className="w-4 h-4" />
                                 </Button>
                             ) : (
-                                <span className="p-2 text-slate-300 cursor-not-allowed" title="Requiere aprobación">
+                                <span
+                                    className="p-2 text-slate-300 cursor-not-allowed"
+                                    title="Requiere aprobación"
+                                >
                                     <LockIcon className="w-4 h-4" />
                                 </span>
                             )}
@@ -865,7 +884,10 @@ const ProviderStatements = () => {
                         <Skeleton className="h-10 w-full" />
                         <div className="space-y-2">
                             {[1, 2, 3, 4, 5, 6].map((i) => (
-                                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                                <Skeleton
+                                    key={i}
+                                    className="h-16 w-full rounded-lg"
+                                />
                             ))}
                         </div>
                     </div>
@@ -1092,28 +1114,60 @@ const ProviderStatements = () => {
                                 <CardHeader>
                                     <div className="flex items-center justify-between">
                                         <CardTitle>
-                                            Historial de Movimientos ({selectedYear})
+                                            Historial de Movimientos (
+                                            {selectedYear})
                                         </CardTitle>
-                                        {statement?.transfers && statement.transfers.some(t => (t.status === "aprobado" || t.status === "parcial") && t.balance > 0) && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => {
-                                                    const payableTransfers = statement.transfers
-                                                        .filter(t => t.status !== "pagado" && t.balance > 0)
-                                                        .map(t => t.id);
-                                                    if (selectedTransferIds.length === payableTransfers.length) {
-                                                        setSelectedTransferIds([]);
-                                                    } else {
-                                                        setSelectedTransferIds(payableTransfers);
+                                        {statement?.transfers &&
+                                            statement.transfers.some(
+                                                (t) =>
+                                                    (t.status === "aprobado" ||
+                                                        t.status ===
+                                                            "parcial") &&
+                                                    t.balance > 0
+                                            ) && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        const payableTransfers =
+                                                            statement.transfers
+                                                                .filter(
+                                                                    (t) =>
+                                                                        t.status !==
+                                                                            "pagado" &&
+                                                                        t.balance >
+                                                                            0
+                                                                )
+                                                                .map(
+                                                                    (t) => t.id
+                                                                );
+                                                        if (
+                                                            selectedTransferIds.length ===
+                                                            payableTransfers.length
+                                                        ) {
+                                                            setSelectedTransferIds(
+                                                                []
+                                                            );
+                                                        } else {
+                                                            setSelectedTransferIds(
+                                                                payableTransfers
+                                                            );
+                                                        }
+                                                    }}
+                                                    className={
+                                                        selectedTransferIds.length >
+                                                        0
+                                                            ? "border-blue-500 text-blue-700"
+                                                            : ""
                                                     }
-                                                }}
-                                                className={selectedTransferIds.length > 0 ? "border-blue-500 text-blue-700" : ""}
-                                            >
-                                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                                {selectedTransferIds.length > 0 ? 'Deseleccionar Todas' : 'Seleccionar Todas'}
-                                            </Button>
-                                        )}
+                                                >
+                                                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                                                    {selectedTransferIds.length >
+                                                    0
+                                                        ? "Deseleccionar Todas"
+                                                        : "Seleccionar Todas"}
+                                                </Button>
+                                            )}
                                     </div>
                                 </CardHeader>
                                 <CardContent>
@@ -1303,16 +1357,25 @@ const ProviderStatements = () => {
                             <FileMinus className="w-4 h-4 text-slate-600" />
                         </div>
                         <div>
-                            <h4 className="text-sm font-semibold text-slate-900">Aplicación Inmediata</h4>
+                            <h4 className="text-sm font-semibold text-slate-900">
+                                Aplicación Inmediata
+                            </h4>
                             <p className="text-sm text-slate-600 mt-1">
-                                La nota de crédito se registrará y aplicará automáticamente a la factura <span className="font-mono font-medium text-slate-900">{selectedTransfer?.invoice_number}</span>.
+                                La nota de crédito se registrará y aplicará
+                                automáticamente a la factura{" "}
+                                <span className="font-mono font-medium text-slate-900">
+                                    {selectedTransfer?.invoice_number}
+                                </span>
+                                .
                             </p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                            <Label className="mb-1.5 block">N° Nota de Crédito *</Label>
+                            <Label className="mb-1.5 block">
+                                N° Nota de Crédito *
+                            </Label>
                             <Input
                                 value={creditNoteForm.note_number}
                                 onChange={(e) =>
@@ -1326,9 +1389,13 @@ const ProviderStatements = () => {
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block">Monto Total *</Label>
+                            <Label className="mb-1.5 block">
+                                Monto Total *
+                            </Label>
                             <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">$</span>
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">
+                                    $
+                                </span>
                                 <Input
                                     type="number"
                                     step="0.01"
@@ -1345,14 +1412,19 @@ const ProviderStatements = () => {
                                 />
                             </div>
                             <p className="text-[10px] text-slate-500 mt-1">
-                                Saldo factura: {selectedTransfer ? formatCurrency(selectedTransfer.balance) : '$0.00'}
+                                Saldo factura:{" "}
+                                {selectedTransfer
+                                    ? formatCurrency(selectedTransfer.balance)
+                                    : "$0.00"}
                             </p>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                            <Label className="mb-1.5 block">Fecha de Emisión *</Label>
+                            <Label className="mb-1.5 block">
+                                Fecha de Emisión *
+                            </Label>
                             <Input
                                 type="date"
                                 value={creditNoteForm.issue_date}
@@ -1366,7 +1438,9 @@ const ProviderStatements = () => {
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block">Fecha de Recepción</Label>
+                            <Label className="mb-1.5 block">
+                                Fecha de Recepción
+                            </Label>
                             <Input
                                 type="date"
                                 value={creditNoteForm.received_date}
@@ -1385,24 +1459,38 @@ const ProviderStatements = () => {
                             <Label className="mb-1.5 block">Motivo *</Label>
                             <SelectERP
                                 value={creditNoteForm.reason}
-                                onChange={(val) => setCreditNoteForm({ ...creditNoteForm, reason: val })}
+                                onChange={(val) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        reason: val,
+                                    })
+                                }
                                 options={NC_REASON_OPTIONS}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
                             />
                         </div>
                         <div className="sm:col-span-2">
-                            <Label className="mb-1.5 block">Detalle del Motivo</Label>
+                            <Label className="mb-1.5 block">
+                                Detalle del Motivo
+                            </Label>
                             <Input
                                 value={creditNoteForm.reason_detail}
-                                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, reason_detail: e.target.value })}
+                                onChange={(e) =>
+                                    setCreditNoteForm({
+                                        ...creditNoteForm,
+                                        reason_detail: e.target.value,
+                                    })
+                                }
                                 placeholder="Ej: Mercancía dañada en el envío..."
                             />
                         </div>
                     </div>
 
                     <div>
-                        <Label className="mb-1.5 block">Documento PDF (Opcional)</Label>
+                        <Label className="mb-1.5 block">
+                            Documento PDF (Opcional)
+                        </Label>
                         <FileUpload
                             accept=".pdf"
                             onChange={(file) =>
@@ -1686,9 +1774,13 @@ const ProviderStatements = () => {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                onClick={(e) => {
+                                                                onClick={(
+                                                                    e
+                                                                ) => {
                                                                     e.stopPropagation();
-                                                                    setPaymentToDelete(payment);
+                                                                    setPaymentToDelete(
+                                                                        payment
+                                                                    );
                                                                 }}
                                                                 className="text-red-500 hover:text-red-700 hover:bg-red-50"
                                                                 title="Eliminar pago"
@@ -1810,7 +1902,10 @@ const ProviderStatements = () => {
                     <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                         <span className="font-medium text-sm">
-                            {selectedTransferIds.length} {selectedTransferIds.length === 1 ? 'factura seleccionada' : 'facturas seleccionadas'}
+                            {selectedTransferIds.length}{" "}
+                            {selectedTransferIds.length === 1
+                                ? "factura seleccionada"
+                                : "facturas seleccionadas"}
                         </span>
                     </div>
                     <div className="h-4 w-px bg-slate-700" />
@@ -1836,42 +1931,75 @@ const ProviderStatements = () => {
             <Modal
                 isOpen={isBatchPaymentModalOpen}
                 onClose={() => setIsBatchPaymentModalOpen(false)}
-                title={`Pago Múltiple - ${selectedProvider?.name || ''}`}
+                title={`Pago Múltiple - ${selectedProvider?.name || ""}`}
                 size="xl"
             >
-                <form onSubmit={handleRegisterBatchPayment} className="space-y-6">
+                <form
+                    onSubmit={handleRegisterBatchPayment}
+                    className="space-y-6"
+                >
                     {/* Resumen de Facturas */}
                     <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                         <div className="px-4 py-3 bg-slate-100 border-b border-slate-200">
                             <h4 className="font-semibold text-sm text-slate-900">
-                                Facturas Seleccionadas ({selectedTransferIds.length})
+                                Facturas Seleccionadas (
+                                {selectedTransferIds.length})
                             </h4>
                         </div>
                         <div className="max-h-48 overflow-y-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 sticky top-0">
                                     <tr className="border-b border-slate-200">
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">OS</th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">Factura</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-600">Saldo</th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">
+                                            OS
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">
+                                            Factura
+                                        </th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-600">
+                                            Saldo
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {statement?.transfers
-                                        ?.filter(t => selectedTransferIds.includes(t.id))
+                                        ?.filter((t) =>
+                                            selectedTransferIds.includes(t.id)
+                                        )
                                         .map((transfer) => (
-                                            <tr key={transfer.id} className="hover:bg-slate-50">
-                                                <td className="px-3 py-2 font-mono text-xs">{transfer.service_order || 'Sin OS'}</td>
-                                                <td className="px-3 py-2 font-mono text-xs">{transfer.invoice_number || '-'}</td>
-                                                <td className="px-3 py-2 text-right font-semibold text-slate-900">{formatCurrency(transfer.balance)}</td>
+                                            <tr
+                                                key={transfer.id}
+                                                className="hover:bg-slate-50"
+                                            >
+                                                <td className="px-3 py-2 font-mono text-xs">
+                                                    {transfer.service_order ||
+                                                        "Sin OS"}
+                                                </td>
+                                                <td className="px-3 py-2 font-mono text-xs">
+                                                    {transfer.invoice_number ||
+                                                        "-"}
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                                    {formatCurrency(
+                                                        transfer.balance
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                 </tbody>
                                 <tfoot className="bg-slate-100 border-t-2 border-slate-300">
                                     <tr>
-                                        <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
+                                        <td
+                                            colSpan="2"
+                                            className="px-3 py-2 text-right font-semibold text-slate-700"
+                                        >
+                                            Total:
+                                        </td>
                                         <td className="px-3 py-2 text-right font-bold text-lg text-slate-700">
-                                            {formatCurrency(batchPaymentForm.total_amount || 0)}
+                                            {formatCurrency(
+                                                batchPaymentForm.total_amount ||
+                                                    0
+                                            )}
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -1880,7 +2008,8 @@ const ProviderStatements = () => {
                         <div className="px-4 py-2 border-t border-dashed border-slate-300 bg-slate-50/50">
                             <p className="text-xs text-slate-500 flex items-center gap-2">
                                 <AlertCircle className="w-4 h-4 text-slate-400" />
-                                El monto se distribuirá automáticamente por orden de fecha (FIFO).
+                                El monto se distribuirá automáticamente por
+                                orden de fecha (FIFO).
                             </p>
                         </div>
                     </div>
@@ -1930,11 +2059,17 @@ const ProviderStatements = () => {
                                     setBatchPaymentForm({
                                         ...batchPaymentForm,
                                         payment_method: val,
-                                        bank: val === "efectivo" ? "" : batchPaymentForm.bank,
+                                        bank:
+                                            val === "efectivo"
+                                                ? ""
+                                                : batchPaymentForm.bank,
                                     })
                                 }
                                 options={[
-                                    { id: "transferencia", name: "Transferencia Bancaria" },
+                                    {
+                                        id: "transferencia",
+                                        name: "Transferencia Bancaria",
+                                    },
                                     { id: "cheque", name: "Cheque" },
                                     { id: "efectivo", name: "Efectivo" },
                                     { id: "tarjeta", name: "Tarjeta" },
@@ -1958,7 +2093,9 @@ const ProviderStatements = () => {
                         </div>
                     </div>
 
-                    {["transferencia", "cheque", "tarjeta"].includes(batchPaymentForm.payment_method) && (
+                    {["transferencia", "cheque", "tarjeta"].includes(
+                        batchPaymentForm.payment_method
+                    ) && (
                         <div>
                             <Label>Banco *</Label>
                             <SelectERP
@@ -2021,7 +2158,9 @@ const ProviderStatements = () => {
                             Cancelar
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? "Procesando..." : "Registrar Pago Agrupado"}
+                            {isSubmitting
+                                ? "Procesando..."
+                                : "Registrar Pago Agrupado"}
                         </Button>
                     </ModalFooter>
                 </form>
@@ -2033,7 +2172,11 @@ const ProviderStatements = () => {
                 onClose={() => setPaymentToDelete(null)}
                 onConfirm={handleDeletePayment}
                 title="Eliminar Pago"
-                description={`¿Está seguro que desea eliminar este pago de ${paymentToDelete ? formatCurrency(paymentToDelete.amount) : ''}? Esta acción no se puede deshacer.`}
+                description={`¿Está seguro que desea eliminar este pago de ${
+                    paymentToDelete
+                        ? formatCurrency(paymentToDelete.amount)
+                        : ""
+                }? Esta acción no se puede deshacer.`}
                 confirmText="Eliminar"
                 variant="danger"
             />

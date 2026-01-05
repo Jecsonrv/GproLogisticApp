@@ -15,7 +15,7 @@ class ErrorBoundary extends React.Component {
         };
     }
 
-    static getDerivedStateFromError(error) {
+    static getDerivedStateFromError() {
         // Actualizar estado para mostrar UI de fallback
         return { hasError: true };
     }
@@ -65,29 +65,40 @@ class ErrorBoundary extends React.Component {
                                     No pudimos procesar su solicitud
                                 </h2>
                                 <p className="text-gray-600 text-sm leading-relaxed">
-                                    El sistema ha detectado una anomalía técnica inesperada que impide visualizar esta sección correctamente. Esta incidencia ha sido registrada para su análisis.
+                                    El sistema ha detectado una anomalía técnica
+                                    inesperada que impide visualizar esta
+                                    sección correctamente. Esta incidencia ha
+                                    sido registrada para su análisis.
                                 </p>
                             </div>
 
                             {/* Detalles Técnicos (Solo Desarrollo) - Estilo Terminal */}
-                            {import.meta.env.MODE === "development" && this.state.error && (
-                                <div className="mb-6 bg-gray-900 rounded-md overflow-hidden text-left">
-                                    <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
-                                        <span className="text-xs text-gray-400 font-mono uppercase tracking-wider">Stack Trace</span>
-                                        <span className="text-xs text-red-400 font-mono">Dev Mode Only</span>
+                            {import.meta.env.MODE === "development" &&
+                                this.state.error && (
+                                    <div className="mb-6 bg-gray-900 rounded-md overflow-hidden text-left">
+                                        <div className="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
+                                            <span className="text-xs text-gray-400 font-mono uppercase tracking-wider">
+                                                Stack Trace
+                                            </span>
+                                            <span className="text-xs text-red-400 font-mono">
+                                                Dev Mode Only
+                                            </span>
+                                        </div>
+                                        <div className="p-4 overflow-auto max-h-48 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                                            <p className="text-xs text-red-300 font-mono mb-2 font-bold">
+                                                {this.state.error.toString()}
+                                            </p>
+                                            {this.state.errorInfo && (
+                                                <pre className="text-xs text-gray-400 font-mono leading-tight">
+                                                    {
+                                                        this.state.errorInfo
+                                                            .componentStack
+                                                    }
+                                                </pre>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="p-4 overflow-auto max-h-48 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                                        <p className="text-xs text-red-300 font-mono mb-2 font-bold">
-                                            {this.state.error.toString()}
-                                        </p>
-                                        {this.state.errorInfo && (
-                                            <pre className="text-xs text-gray-400 font-mono leading-tight">
-                                                {this.state.errorInfo.componentStack}
-                                            </pre>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                                )}
 
                             {/* Acciones */}
                             <div className="space-y-3">
@@ -98,10 +109,11 @@ class ErrorBoundary extends React.Component {
                                     <RefreshCw className="h-4 w-4" />
                                     Restablecer Aplicación
                                 </button>
-                                
+
                                 <div className="text-center pt-4">
                                     <p className="text-xs text-gray-400">
-                                        Código de Referencia: ERR-{Math.floor(Math.random() * 10000)}-SYS
+                                        Código de Referencia: ERR-
+                                        {Math.floor(Math.random() * 10000)}-SYS
                                     </p>
                                 </div>
                             </div>

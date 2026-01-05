@@ -1,5 +1,13 @@
+/* eslint react-hooks/set-state-in-effect: off */
 import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./Dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "./Dialog";
 import { Button } from "./Button";
 import { Input } from "./Input";
 
@@ -25,9 +33,9 @@ const PromptDialog = ({
     const [value, setValue] = useState(defaultValue);
 
     useEffect(() => {
-        if (open) {
-            setValue(defaultValue);
-        }
+        if (!open) return;
+        if (defaultValue === undefined || defaultValue === null) return;
+        setValue(defaultValue);
     }, [open, defaultValue]);
 
     const handleConfirm = () => {
@@ -43,9 +51,11 @@ const PromptDialog = ({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    {description && <DialogDescription>{description}</DialogDescription>}
+                    {description && (
+                        <DialogDescription>{description}</DialogDescription>
+                    )}
                 </DialogHeader>
-                
+
                 <div className="py-4">
                     <Input
                         label={label}
@@ -66,7 +76,11 @@ const PromptDialog = ({
                     <Button variant="outline" onClick={onClose}>
                         {cancelText}
                     </Button>
-                    <Button onClick={handleConfirm} disabled={required && !value.trim()} variant={confirmVariant}>
+                    <Button
+                        onClick={handleConfirm}
+                        disabled={required && !value.trim()}
+                        variant={confirmVariant}
+                    >
                         {confirmText}
                     </Button>
                 </DialogFooter>
