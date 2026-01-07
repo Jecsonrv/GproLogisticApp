@@ -17,6 +17,28 @@ class ProviderCategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
+    def validate_name(self, value):
+        """Permitir duplicados si la categoría anterior está inactiva"""
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name == value:
+            return value
+
+        # Verificar si existe otra categoría con este nombre
+        existing = ProviderCategory.objects.filter(name=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactiva, permitir
+            if not existing.is_active:
+                return value
+            # Si está activa, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe una categoría activa con el nombre '{value}'"
+            )
+
+        return value
+
 
 class ProviderSerializer(serializers.ModelSerializer):
     """Serializer para Proveedores"""
@@ -67,6 +89,28 @@ class BankSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
 
+    def validate_name(self, value):
+        """Permitir duplicados si el banco anterior está inactivo"""
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name == value:
+            return value
+
+        # Verificar si existe otro banco con este nombre
+        existing = Bank.objects.filter(name=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un banco activo con el nombre '{value}'"
+            )
+
+        return value
+
 
 class ShipmentTypeSerializer(serializers.ModelSerializer):
     """Serializer para Tipos de Embarque"""
@@ -79,6 +123,28 @@ class ShipmentTypeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
 
+    def validate_name(self, value):
+        """Permitir duplicados si el tipo de embarque anterior está inactivo"""
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name == value:
+            return value
+
+        # Verificar si existe otro tipo con este nombre
+        existing = ShipmentType.objects.filter(name=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un tipo de embarque activo con el nombre '{value}'"
+            )
+
+        return value
+
 
 class CustomsSerializer(serializers.ModelSerializer):
     """Serializer para Aduanas"""
@@ -90,6 +156,28 @@ class CustomsSerializer(serializers.ModelSerializer):
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+    def validate_name(self, value):
+        """Permitir duplicados si la aduana anterior está inactiva"""
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name == value:
+            return value
+
+        # Verificar si existe otra aduana con este nombre
+        existing = Customs.objects.filter(name=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactiva, permitir
+            if not existing.is_active:
+                return value
+            # Si está activa, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe una aduana activa con el nombre '{value}'"
+            )
+
+        return value
 
 
 class SubClientSerializer(serializers.ModelSerializer):
@@ -132,6 +220,29 @@ class ServiceSerializer(serializers.ModelSerializer):
         """Retorna el precio con IVA calculado"""
         return float(obj.get_price_with_iva())
 
+    def validate_name(self, value):
+        """Permitir duplicados si el servicio anterior está eliminado o inactivo"""
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name == value:
+            return value
+
+        # Verificar si existe otro servicio con este nombre (incluye soft-deleted)
+        # Usamos all_objects para incluir servicios soft-deleted
+        existing = Service.all_objects.filter(name=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está eliminado o inactivo, permitir
+            if existing.is_deleted or not existing.is_active:
+                return value
+            # Si está activo y no eliminado, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un servicio activo con el nombre '{value}'"
+            )
+
+        return value
+
 
 class ClientServicePriceSerializer(serializers.ModelSerializer):
     """Serializer para Tarifario de Clientes"""
@@ -158,20 +269,28 @@ class ClientServicePriceSerializer(serializers.ModelSerializer):
         return float(obj.get_price_with_iva())
 
     def validate(self, data):
-        """Validar que no exista ya un precio para este cliente+servicio"""
+        """Validar que no exista un precio activo para este cliente+servicio"""
         client = data.get('client')
         service = data.get('service')
 
         # Solo validar en creación, no en actualización
         if not self.instance:
+            # Buscar precio existente (activo o inactivo)
             existing = ClientServicePrice.objects.filter(
                 client=client,
                 service=service
-            ).exists()
+            ).first()
 
             if existing:
-                raise serializers.ValidationError(
-                    "Ya existe un precio personalizado para este cliente y servicio."
-                )
+                # Si existe pero está inactivo, permitir creación de duplicado
+                if not existing.is_active:
+                    return data
+                # Si está activo, rechazar
+                raise serializers.ValidationError({
+                    'non_field_errors': [
+                        f"Ya existe un precio personalizado activo para {client.name} - {service.name}. "
+                        "Desactiva el precio anterior si deseas crear uno nuevo."
+                    ]
+                })
 
         return data
