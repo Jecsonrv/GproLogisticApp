@@ -96,9 +96,9 @@ class ServiceOrder(SoftDeleteModel):
 
         # Validaciones adicionales para OS manuales
         if self.is_manual_os and self.order_number:
-            # Validar formato con regex
-            if not re.match(r'^\d{3}-\d{4}$', self.order_number):
-                raise ValidationError("El formato del número de OS debe ser XXX-YYYY (ejemplo: 075-2023)")
+            # Validar formato con regex (1 a 4 dígitos para el número)
+            if not re.match(r'^\d{1,4}-\d{4}$', self.order_number):
+                raise ValidationError("El formato del número de OS debe ser NNN-YYYY (ejemplo: 75-2023, 075-2023, 1550-2023)")
 
             # Extraer el año del número manual
             try:
