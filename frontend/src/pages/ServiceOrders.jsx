@@ -314,10 +314,10 @@ const ServiceOrders = () => {
                 return;
             }
 
-            // Validar formato XXX-YYYY
-            const formatRegex = /^\d{3}-\d{4}$/;
+            // Validar formato X-YYYY (1 a 4 dígitos para el número)
+            const formatRegex = /^\d{1,4}-\d{4}$/;
             if (!formatRegex.test(osNumber)) {
-                toast.error("Formato inválido. Use XXX-YYYY (ejemplo: 075-2023)");
+                toast.error("Formato inválido. Use NNN-YYYY (ejemplo: 75-2023, 075-2023, 1550-2023)");
                 return;
             }
 
@@ -1077,11 +1077,11 @@ const ServiceOrders = () => {
                             {formData.is_manual_os && (
                                 <div className="mt-4">
                                     <Label className="mb-1.5 block">
-                                        Número de OS (Formato: 075-2023)
+                                        Número de OS (Formato: NNN-YYYY)
                                     </Label>
                                     <Input
                                         type="text"
-                                        placeholder="Ejemplo: 075-2023"
+                                        placeholder="Ejemplo: 75-2023, 075-2023, 1550-2023"
                                         value={formData.order_number}
                                         onChange={(e) =>
                                             setFormData({
@@ -1089,12 +1089,12 @@ const ServiceOrders = () => {
                                                 order_number: e.target.value,
                                             })
                                         }
-                                        pattern="\d{3}-\d{4}"
+                                        pattern="\d{1,4}-\d{4}"
                                         required={formData.is_manual_os}
                                         className="font-mono"
                                     />
                                     <p className="text-xs text-slate-600 mt-1">
-                                        Formato: XXX-YYYY (3 dígitos - 4 dígitos de año)
+                                        Formato: NNN-YYYY (1 a 4 dígitos - año de 4 dígitos)
                                     </p>
                                 </div>
                             )}
