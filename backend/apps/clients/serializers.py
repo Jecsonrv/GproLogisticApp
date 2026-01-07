@@ -32,6 +32,36 @@ class ClientSerializer(serializers.ModelSerializer):
         
         return float(credit_used)
 
+    def validate_name(self, value):
+        """
+        Validar nombre permitiendo duplicados si el cliente anterior está inactivo.
+        """
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre es obligatorio")
+
+        # Normalizar valor (eliminar espacios extras y convertir a mayúsculas para comparación)
+        normalized_value = ' '.join(value.strip().split()).upper()
+
+        # En actualización, permitir el mismo nombre
+        if self.instance and self.instance.name.upper() == normalized_value:
+            return value
+
+        # Verificar si existe otro cliente con este nombre (case-insensitive)
+        existing = Client.objects.filter(name__iexact=value.strip()).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir (se puede crear duplicado de inactivo)
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un cliente activo con el nombre '{existing.name}'"
+            )
+
+        return value
+
     def validate_nit(self, value):
         """
         Validar NIT permitiendo duplicados si el cliente anterior está inactivo.

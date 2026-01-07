@@ -172,39 +172,8 @@ function Catalogs() {
             setIsModalOpen(false);
             await fetchAllCatalogs();
         } catch (error) {
-            // Extraer mensaje de error más descriptivo
-            let errorMessage = "Error al guardar";
-
-            if (error.response?.data) {
-                const data = error.response.data;
-
-                // Errores de validación de Django
-                if (data.name && Array.isArray(data.name)) {
-                    errorMessage = `Nombre: ${data.name.join(", ")}`;
-                } else if (data.nit && Array.isArray(data.nit)) {
-                    errorMessage = `NIT: ${data.nit.join(", ")}`;
-                } else if (data.email && Array.isArray(data.email)) {
-                    errorMessage = `Email: ${data.email.join(", ")}`;
-                } else if (typeof data === "string") {
-                    errorMessage = data;
-                } else if (data.detail) {
-                    errorMessage = data.detail;
-                } else if (data.message) {
-                    errorMessage = data.message;
-                } else if (data.non_field_errors) {
-                    errorMessage = data.non_field_errors.join(", ");
-                } else {
-                    // Intentar obtener el primer error
-                    const firstError = Object.values(data)[0];
-                    if (Array.isArray(firstError)) {
-                        errorMessage = firstError.join(", ");
-                    } else if (typeof firstError === "string") {
-                        errorMessage = firstError;
-                    }
-                }
-            }
-
-            toast.error(errorMessage, { duration: 4000 });
+            // El interceptor de axios ya muestra el toast de error automáticamente
+            // No necesitamos manejar el error aquí
         }
     };
 

@@ -12,7 +12,8 @@ from apps.core.models import SoftDeleteModel
 from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
 
 class ServiceOrder(SoftDeleteModel):
-    order_number = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Número de Orden")
+    order_number = models.CharField(max_length=20, unique=True, blank=True, verbose_name="Número de Orden")
+    is_manual_os = models.BooleanField(default=False, verbose_name="OS Manual", help_text="Permite ingresar número de OS manualmente (solo para años anteriores)")
     client = models.ForeignKey(Client, on_delete=models.PROTECT, verbose_name="Cliente")
     sub_client = models.ForeignKey(SubClient, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Subcliente")
 
@@ -60,14 +61,19 @@ class ServiceOrder(SoftDeleteModel):
         return self.order_number
 
     def save(self, *args, **kwargs):
-        # Generar número de orden con formato XXX-YYYY
+        from django.db import transaction
+        from django.db.models import Max
+        import re
+
+        current_year = timezone.now().year
+
+        # Generar o validar número de orden con formato XXX-YYYY
         if not self.order_number:
-            from django.db import transaction
-            from django.db.models import Max
-            import re
+            # Si es OS manual, debe venir desde el serializer/frontend
+            if self.is_manual_os:
+                raise ValidationError("Debe proporcionar un número de OS para las OS manuales")
 
-            current_year = timezone.now().year
-
+            # Generación automática (código original)
             # Usar select_for_update con transacción para evitar race conditions
             with transaction.atomic():
                 # Buscar el máximo número del año actual con bloqueo
@@ -87,6 +93,27 @@ class ServiceOrder(SoftDeleteModel):
                     new_num = 1
 
                 self.order_number = f'{new_num:03d}-{current_year}'
+
+        # Validaciones adicionales para OS manuales
+        if self.is_manual_os and self.order_number:
+            # Validar formato con regex
+            if not re.match(r'^\d{3}-\d{4}$', self.order_number):
+                raise ValidationError("El formato del número de OS debe ser XXX-YYYY (ejemplo: 075-2023)")
+
+            # Extraer el año del número manual
+            try:
+                manual_year = int(self.order_number.split('-')[1])
+            except (ValueError, IndexError):
+                raise ValidationError("Formato de año inválido en el número de OS")
+
+            # Validar que el año sea anterior al actual
+            if manual_year >= current_year:
+                raise ValidationError(f"Las OS manuales solo pueden ser de años anteriores. Año actual: {current_year}")
+
+            # Validar que no exista duplicado (solo para nuevas OS)
+            if not self.pk:
+                if ServiceOrder.all_objects.filter(order_number=self.order_number).exists():
+                    raise ValidationError(f"Ya existe una OS con el número {self.order_number}")
 
         # Establecer el mes automáticamente
         if not self.mes:

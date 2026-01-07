@@ -170,11 +170,8 @@ function ClientForm() {
 
             navigate("/clients");
         } catch (error) {
-            const errorMessage =
-                error.response?.data?.nit?.[0] ||
-                error.response?.data?.detail ||
-                "No se pudieron guardar los cambios. Verifique los datos.";
-            toast.error(errorMessage);
+            // El interceptor de axios ya muestra el toast de error automáticamente
+            // No necesitamos manejar el error aquí
         } finally {
             setSaving(false);
         }

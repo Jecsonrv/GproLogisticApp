@@ -96,7 +96,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = ServiceOrder
         fields = '__all__'
-        read_only_fields = ('order_number', 'customs_agent', 'created_at', 'updated_at')
+        read_only_fields = ('customs_agent', 'created_at', 'updated_at')
 
     def get_customs_agent_name(self, obj):
         """Nombre completo del aforador"""

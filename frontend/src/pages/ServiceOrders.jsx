@@ -212,6 +212,8 @@ const ServiceOrders = () => {
         ducas: [""],
         customs: "",
         notes: "",
+        is_manual_os: false,
+        order_number: "",
     });
 
     useEffect(() => {
@@ -301,6 +303,33 @@ const ServiceOrders = () => {
 
     const handleCreate = async (e) => {
         e.preventDefault();
+
+        // Validaciones del lado del cliente para OS manual
+        if (formData.is_manual_os && !selectedOrder) {
+            const osNumber = formData.order_number?.trim();
+
+            // Validar que se haya ingresado un número
+            if (!osNumber) {
+                toast.error("Debe ingresar un número de OS para las OS manuales");
+                return;
+            }
+
+            // Validar formato XXX-YYYY
+            const formatRegex = /^\d{3}-\d{4}$/;
+            if (!formatRegex.test(osNumber)) {
+                toast.error("Formato inválido. Use XXX-YYYY (ejemplo: 075-2023)");
+                return;
+            }
+
+            // Validar que el año sea anterior al actual
+            const currentYear = new Date().getFullYear();
+            const osYear = parseInt(osNumber.split('-')[1]);
+            if (osYear >= currentYear) {
+                toast.error(`Las OS manuales solo pueden ser de años anteriores. Año actual: ${currentYear}`);
+                return;
+            }
+        }
+
         try {
             // Convertir array de ducas a string separado por comas (filtrar vacíos)
             const dataToSend = {
@@ -308,6 +337,11 @@ const ServiceOrders = () => {
                 duca: formData.ducas.filter((d) => d.trim()).join(", "),
             };
             delete dataToSend.ducas;
+
+            // Si no es manual, eliminar el campo order_number para que el backend lo genere
+            if (!formData.is_manual_os) {
+                delete dataToSend.order_number;
+            }
 
             if (selectedOrder) {
                 // Update logic
@@ -364,6 +398,8 @@ const ServiceOrders = () => {
             ducas: [""],
             customs: "",
             notes: "",
+            is_manual_os: false,
+            order_number: "",
         });
         setSelectedOrder(null);
     };
@@ -1006,6 +1042,64 @@ const ServiceOrders = () => {
                                 )}
                         </div>
                     </div>
+
+                    {/* OS Manual Checkbox - Solo visible en modo creación */}
+                    {!selectedOrder && (
+                        <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                            <div className="flex items-start gap-3">
+                                <input
+                                    type="checkbox"
+                                    id="is_manual_os"
+                                    checked={formData.is_manual_os}
+                                    onChange={(e) =>
+                                        setFormData({
+                                            ...formData,
+                                            is_manual_os: e.target.checked,
+                                            order_number: e.target.checked ? formData.order_number : "",
+                                        })
+                                    }
+                                    className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-600 focus:ring-slate-500"
+                                />
+                                <div className="flex-1">
+                                    <label
+                                        htmlFor="is_manual_os"
+                                        className="block text-sm font-medium text-slate-900 cursor-pointer"
+                                    >
+                                        Crear OS Manualmente (Solo para años anteriores)
+                                    </label>
+                                    <p className="text-xs text-slate-600 mt-0.5">
+                                        Activa esta opción para ingresar manualmente el número de una OS de años anteriores (2023, 2024, 2025, etc.)
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Campo manual de número OS */}
+                            {formData.is_manual_os && (
+                                <div className="mt-4">
+                                    <Label className="mb-1.5 block">
+                                        Número de OS (Formato: 075-2023)
+                                    </Label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Ejemplo: 075-2023"
+                                        value={formData.order_number}
+                                        onChange={(e) =>
+                                            setFormData({
+                                                ...formData,
+                                                order_number: e.target.value,
+                                            })
+                                        }
+                                        pattern="\d{3}-\d{4}"
+                                        required={formData.is_manual_os}
+                                        className="font-mono"
+                                    />
+                                    <p className="text-xs text-slate-600 mt-1">
+                                        Formato: XXX-YYYY (3 dígitos - 4 dígitos de año)
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Shipment Info */}
                     <div>

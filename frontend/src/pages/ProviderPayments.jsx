@@ -26,6 +26,7 @@ import {
     ArrowUpRight,
     Lock as LockIcon,
     FileX,
+    FileMinus,
     RotateCcw,
     Info,
 } from "lucide-react";

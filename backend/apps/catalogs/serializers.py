@@ -53,6 +53,31 @@ class ProviderSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'category_name']
 
+    def validate_name(self, value):
+        """Permitir duplicados si el proveedor anterior está inactivo"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre es obligatorio")
+
+        # En actualización, permitir el mismo nombre (case-insensitive)
+        if self.instance and self.instance.name.upper() == value.strip().upper():
+            return value
+
+        # Verificar si existe otro proveedor con este nombre (case-insensitive)
+        existing = Provider.objects.filter(name__iexact=value.strip()).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un proveedor activo con el nombre '{existing.name}'"
+            )
+
+        return value
+
     def get_total_debt(self, obj):
         """Calcula la deuda total pendiente del proveedor"""
         from apps.transfers.models import Transfer
@@ -76,6 +101,31 @@ class CustomsAgentSerializer(serializers.ModelSerializer):
             'is_active', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+    def validate_name(self, value):
+        """Permitir duplicados si el aforador anterior está inactivo"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre es obligatorio")
+
+        # En actualización, permitir el mismo nombre (case-insensitive)
+        if self.instance and self.instance.name.upper() == value.strip().upper():
+            return value
+
+        # Verificar si existe otro aforador con este nombre (case-insensitive)
+        existing = CustomsAgent.objects.filter(name__iexact=value.strip()).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un aforador activo con el nombre '{existing.name}'"
+            )
+
+        return value
 
 
 class BankSerializer(serializers.ModelSerializer):
@@ -196,6 +246,31 @@ class SubClientSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'parent_client_name']
 
+    def validate_name(self, value):
+        """Permitir duplicados si el subcliente anterior está inactivo"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre es obligatorio")
+
+        # En actualización, permitir el mismo nombre (case-insensitive)
+        if self.instance and self.instance.name.upper() == value.strip().upper():
+            return value
+
+        # Verificar si existe otro subcliente con este nombre (case-insensitive)
+        existing = SubClient.objects.filter(name__iexact=value.strip()).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un subcliente activo con el nombre '{existing.name}'"
+            )
+
+        return value
+
     def validate_parent_client(self, value):
         """Validar que se proporcione un cliente padre"""
         if not value:
@@ -222,13 +297,16 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value):
         """Permitir duplicados si el servicio anterior está eliminado o inactivo"""
-        # En actualización, permitir el mismo nombre
-        if self.instance and self.instance.name == value:
+        if not value or not value.strip():
+            raise serializers.ValidationError("El nombre es obligatorio")
+
+        # En actualización, permitir el mismo nombre (case-insensitive)
+        if self.instance and self.instance.name.upper() == value.strip().upper():
             return value
 
-        # Verificar si existe otro servicio con este nombre (incluye soft-deleted)
+        # Verificar si existe otro servicio con este nombre (incluye soft-deleted, case-insensitive)
         # Usamos all_objects para incluir servicios soft-deleted
-        existing = Service.all_objects.filter(name=value).exclude(
+        existing = Service.all_objects.filter(name__iexact=value.strip()).exclude(
             id=self.instance.id if self.instance else None
         ).first()
 
@@ -238,7 +316,7 @@ class ServiceSerializer(serializers.ModelSerializer):
                 return value
             # Si está activo y no eliminado, rechazar
             raise serializers.ValidationError(
-                f"Ya existe un servicio activo con el nombre '{value}'"
+                f"Ya existe un servicio activo con el nombre '{existing.name}'"
             )
 
         return value
