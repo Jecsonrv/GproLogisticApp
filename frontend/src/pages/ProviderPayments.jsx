@@ -840,20 +840,20 @@ function ProviderPayments() {
         setSelectedPayment(payment);
         const formDataToSet = {
             service_order: payment.service_order?.id
-                ? String(payment.service_order.id)
+                ? String(payment.service_order?.id)
                 : payment.service_order
                 ? String(payment.service_order)
                 : "",
             transfer_type: payment.transfer_type || "costos",
             provider: payment.provider?.id
-                ? String(payment.provider.id)
+                ? String(payment.provider?.id)
                 : payment.provider
                 ? String(payment.provider)
                 : "",
             description: payment.description || "",
             amount: payment.amount ? String(payment.amount) : "",
             bank: payment.bank?.id
-                ? String(payment.bank.id)
+                ? String(payment.bank?.id)
                 : payment.bank
                 ? String(payment.bank)
                 : "",

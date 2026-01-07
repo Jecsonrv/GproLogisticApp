@@ -2351,8 +2351,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                         {/* Calculadora de Gastos - Integrada en la misma pestaña */}
                         <ExpenseCalculatorTab
                             orderId={orderId}
-                            orderStatus={order.status}
-                            clientType={order.client_type}
+                            orderStatus={order?.status}
+                            clientType={order?.client_type}
                             onUpdate={() => {
                                 fetchOrderDetail();
                                 if (onUpdate) onUpdate();

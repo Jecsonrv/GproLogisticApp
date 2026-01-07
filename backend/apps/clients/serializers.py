@@ -33,9 +33,31 @@ class ClientSerializer(serializers.ModelSerializer):
         return float(credit_used)
 
     def validate_nit(self, value):
-        """Convertir cadenas vacías a None para evitar error de unicidad"""
+        """
+        Validar NIT permitiendo duplicados si el cliente anterior está inactivo.
+        Convertir cadenas vacías a None para evitar error de unicidad.
+        """
         if value == "" or value is None:
             return None
+
+        # En actualización, permitir el mismo NIT
+        if self.instance and self.instance.nit == value:
+            return value
+
+        # Verificar si existe otro cliente con este NIT
+        existing = Client.objects.filter(nit=value).exclude(
+            id=self.instance.id if self.instance else None
+        ).first()
+
+        if existing:
+            # Si existe pero está inactivo, permitir (se puede crear duplicado de inactivo)
+            if not existing.is_active:
+                return value
+            # Si está activo, rechazar
+            raise serializers.ValidationError(
+                f"Ya existe un cliente activo con el NIT '{value}': {existing.name}"
+            )
+
         return value
 
 class ClientListSerializer(serializers.ModelSerializer):
