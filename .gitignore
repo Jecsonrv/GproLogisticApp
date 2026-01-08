@@ -3,10 +3,22 @@
 Thumbs.db
 ehthumbs.db
 desktop.ini
+~$*
 *.log
 *.tmp
 *.swp
 *.swo
+
+# --- COVERAGE / CACHE ---
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+
 
 # --- IDEs ---
 .vscode/
