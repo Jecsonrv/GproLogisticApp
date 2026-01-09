@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
     Calculator,
     Save,
@@ -68,7 +68,7 @@ const ExpenseCalculatorTab = ({
     };
 
     // Extract fetchData outside useEffect for reusability
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
             const response = await axios.get(
@@ -114,13 +114,13 @@ const ExpenseCalculatorTab = ({
         } finally {
             setLoading(false);
         }
-    };
+    }, [orderId, clientType]);
 
     useEffect(() => {
         if (orderId) {
             fetchData();
         }
-    }, [orderId, clientType]);
+    }, [orderId, fetchData]);
 
     const summary = useMemo(() => {
         let totalCost = 0;
