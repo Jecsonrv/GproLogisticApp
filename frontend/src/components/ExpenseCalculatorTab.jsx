@@ -67,62 +67,56 @@ const ExpenseCalculatorTab = ({
         return { cost, basePrice, ivaAmount, total, profit, ivaType };
     };
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const response = await axios.get(
-                    `/transfers/transfers/?service_order=${orderId}`
-                );
-                const data = Array.isArray(response.data) ? response.data : [];
+    // Extract fetchData outside useEffect for reusability
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const response = await axios.get(
+                `/transfers/transfers/?service_order=${orderId}`
+            );
+            const data = Array.isArray(response.data) ? response.data : [];
 
-                const billableExpenses = data.filter(
-                    (exp) =>
-                        exp.transfer_type === "cargos" ||
-                        exp.transfer_type === "costos" ||
-                        exp.transfer_type === "terceros"
-                );
+            const billableExpenses = data.filter(
+                (exp) =>
+                    exp.transfer_type === "cargos" ||
+                    exp.transfer_type === "costos" ||
+                    exp.transfer_type === "terceros"
+            );
 
-                setExpenses(billableExpenses);
+            setExpenses(billableExpenses);
 
-                // Inicializar ajustes con valores guardados en el transfer
-                const initialAdjustments = {};
-                billableExpenses.forEach((exp) => {
-                    // Determinar tipo de IVA:
-                    // 1. Si ya tiene customer_iva_type guardado, usarlo.
-                    // 2. Si es cliente internacional, default a 'no_sujeto'.
-                    // 3. Si no, derivar de applies_iva (legacy) o default a 'no_sujeto'
-                    let ivaType = exp.customer_iva_type;
-
-                    if (!ivaType) {
-                        if (clientType === "internacional") {
-                            ivaType = "no_sujeto";
-                        } else if (exp.customer_applies_iva) {
-                            ivaType = "gravado";
-                        } else {
-                            ivaType = "no_sujeto";
-                        }
+            // Inicializar ajustes con valores guardados
+            const initialAdjustments = {};
+            billableExpenses.forEach((exp) => {
+                let ivaType = exp.customer_iva_type;
+                if (!ivaType) {
+                    if (clientType === "internacional") {
+                        ivaType = "no_sujeto";
+                    } else if (exp.customer_applies_iva) {
+                        ivaType = "gravado";
+                    } else {
+                        ivaType = "no_sujeto";
                     }
+                }
 
-                    initialAdjustments[exp.id] = {
-                        markup_percentage: parseFloat(
-                            exp.customer_markup_percentage || 0
-                        ),
-                        iva_type: ivaType,
-                        // Metadatos de restricción
-                        amount_locked: exp.amount_locked || false,
-                        is_billed: !!exp.invoice_id,
-                    };
-                });
-                setExpenseAdjustments(initialAdjustments);
-            } catch (error) {
-                console.error("Error loading expenses:", error);
-                toast.error("Error al cargar los gastos");
-            } finally {
-                setLoading(false);
-            }
-        };
+                initialAdjustments[exp.id] = {
+                    // Asegurar conversión a número
+                    markup_percentage: parseFloat(exp.customer_markup_percentage || 0),
+                    iva_type: ivaType,
+                    amount_locked: exp.amount_locked || false,
+                    is_billed: !!exp.invoice_id,
+                };
+            });
+            setExpenseAdjustments(initialAdjustments);
+        } catch (error) {
+            console.error("Error loading expenses:", error);
+            toast.error("Error al cargar los gastos");
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         if (orderId) {
             fetchData();
         }
@@ -150,13 +144,25 @@ const ExpenseCalculatorTab = ({
     }, [expenses, expenseAdjustments]);
 
     const updateAdjustment = (expenseId, field, value) => {
-        setExpenseAdjustments((prev) => ({
-            ...prev,
-            [expenseId]: {
-                ...prev[expenseId],
-                [field]: value,
-            },
-        }));
+        setExpenseAdjustments((prev) => {
+            const currentAdjustment = prev[expenseId] || {};
+            
+            // Validar y convertir markup_percentage
+            let finalValue = value;
+            if (field === 'markup_percentage') {
+                // Convertir a número y validar
+                const numValue = parseFloat(value);
+                finalValue = isNaN(numValue) ? 0 : Math.max(0, numValue); // No permitir negativos
+            }
+            
+            return {
+                ...prev,
+                [expenseId]: {
+                    ...currentAdjustment,
+                    [field]: finalValue,
+                },
+            };
+        });
     };
 
     const handleReset = () => {
@@ -178,18 +184,29 @@ const ExpenseCalculatorTab = ({
     const handleSaveAsCharges = async () => {
         try {
             setSaving(true);
+            
+            // Filtrar y mapear con validación explícita
             const configs = expenses
-                .filter((expense) => !expenseAdjustments[expense.id]?.is_billed) // Solo guardar no facturados
+                .filter((expense) => !expenseAdjustments[expense.id]?.is_billed)
                 .map((expense) => {
-                    const adj = expenseAdjustments[expense.id];
+                    const adj = expenseAdjustments[expense.id] || {};
+                    
+                    // Conversión explícita y validación
+                    const markupValue = parseFloat(adj.markup_percentage);
+                    const markupPercentage = isNaN(markupValue) ? 0 : Math.max(0, markupValue);
+                    
                     return {
                         expense_id: expense.id,
-                        markup_percentage: adj?.markup_percentage || 0,
-                        iva_type: adj?.iva_type || "no_sujeto",
-                        // Compatibilidad legacy
-                        applies_iva: adj?.iva_type === "gravado",
+                        markup_percentage: markupPercentage,
+                        iva_type: adj.iva_type || "no_sujeto",
+                        applies_iva: adj.iva_type === "gravado",
                     };
                 });
+
+            if (configs.length === 0) {
+                toast.info("No hay gastos para actualizar");
+                return;
+            }
 
             const response = await axios.post(
                 `/orders/service-orders/${orderId}/update_expense_configurations/`,
@@ -197,18 +214,19 @@ const ExpenseCalculatorTab = ({
             );
 
             const { updated_count, synced_invoices } = response.data;
-            let message = `Configuración guardada: ${updated_count} gastos actualizados`;
+            let message = `✓ ${updated_count} gasto${updated_count !== 1 ? 's' : ''} actualizado${updated_count !== 1 ? 's' : ''}`;
             if (synced_invoices > 0) {
-                message += ` | ${synced_invoices} facturas sincronizadas`;
+                message += ` | ${synced_invoices} factura${synced_invoices !== 1 ? 's' : ''} sincronizada${synced_invoices !== 1 ? 's' : ''}`;
             }
             toast.success(message);
 
+            // CRÍTICO: Recargar datos después de guardar
+            await fetchData();
+            
             if (onUpdate) onUpdate();
         } catch (error) {
             console.error("Error saving configs:", error);
-            const errorMsg =
-                error.response?.data?.error ||
-                "Error al guardar la configuración";
+            const errorMsg = error.response?.data?.error || "Error al guardar la configuración";
             toast.error(errorMsg);
         } finally {
             setSaving(false);
@@ -395,30 +413,35 @@ const ExpenseCalculatorTab = ({
                                                 <div className="flex items-center justify-end">
                                                     <Input
                                                         type="number"
-                                                        min="0"
                                                         step="0.01"
-                                                        className="h-8 w-16 text-right px-1 py-1"
+                                                        min="0"
+                                                        max="1000"
                                                         value={
                                                             adjustment.markup_percentage ||
-                                                            ""
+                                                            0
                                                         }
                                                         onChange={(e) => {
-                                                            const val =
-                                                                e.target.value;
-                                                            if (
-                                                                val === "" ||
-                                                                parseFloat(
-                                                                    val
-                                                                ) >= 0
-                                                            ) {
-                                                                updateAdjustment(
-                                                                    expense.id,
-                                                                    "markup_percentage",
-                                                                    val
-                                                                );
+                                                            const value = e.target.value;
+                                                            // Permitir vacío temporalmente para edición
+                                                            if (value === '') {
+                                                                updateAdjustment(expense.id, 'markup_percentage', 0);
+                                                            } else {
+                                                                const numValue = parseFloat(value);
+                                                                if (!isNaN(numValue) && numValue >= 0) {
+                                                                    updateAdjustment(expense.id, 'markup_percentage', numValue);
+                                                                }
+                                                            }
+                                                        }}
+                                                        onBlur={(e) => {
+                                                            // Al perder el foco, asegurar que hay un valor válido
+                                                            const value = e.target.value;
+                                                            const numValue = parseFloat(value);
+                                                            if (isNaN(numValue) || numValue < 0) {
+                                                                updateAdjustment(expense.id, 'markup_percentage', 0);
                                                             }
                                                         }}
                                                         disabled={!canEdit}
+                                                        className="h-8 w-16 text-right px-1 py-1"
                                                         placeholder="0"
                                                     />
                                                 </div>

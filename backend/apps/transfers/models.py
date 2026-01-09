@@ -544,6 +544,25 @@ class Transfer(SoftDeleteModel):
                 'amount': 'El monto debe ser mayor a cero.'
             })
 
+        # Validar customer_markup_percentage
+        if self.customer_markup_percentage is not None:
+            if self.customer_markup_percentage < Decimal('0.00'):
+                raise ValidationError({
+                    'customer_markup_percentage': 'El margen no puede ser negativo.'
+                })
+            if self.customer_markup_percentage > Decimal('10000.00'):
+                raise ValidationError({
+                    'customer_markup_percentage': 'El margen excede el límite máximo (10000%).'
+                })
+
+        # Validar customer_iva_type
+        if hasattr(self, 'customer_iva_type') and self.customer_iva_type:
+            valid_types = ['gravado', 'no_sujeto']
+            if self.customer_iva_type not in valid_types:
+                raise ValidationError({
+                    'customer_iva_type': f'Tipo de IVA inválido: {self.customer_iva_type}. Valores permitidos: {", ".join(valid_types)}'
+                })
+
     def save(self, *args, **kwargs):
         self.full_clean()
 
