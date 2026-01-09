@@ -1,5 +1,11 @@
 import React from "react";
-import { AlertTriangle, X, Info, AlertCircle } from "lucide-react";
+import {
+    AlertTriangle,
+    X,
+    Info,
+    AlertCircle,
+    CheckCircle2,
+} from "lucide-react";
 import { Button } from "./Button";
 
 /**
@@ -11,7 +17,7 @@ import { Button } from "./Button";
  * @param {string} description - Descripción/mensaje del diálogo
  * @param {string} confirmText - Texto del botón de confirmar (default: "Confirmar")
  * @param {string} cancelText - Texto del botón de cancelar (default: "Cancelar")
- * @param {string} variant - Variante del botón ('danger' | 'warning' | 'primary' | 'info')
+ * @param {string} variant - Variante del botón ('danger' | 'warning' | 'primary' | 'info' | 'success')
  */
 const ConfirmDialog = ({
     open = false,
@@ -59,6 +65,14 @@ const ConfirmDialog = ({
             iconColor: "text-sky-600",
             buttonBg: "bg-sky-600 hover:bg-sky-700 focus:ring-sky-500",
             borderColor: "border-sky-100",
+        },
+        success: {
+            icon: CheckCircle2,
+            iconBg: "bg-emerald-50",
+            iconColor: "text-emerald-600",
+            buttonBg:
+                "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500",
+            borderColor: "border-emerald-100",
         },
     };
 

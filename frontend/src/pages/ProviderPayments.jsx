@@ -52,6 +52,7 @@ import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+import usePermissionStore from "../stores/permissionStore";
 
 // ============================================
 // HELPERS
@@ -307,6 +308,10 @@ function ProviderPayments() {
         id: null,
         type: null, // 'payment' | 'credit-note'
     });
+    const [approveConfirm, setApproveConfirm] = useState({
+        open: false,
+        id: null,
+    });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Credit Note states
@@ -329,6 +334,11 @@ function ProviderPayments() {
     const [pendingTransfers, setPendingTransfers] = useState([]);
     const [providerTransfers, setProviderTransfers] = useState([]); // Facturas del proveedor seleccionado
     const [applyFormData, setApplyFormData] = useState([]);
+
+    // Permissions
+    const canApprovePayments = usePermissionStore(
+        (state) => state.canApprovePayments
+    );
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -894,6 +904,31 @@ function ProviderPayments() {
     const openPaymentModal = (payment) => {
         setSelectedPayment(payment);
         setIsPayModalOpen(true);
+    };
+
+    const handleApprove = (paymentId) => {
+        setApproveConfirm({ open: true, id: paymentId });
+    };
+
+    const confirmApprove = async () => {
+        if (!approveConfirm.id) return;
+
+        try {
+            await axios.patch(`/transfers/transfers/${approveConfirm.id}/`, {
+                status: "aprobado",
+            });
+            toast.success("Gasto aprobado exitosamente");
+            fetchPayments();
+            setSelectedPayment((prev) =>
+                prev && prev.id === approveConfirm.id
+                    ? { ...prev, status: "aprobado" }
+                    : prev
+            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setApproveConfirm({ open: false, id: null });
+        }
     };
 
     const handleExportExcel = async (exportType = "all") => {
@@ -2040,7 +2075,7 @@ function ProviderPayments() {
                     setIsDetailModalOpen(false);
                     setSelectedPayment(null);
                 }}
-                title="Detalle de Movimiento"
+                title="Detalle del Gasto"
                 size="2xl"
             >
                 {selectedPayment && (
@@ -2412,18 +2447,36 @@ function ProviderPayments() {
                             >
                                 Cerrar
                             </Button>
-                            {selectedPayment.status !== "pagado" &&
-                                selectedPayment.status !== "pagada" && (
-                                    <Button
-                                        onClick={() => {
-                                            setIsDetailModalOpen(false);
-                                            openPaymentModal(selectedPayment);
-                                        }}
-                                    >
-                                        <Banknote className="w-4 h-4 mr-2" />{" "}
-                                        Registrar Pago
-                                    </Button>
-                                )}
+                            <div className="flex items-center gap-2">
+                                {selectedPayment.status === "pendiente" &&
+                                    canApprovePayments() && (
+                                        <Button
+                                            onClick={() =>
+                                                handleApprove(
+                                                    selectedPayment.id
+                                                )
+                                            }
+                                        >
+                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                            Aprobar Gasto
+                                        </Button>
+                                    )}
+                                {selectedPayment.status !== "pendiente" &&
+                                    selectedPayment.status !== "pagado" &&
+                                    selectedPayment.status !== "pagada" && (
+                                        <Button
+                                            onClick={() => {
+                                                setIsDetailModalOpen(false);
+                                                openPaymentModal(
+                                                    selectedPayment
+                                                );
+                                            }}
+                                        >
+                                            <Banknote className="w-4 h-4 mr-2" />{" "}
+                                            Registrar Pago
+                                        </Button>
+                                    )}
+                            </div>
                         </ModalFooter>
                     </div>
                 )}
@@ -2625,6 +2678,18 @@ function ProviderPayments() {
                 cancelText="Cancelar"
                 variant="danger"
                 onConfirm={handleDelete}
+            />
+
+            {/* Confirm Approve Dialog */}
+            <ConfirmDialog
+                open={approveConfirm.open}
+                onClose={() => setApproveConfirm({ open: false, id: null })}
+                title="Aprobar Gasto"
+                description="¿Confirmas que deseas aprobar este gasto? Luego podrás registrar el pago."
+                confirmText="Aprobar"
+                cancelText="Cancelar"
+                variant="success"
+                onConfirm={confirmApprove}
             />
 
             {/* Modal Nueva Nota de Crédito */}

@@ -20,6 +20,7 @@ import {
     Banknote,
     Trash2,
     Lock as LockIcon,
+    Building2,
 } from "lucide-react";
 import {
     Button,
@@ -43,6 +44,7 @@ import ExportButton from "../components/ui/ExportButton";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn, getTodayDate } from "../lib/utils";
+import usePermissionStore from "../stores/permissionStore";
 
 // ============================================
 // HELPERS
@@ -130,9 +132,46 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-// ============================================
+// Normalize transfer types to human-friendly labels
+const formatTransferType = (type) => {
+    if (!type) return "Gasto";
+    const normalized = String(type)
+        .toLowerCase()
+        .replace("(legacy)", "")
+        .trim();
+
+    const map = {
+        gasto: "Gasto",
+        gasto_admin: "Gasto Administrativo",
+        gasto_administrativo: "Gasto Administrativo",
+        gasto_operativo: "Gasto Operativo",
+        factura: "Factura",
+        factura_proveedor: "Factura de Proveedor",
+        factura_servicio: "Factura de Servicio",
+        orden_servicio: "Orden de Servicio",
+        os: "Orden de Servicio",
+        compra: "Compra",
+        compras: "Compra",
+        transferencia: "Transferencia",
+        transfer: "Transferencia",
+        pago: "Pago",
+        parcial: "Pago Parcial",
+        anticipo: "Anticipo",
+        nota_credito: "Nota de Crédito",
+        nc: "Nota de Crédito",
+        ajuste: "Ajuste",
+    };
+
+    if (map[normalized]) return map[normalized];
+
+    return normalized
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+};
+
 // PROVIDER CARD COMPONENT (Sidebar)
-// ============================================
 const ProviderCard = ({ provider, isSelected, onClick }) => {
     const hasDebt = provider.total_debt > 0;
 
@@ -201,6 +240,9 @@ const NC_REASON_OPTIONS = [
 
 const ProviderStatements = () => {
     const navigate = useNavigate();
+    const canApprovePayments = usePermissionStore(
+        (state) => state.canApprovePayments
+    );
     const [searchParams] = useSearchParams();
     const providerIdFromUrl = searchParams.get("provider");
 
@@ -225,6 +267,10 @@ const ProviderStatements = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedTransferIds, setSelectedTransferIds] = useState([]);
     const [paymentToDelete, setPaymentToDelete] = useState(null);
+    const [approveConfirm, setApproveConfirm] = useState({
+        open: false,
+        id: null,
+    });
 
     // Forms
     const [paymentForm, setPaymentForm] = useState({
@@ -393,6 +439,31 @@ const ProviderStatements = () => {
         }
     };
 
+    const handleApprove = (transferId) => {
+        setApproveConfirm({ open: true, id: transferId });
+    };
+
+    const confirmApprove = async () => {
+        if (!approveConfirm.id) return;
+
+        try {
+            await axios.patch(`/transfers/transfers/${approveConfirm.id}/`, {
+                status: "aprobado",
+            });
+            toast.success("Gasto aprobado exitosamente");
+            fetchStatement(selectedProvider?.id);
+            setSelectedTransfer((prev) =>
+                prev && prev.id === approveConfirm.id
+                    ? { ...prev, status: "aprobado" }
+                    : prev
+            );
+        } catch {
+            // El interceptor de axios ya muestra el toast de error
+        } finally {
+            setApproveConfirm({ open: false, id: null });
+        }
+    };
+
     const handleOpenBatchPayment = () => {
         if (selectedTransferIds.length === 0) {
             toast.error("Selecciona al menos una factura para pagar");
@@ -446,6 +517,14 @@ const ProviderStatements = () => {
 
     const handleRegisterBatchPayment = async (e) => {
         e.preventDefault();
+
+        if (!batchPaymentForm.proof_file) {
+            toast.error(
+                "El comprobante es obligatorio para registrar el pago agrupado"
+            );
+            return;
+        }
+
         try {
             setIsSubmitting(true);
             const formData = new FormData();
@@ -495,6 +574,11 @@ const ProviderStatements = () => {
     const handleRegisterPayment = async (e) => {
         e.preventDefault();
         if (!selectedTransfer) return;
+
+        if (!paymentForm.proof_file) {
+            toast.error("El comprobante es obligatorio para registrar el pago");
+            return;
+        }
 
         try {
             setIsSubmitting(true);
@@ -748,6 +832,9 @@ const ProviderStatements = () => {
             header: "Tipo",
             accessor: "type",
             cell: (row) => <Badge variant="outline">{row.type}</Badge>,
+            cell: (row) => (
+                <Badge variant="outline">{formatTransferType(row.type)}</Badge>
+            ),
         },
         {
             header: "Total",
@@ -817,6 +904,30 @@ const ProviderStatements = () => {
                 <div className="flex items-center justify-end gap-1">
                     {row.status !== "pagado" && (
                         <>
+                            {row.status === "pendiente" &&
+                                canApprovePayments() && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleApprove(row.id);
+                                        }}
+                                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                        title="Aprobar"
+                                    >
+                                        <CheckCircle2 className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            {row.status === "pendiente" &&
+                                !canApprovePayments() && (
+                                    <span
+                                        className="p-2 text-slate-300 cursor-not-allowed"
+                                        title="Requiere permiso para aprobar"
+                                    >
+                                        <LockIcon className="w-4 h-4" />
+                                    </span>
+                                )}
                             {row.status === "aprobado" ||
                             row.status === "parcial" ? (
                                 <Button
@@ -1188,160 +1299,227 @@ const ProviderStatements = () => {
             <Modal
                 isOpen={isPaymentModalOpen}
                 onClose={() => setIsPaymentModalOpen(false)}
-                title="Registrar Pago a Proveedor"
+                title="Registrar Pago"
                 size="lg"
             >
-                <form onSubmit={handleRegisterPayment} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Monto a Pagar *</Label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    className="pl-9"
-                                    value={paymentForm.amount}
-                                    onChange={(e) =>
-                                        setPaymentForm({
-                                            ...paymentForm,
-                                            amount: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
+                {selectedTransfer && (
+                    <form
+                        onSubmit={handleRegisterPayment}
+                        className="space-y-6"
+                    >
+                        {/* Resumen del Pago */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                                    <Building2 className="w-5 h-5 text-slate-500" />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                        Proveedor / Beneficiario
+                                    </p>
+                                    <p className="text-sm font-bold text-slate-700 truncate max-w-[200px]">
+                                        {selectedTransfer.provider_name ||
+                                            selectedTransfer.beneficiary_name ||
+                                            selectedProvider?.name ||
+                                            "—"}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                    Monto a Pagar
+                                </p>
+                                <p className="text-xl font-bold text-slate-800 tabular-nums tracking-tight">
+                                    {formatCurrency(
+                                        paymentForm.amount ||
+                                            selectedTransfer.pending_amount ||
+                                            selectedTransfer.amount
+                                    )}
+                                </p>
                             </div>
                         </div>
+
                         <div>
-                            <Label>Fecha de Pago *</Label>
-                            <Input
-                                type="date"
-                                value={paymentForm.payment_date}
-                                onChange={(e) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        payment_date: e.target.value,
-                                    })
-                                }
-                                required
-                            />
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                                Detalle de la Transacción
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Monto a Pagar *
+                                    </Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            className="pl-9"
+                                            value={paymentForm.amount}
+                                            onChange={(e) =>
+                                                setPaymentForm({
+                                                    ...paymentForm,
+                                                    amount: e.target.value,
+                                                })
+                                            }
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Fecha de Pago *
+                                    </Label>
+                                    <Input
+                                        type="date"
+                                        value={paymentForm.payment_date}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                payment_date: e.target.value,
+                                            })
+                                        }
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Método de Pago *
+                                    </Label>
+                                    <SelectERP
+                                        value={paymentForm.payment_method}
+                                        onChange={(val) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                payment_method: val,
+                                                bank:
+                                                    val === "efectivo"
+                                                        ? ""
+                                                        : paymentForm.bank,
+                                            })
+                                        }
+                                        options={[
+                                            {
+                                                id: "transferencia",
+                                                name: "Transferencia Bancaria",
+                                            },
+                                            { id: "cheque", name: "Cheque" },
+                                            {
+                                                id: "efectivo",
+                                                name: "Efectivo",
+                                            },
+                                            { id: "tarjeta", name: "Tarjeta" },
+                                        ]}
+                                        getOptionLabel={(opt) => opt.name}
+                                        getOptionValue={(opt) => opt.id}
+                                    />
+                                </div>
+
+                                <div>
+                                    <Label className="mb-1.5 block">
+                                        Referencia / N° Cheque
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.reference}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                reference: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: Transferencia #123456 o Cheque #001"
+                                    />
+                                </div>
+
+                                {/* Banco - Solo visible para transferencia, cheque o tarjeta */}
+                                {paymentForm.payment_method !== "efectivo" && (
+                                    <div className="sm:col-span-2">
+                                        <Label className="mb-1.5 block">
+                                            Banco de Salida
+                                        </Label>
+                                        <SelectERP
+                                            value={paymentForm.bank}
+                                            onChange={(val) =>
+                                                setPaymentForm({
+                                                    ...paymentForm,
+                                                    bank: val,
+                                                })
+                                            }
+                                            options={[
+                                                {
+                                                    id: "",
+                                                    name: "Seleccionar banco...",
+                                                },
+                                                ...banks.map((b) => ({
+                                                    id: String(b.id),
+                                                    name: b.name,
+                                                })),
+                                            ]}
+                                            getOptionLabel={(opt) => opt.name}
+                                            getOptionValue={(opt) => opt.id}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block" required>
+                                        Comprobante de Pago *
+                                    </Label>
+                                    <FileUpload
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        onChange={(file) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                proof_file: file,
+                                            })
+                                        }
+                                        value={paymentForm.proof_file}
+                                        helperText="Adjuntar comprobante de transferencia o cheque (requerido)"
+                                    />
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <Label className="mb-1.5 block">
+                                        Notas
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.notes}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                notes: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Observaciones adicionales..."
+                                    />
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Método de Pago *</Label>
-                            <SelectERP
-                                value={paymentForm.payment_method}
-                                onChange={(val) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        payment_method: val,
-                                        bank:
-                                            val === "efectivo"
-                                                ? ""
-                                                : paymentForm.bank,
-                                    })
-                                }
-                                options={[
-                                    {
-                                        id: "transferencia",
-                                        name: "Transferencia Bancaria",
-                                    },
-                                    { id: "cheque", name: "Cheque" },
-                                    { id: "efectivo", name: "Efectivo" },
-                                    { id: "tarjeta", name: "Tarjeta" },
-                                ]}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                            />
-                        </div>
-                        <div>
-                            <Label>Referencia / No. Cheque</Label>
-                            <Input
-                                value={paymentForm.reference}
-                                onChange={(e) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        reference: e.target.value,
-                                    })
-                                }
-                                placeholder="Ej: TRF-12345"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Banco - Solo visible para transferencia, cheque o tarjeta */}
-                    {["transferencia", "cheque", "tarjeta"].includes(
-                        paymentForm.payment_method
-                    ) && (
-                        <div>
-                            <Label>Banco *</Label>
-                            <SelectERP
-                                value={paymentForm.bank}
-                                onChange={(val) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        bank: val,
-                                    })
-                                }
-                                options={[
-                                    { id: "", name: "Seleccionar banco" },
-                                    ...banks.map((b) => ({
-                                        id: String(b.id),
-                                        name: b.name,
-                                    })),
-                                ]}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                searchable
-                                clearable
-                                helperText="Cuenta bancaria desde donde se realizará el pago"
-                            />
-                        </div>
-                    )}
-
-                    <div>
-                        <Label>Comprobante (Opcional)</Label>
-                        <FileUpload
-                            accept=".pdf,.jpg,.png"
-                            onChange={(file) =>
-                                setPaymentForm({
-                                    ...paymentForm,
-                                    proof_file: file,
-                                })
-                            }
-                            value={paymentForm.proof_file}
-                        />
-                    </div>
-
-                    <div>
-                        <Label>Notas</Label>
-                        <Input
-                            value={paymentForm.notes}
-                            onChange={(e) =>
-                                setPaymentForm({
-                                    ...paymentForm,
-                                    notes: e.target.value,
-                                })
-                            }
-                            placeholder="Observaciones adicionales..."
-                        />
-                    </div>
-
-                    <ModalFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsPaymentModalOpen(false)}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button type="submit" disabled={isSubmitting}>
-                            {isSubmitting ? "Registrando..." : "Registrar Pago"}
-                        </Button>
-                    </ModalFooter>
-                </form>
+                        <ModalFooter>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setIsPaymentModalOpen(false)}
+                                className="text-slate-500 font-semibold"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200 transition-all active:scale-95 min-w-[160px]"
+                            >
+                                {isSubmitting
+                                    ? "Procesando..."
+                                    : "Confirmar Pago"}
+                            </Button>
+                        </ModalFooter>
+                    </form>
+                )}
             </Modal>
 
             {/* Credit Note Modal */}
@@ -1546,7 +1724,9 @@ const ProviderStatements = () => {
                                 </div>
                                 <div className="flex items-center gap-2 mt-2">
                                     <Badge variant="outline">
-                                        {selectedTransfer.type || "Gasto"}
+                                        {formatTransferType(
+                                            selectedTransfer.type
+                                        )}
                                     </Badge>
                                     <StatusBadge
                                         status={selectedTransfer.status}
@@ -1890,6 +2070,45 @@ const ProviderStatements = () => {
                                     </div>
                                 </div>
                             )}
+
+                        <ModalFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsDetailModalOpen(false)}
+                            >
+                                Cerrar
+                            </Button>
+                            <div className="flex items-center gap-2">
+                                {selectedTransfer.status === "pendiente" &&
+                                    canApprovePayments() && (
+                                        <Button
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                            onClick={() =>
+                                                handleApprove(
+                                                    selectedTransfer.id
+                                                )
+                                            }
+                                        >
+                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                            Aprobar
+                                        </Button>
+                                    )}
+                                {selectedTransfer.status !== "pendiente" &&
+                                    selectedTransfer.status !== "pagado" && (
+                                        <Button
+                                            onClick={() => {
+                                                setIsDetailModalOpen(false);
+                                                openPaymentModal(
+                                                    selectedTransfer
+                                                );
+                                            }}
+                                        >
+                                            <Banknote className="w-4 h-4 mr-2" />
+                                            Registrar Pago
+                                        </Button>
+                                    )}
+                            </div>
+                        </ModalFooter>
                     </div>
                 ) : (
                     <div className="p-4 text-center">Cargando detalles...</div>
@@ -2122,7 +2341,9 @@ const ProviderStatements = () => {
                     )}
 
                     <div>
-                        <Label>Comprobante Global (Opcional)</Label>
+                        <Label className="label-required">
+                            Comprobante Global *
+                        </Label>
                         <FileUpload
                             accept=".pdf,.jpg,.png"
                             onChange={(file) =>
@@ -2132,6 +2353,7 @@ const ProviderStatements = () => {
                                 })
                             }
                             value={batchPaymentForm.proof_file}
+                            helperText="Adjunta el comprobante del pago agrupado (requerido)"
                         />
                     </div>
 
@@ -2179,6 +2401,17 @@ const ProviderStatements = () => {
                 }? Esta acción no se puede deshacer.`}
                 confirmText="Eliminar"
                 variant="danger"
+            />
+
+            <ConfirmDialog
+                open={approveConfirm.open}
+                onClose={() => setApproveConfirm({ open: false, id: null })}
+                onConfirm={confirmApprove}
+                title="Aprobar Gasto"
+                description="¿Confirmas que deseas aprobar este gasto? Luego podrás registrar el pago."
+                confirmText="Aprobar"
+                cancelText="Cancelar"
+                variant="success"
             />
         </div>
     );

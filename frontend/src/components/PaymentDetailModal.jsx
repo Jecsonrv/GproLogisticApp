@@ -120,7 +120,7 @@ export function PaymentDetailModal({ isOpen, onClose, payment, onUpdate }) {
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title="Detalle del Pago"
+            title="Detalle del Gasto"
             size="lg"
         >
             <div className="space-y-5">
