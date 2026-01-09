@@ -606,10 +606,10 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 if changes_log:
                     OrderHistory.objects.create(
                         service_order=order,
-                        changed_by=request.user,
-                        change_type='expense_config',
-                        description=f'Actualizada configuración de {len(changes_log)} gasto(s) en Calculadora',
-                        changes=changes_log
+                        event_type='updated',
+                        description=f'Actualizada configuración de {len(changes_log)} gasto(s) en Calculadora de Gastos',
+                        user=request.user,
+                        metadata={'changes': changes_log}
                     )
 
             # Preparar respuesta
