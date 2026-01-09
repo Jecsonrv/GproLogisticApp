@@ -461,66 +461,107 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     def update_expense_configurations(self, request, pk=None):
         """
         Actualiza la configuración de cobro para gastos (Transfers) en la Calculadora de Gastos.
-
+        
         CAMPOS PERMITIDOS POR GASTO:
-        - markup_percentage: Margen de utilidad (%)
-        - iva_type: Tratamiento fiscal (gravado/exento/no_sujeto)
+        - markup_percentage: Margen de utilidad (%) - debe ser >= 0
+        - iva_type: Tratamiento fiscal (gravado/no_sujeto)
         - applies_iva: Legacy boolean (se sincroniza con iva_type)
-
+        
         RESTRICCIONES:
         - El monto base (amount) NO es editable desde aquí
         - Si el gasto ya está facturado con DTE, no se puede modificar
-
-        SINCRONIZACIÓN:
-        - Los cambios se reflejan automáticamente en CXC si el gasto está vinculado a una factura
         """
         order = self.get_object()
         configs = request.data.get('configs', [])
 
         if not configs:
-            return Response({'message': 'No hay configuraciones para guardar'}, status=status.HTTP_200_OK)
+            return Response(
+                {'message': 'No hay configuraciones para guardar'}, 
+                status=status.HTTP_200_OK
+            )
 
         try:
             from apps.transfers.models import Transfer
             from apps.orders.models import OrderHistory
-            from decimal import Decimal
+            from decimal import Decimal, InvalidOperation
             from django.db import transaction
 
             updated_count = 0
             synced_invoices = set()
             changes_log = []
+            errors = []
 
             with transaction.atomic():
-                for item in configs:
+                for idx, item in enumerate(configs):
                     transfer_id = item.get('expense_id')
                     if not transfer_id:
+                        errors.append(f"Configuración {idx + 1}: falta expense_id")
                         continue
 
                     try:
                         transfer = Transfer.objects.select_for_update().get(
                             id=transfer_id,
-                            service_order=order
+                            service_order=order,
+                            is_deleted=False
                         )
                     except Transfer.DoesNotExist:
+                        errors.append(f"Gasto ID {transfer_id}: no encontrado")
                         continue
 
                     # Verificar si el gasto puede ser editado
                     if not transfer.is_billing_config_editable():
-                        changes_log.append({
-                            'transfer_id': transfer_id,
-                            'status': 'error',
-                            'message': 'Gasto con DTE emitido, no editable'
-                        })
+                        errors.append(
+                            f"Gasto '{transfer.description[:30]}': ya facturado con DTE, no editable"
+                        )
                         continue
 
-                    # Obtener valores anteriores
+                    # Obtener valores anteriores para el log
                     old_markup = transfer.customer_markup_percentage
-                    old_iva_type = getattr(transfer, 'customer_iva_type', 'exento')
+                    old_iva_type = getattr(transfer, 'customer_iva_type', 'no_sujeto')
 
-                    # Actualizar valores
-                    new_markup = Decimal(str(item.get('markup_percentage', 0)))
+                    # Validar y convertir markup_percentage
+                    try:
+                        markup_value = item.get('markup_percentage', 0)
+                        
+                        # Convertir a Decimal de forma segura
+                        if isinstance(markup_value, str):
+                            markup_value = markup_value.strip()
+                            if markup_value == '' or markup_value == 'null':
+                                markup_value = 0
+                        
+                        new_markup = Decimal(str(float(markup_value)))
+                        
+                        # Validar rango
+                        if new_markup < 0:
+                            errors.append(
+                                f"Gasto ID {transfer_id}: margen no puede ser negativo"
+                            )
+                            continue
+                        
+                        # Límite razonable para evitar errores
+                        if new_markup > 10000:
+                            errors.append(
+                                f"Gasto ID {transfer_id}: margen excede límite máximo (10000%)"
+                            )
+                            continue
+                            
+                    except (ValueError, InvalidOperation, TypeError) as e:
+                        errors.append(
+                            f"Gasto ID {transfer_id}: valor de margen inválido '{markup_value}'"
+                        )
+                        continue
+
+                    # Obtener iva_type
                     new_applies_iva = item.get('applies_iva', False)
-                    new_iva_type = item.get('iva_type', 'gravado' if new_applies_iva else 'exento')
+                    new_iva_type = item.get('iva_type', 'gravado' if new_applies_iva else 'no_sujeto')
+                    
+                    # Validar iva_type
+                    valid_iva_types = ['gravado', 'no_sujeto']
+                    if new_iva_type not in valid_iva_types:
+                        errors.append(
+                            f"Gasto ID {transfer_id}: tipo de IVA inválido '{new_iva_type}'"
+                        )
+                        continue
 
                     # Aplicar cambios
                     transfer.customer_markup_percentage = new_markup
@@ -530,22 +571,29 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
                     updated_count += 1
 
-                    # Registrar cambio
-                    change_entry = {
-                        'transfer_id': transfer_id,
-                        'description': transfer.description[:50],
-                        'old_markup': str(old_markup),
-                        'new_markup': str(new_markup),
-                        'old_iva_type': old_iva_type,
-                        'new_iva_type': new_iva_type
-                    }
-                    changes_log.append(change_entry)
+                    # Registrar cambio solo si hubo modificación
+                    if old_markup != new_markup or old_iva_type != new_iva_type:
+                        change_entry = {
+                            'transfer_id': transfer_id,
+                            'description': transfer.description[:50],
+                            'changes': {
+                                'markup': {
+                                    'old': float(old_markup),
+                                    'new': float(new_markup)
+                                },
+                                'iva_type': {
+                                    'old': old_iva_type,
+                                    'new': new_iva_type
+                                }
+                            }
+                        }
+                        changes_log.append(change_entry)
 
                     # Si el gasto está vinculado a una factura, marcar para sincronizar
                     if transfer.invoice:
                         synced_invoices.add(transfer.invoice_id)
 
-                # Sincronizar facturas afectadas (bidireccional)
+                # Sincronizar facturas afectadas
                 from apps.orders.models import Invoice
                 for invoice_id in synced_invoices:
                     try:
@@ -554,27 +602,37 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                     except Invoice.DoesNotExist:
                         pass
 
-                # Registrar en historial de la OS
-                if updated_count > 0:
+                # Registrar en historial de la OS si hubo cambios
+                if changes_log:
                     OrderHistory.objects.create(
                         service_order=order,
-                        event_type='updated',
-                        description=f'Configuración de cobro actualizada para {updated_count} gastos',
-                        user=request.user,
-                        metadata={'changes': changes_log}
+                        changed_by=request.user,
+                        change_type='expense_config',
+                        description=f'Actualizada configuración de {len(changes_log)} gasto(s) en Calculadora',
+                        changes=changes_log
                     )
 
-            return Response({
-                'message': f'Configuración de gastos guardada correctamente',
+            # Preparar respuesta
+            response_data = {
                 'updated_count': updated_count,
                 'synced_invoices': len(synced_invoices),
-                'changes': changes_log
-            }, status=status.HTTP_200_OK)
+                'changes_log': changes_log,
+            }
+            
+            if errors:
+                response_data['warnings'] = errors
+                
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    'error': f'Error al actualizar configuraciones: {str(e)}',
+                    'detail': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @action(detail=False, methods=['get'])
