@@ -74,6 +74,9 @@ INSTALLED_APPS = [
     'apps.transfers',
     'apps.dashboard',
     'apps.petty_cash',
+
+    # Utilities
+    'django_cleanup.apps.CleanupConfig',
 ]
 
 MIDDLEWARE = [

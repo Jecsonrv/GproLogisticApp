@@ -29,6 +29,7 @@ decorator==5.2.1
 diff-match-patch==20241021
 dj-database-url==2.1.0
 Django==5.0.1
+django-cleanup==8.1.0
 django-cors-headers==4.3.1
 django-debug-toolbar==4.4.6
 django-extensions==3.2.3
