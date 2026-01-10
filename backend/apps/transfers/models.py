@@ -595,9 +595,9 @@ class Transfer(SoftDeleteModel):
             month_num = self.transaction_date.month if self.transaction_date else timezone.now().month
             self.mes = months[month_num]
 
-        # Si es pass-through (reembolso), forzar margen a 0%
-        if self.is_pass_through:
-            self.customer_markup_percentage = Decimal('0.00')
+        # NOTA: Ya no forzamos margen a 0% para pass-through
+        # El margen ahora es configurable desde la Calculadora de Gastos
+        # La marca is_pass_through solo se usa para identificar el tipo de factura original
 
         # Sincronizar campo legacy customer_applies_iva con customer_iva_type
         self.customer_applies_iva = (self.customer_iva_type == 'gravado')
