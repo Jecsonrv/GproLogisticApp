@@ -60,7 +60,7 @@ const menuSections = [
                 name: "Caja Chica",
                 path: "/petty-cash",
                 icon: Wallet,
-                module: "dashboard", // Temporalmente accesible para todos (o usar provider_payments)
+                module: "petty_cash", // Solo admin y operativo2
             },
             {
                 name: "Facturación y CXC",

@@ -155,12 +155,17 @@ const InvoiceItemsEditor = ({
                 cost_amount: item.cost_amount,
             });
         } else {
+            // Para gastos (expenses), soportamos gravado, exento y no_sujeto
+            let ivaType = item.iva_type || item.customer_iva_type;
+            // Si no hay tipo de IVA, usar fallback
+            if (!ivaType) {
+                ivaType = item.applies_iva ? "gravado" : "no_sujeto";
+            }
             setEditForm({
                 amount: item.cost,
                 markup_percentage: item.markup_percentage,
                 applies_iva: item.applies_iva,
-                iva_type:
-                    item.iva_type || (item.applies_iva ? "gravado" : "exento"),
+                iva_type: ivaType,
             });
         }
     };
@@ -205,8 +210,7 @@ const InvoiceItemsEditor = ({
                 customer_markup_percentage: parseFloat(
                     editForm.markup_percentage || 0
                 ),
-                iva_type: editForm.iva_type,
-                customer_applies_iva: editForm.iva_type === "gravado", // Keep for compatibility
+                customer_iva_type: editForm.iva_type,
             });
             toast.success("Gasto actualizado correctamente");
             handleCancelEdit();
@@ -842,6 +846,9 @@ const InvoiceItemsEditor = ({
                                                                 charge.iva_type ===
                                                                 "gravado"
                                                                     ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                    : charge.iva_type ===
+                                                                      "exento"
+                                                                    ? "bg-amber-50 text-amber-700 border-amber-200"
                                                                     : "bg-slate-50 text-slate-600 border-slate-200"
                                                             }`}
                                                         >
@@ -909,10 +916,10 @@ const InvoiceItemsEditor = ({
                                 {/* Gastos */}
                                 {billedExpenses.map((expense) => {
                                     const costAmount = parseFloat(
-                                        expense.amount || 0
+                                        expense.cost || 0
                                     );
                                     const markupPercent = parseFloat(
-                                        expense.customer_markup_percentage || 0
+                                        expense.markup_percentage || 0
                                     );
                                     const basePrice =
                                         costAmount * (1 + markupPercent / 100);
@@ -1138,18 +1145,27 @@ const InvoiceItemsEditor = ({
                                                         <Badge
                                                             variant="outline"
                                                             className={`text-[10px] px-1.5 py-0.5 font-medium ${
-                                                                expense.customer_applies_iva
+                                                                expense.iva_type ===
+                                                                "gravado"
                                                                     ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                    : expense.iva_type ===
+                                                                      "exento"
+                                                                    ? "bg-amber-50 text-amber-700 border-amber-200"
                                                                     : "bg-slate-50 text-slate-600 border-slate-200"
                                                             }`}
                                                         >
-                                                            {expense.customer_applies_iva
+                                                            {expense.iva_type ===
+                                                            "gravado"
                                                                 ? "Gravado 13%"
+                                                                : expense.iva_type ===
+                                                                  "exento"
+                                                                ? "Exento"
                                                                 : "No Sujeto"}
                                                         </Badge>
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                                                        {expense.customer_applies_iva &&
+                                                        {expense.iva_type ===
+                                                            "gravado" &&
                                                         basePrice > 0 ? (
                                                             formatCurrency(
                                                                 basePrice * 0.13

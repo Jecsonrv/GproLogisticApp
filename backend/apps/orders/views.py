@@ -51,12 +51,9 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
         # Row-Level Security (IDOR protection)
         if user.is_authenticated:
-            # Si es admin o operativo2, ver todo
-            if user.role in ['admin', 'operativo2']:
+            # Todos los roles operativos pueden ver todas las órdenes
+            if user.role in ['admin', 'operativo2', 'operativo']:
                 return queryset
-            # Si es operativo básico, filtrar por órdenes asignadas o creadas
-            if user.role == 'operativo':
-                return queryset.filter(Q(customs_agent=user) | Q(created_by=user))
 
         # Fallback de seguridad
         return queryset.none()
@@ -556,7 +553,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                     new_iva_type = item.get('iva_type', 'gravado' if new_applies_iva else 'no_sujeto')
                     
                     # Validar iva_type
-                    valid_iva_types = ['gravado', 'no_sujeto']
+                    valid_iva_types = ['gravado', 'exento', 'no_sujeto']
                     if new_iva_type not in valid_iva_types:
                         errors.append(
                             f"Gasto ID {transfer_id}: tipo de IVA inválido '{new_iva_type}'"

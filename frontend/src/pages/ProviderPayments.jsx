@@ -339,6 +339,9 @@ function ProviderPayments() {
     const canApprovePayments = usePermissionStore(
         (state) => state.canApprovePayments
     );
+    const canRegisterPayments = usePermissionStore(
+        (state) => state.canRegisterPayments
+    );
 
     // Search and filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -2463,7 +2466,8 @@ function ProviderPayments() {
                                     )}
                                 {selectedPayment.status !== "pendiente" &&
                                     selectedPayment.status !== "pagado" &&
-                                    selectedPayment.status !== "pagada" && (
+                                    selectedPayment.status !== "pagada" &&
+                                    canRegisterPayments() && (
                                         <Button
                                             onClick={() => {
                                                 setIsDetailModalOpen(false);

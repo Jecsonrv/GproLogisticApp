@@ -272,7 +272,8 @@ class TransferListSerializer(serializers.ModelSerializer):
                   'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number',
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
-                  'customer_markup_percentage', 'customer_applies_iva',
+                  'customer_markup_percentage', 'customer_applies_iva', 'customer_iva_type',
+                  'amount_locked', 'billing_status',
                   'invoice_id', 'invoice_number_client', 'is_billed', 'credit_notes_applied',
                   'transaction_date', 'payment_date', 'created_at', 'created_by', 'created_by_username', 'created_by_name']
 

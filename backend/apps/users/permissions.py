@@ -100,15 +100,20 @@ MODULE_PERMISSIONS = {
     # Módulos accesibles por todos los operativos
     'dashboard': ['admin', 'operativo2', 'operativo'],
     'service_orders': ['admin', 'operativo2', 'operativo'],
-    'provider_payments': ['admin', 'operativo2', 'operativo'],  # Ver/Editar, NO aprobar
-    'catalogs': ['admin', 'operativo2', 'operativo'],
-    'clients': ['admin', 'operativo2', 'operativo'],
-    'services': ['admin', 'operativo2', 'operativo'],
+    'provider_payments': ['admin', 'operativo2', 'operativo'],  # Ver, pero aprobar/registrar solo op2+
+    
+    # Catálogos, Clientes, Servicios - solo admin
+    'catalogs': ['admin'],
+    'clients': ['admin'],
+    'services': ['admin'],
     
     # Módulos restringidos a operativo2 y admin
+    'petty_cash': ['admin', 'operativo2'],
     'invoicing': ['admin', 'operativo2'],
     'account_statements': ['admin', 'operativo2'],
-    'provider_statements': ['admin', 'operativo2'],
+    
+    # Cuentas por pagar - solo admin por ahora (operativo2 puede acceder en el futuro)
+    'provider_statements': ['admin'],
     
     # Módulos exclusivos de admin
     'users': ['admin'],
@@ -117,6 +122,7 @@ MODULE_PERMISSIONS = {
 # Acciones especiales con permisos específicos
 ACTION_PERMISSIONS = {
     'approve_payment': ['admin', 'operativo2'],  # Operativo básico NO puede
+    'register_payment': ['admin', 'operativo2'],  # Operativo básico NO puede registrar/pagar
     'delete_invoice': ['admin'],
     'manage_users': ['admin'],
     'export_data': ['admin', 'operativo2'],
@@ -178,6 +184,7 @@ def get_user_permissions(user):
         'role': user_role,
         'is_admin': user_role == 'admin',
         'can_approve_payments': user_role in ['admin', 'operativo2'],
+        'can_register_payments': user_role in ['admin', 'operativo2'],
         'can_manage_users': user_role == 'admin',
         'can_access_finance': user_role in ['admin', 'operativo2'],
     }

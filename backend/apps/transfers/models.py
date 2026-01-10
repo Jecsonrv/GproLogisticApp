@@ -385,6 +385,7 @@ class Transfer(SoftDeleteModel):
     # Tipos de tratamiento fiscal para cobro al cliente
     IVA_TYPE_CHOICES = (
         ('gravado', 'Gravado (13% IVA)'),
+        ('exento', 'Exento'),
         ('no_sujeto', 'No Sujeto (Exportación)'),
     )
 
@@ -557,7 +558,7 @@ class Transfer(SoftDeleteModel):
 
         # Validar customer_iva_type
         if hasattr(self, 'customer_iva_type') and self.customer_iva_type:
-            valid_types = ['gravado', 'no_sujeto']
+            valid_types = ['gravado', 'exento', 'no_sujeto']
             if self.customer_iva_type not in valid_types:
                 raise ValidationError({
                     'customer_iva_type': f'Tipo de IVA inválido: {self.customer_iva_type}. Valores permitidos: {", ".join(valid_types)}'
@@ -683,6 +684,7 @@ class Transfer(SoftDeleteModel):
         """Retorna etiqueta corta para UI"""
         labels = {
             'gravado': 'IVA 13%',
+            'exento': 'Exento',
             'no_sujeto': 'No Sujeto'
         }
         return labels.get(self.customer_iva_type, 'N/A')

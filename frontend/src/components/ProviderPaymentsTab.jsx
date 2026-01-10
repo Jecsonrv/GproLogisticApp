@@ -41,6 +41,10 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
     const canApprovePayments = usePermissionStore(
         (state) => state.canApprovePayments
     );
+    // RBAC: Verificar si el usuario puede registrar pagos (pagar facturas)
+    const canRegisterPayments = usePermissionStore(
+        (state) => state.canRegisterPayments
+    );
     const [isAddingPayment, setIsAddingPayment] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingPaymentId, setEditingPaymentId] = useState(null);
@@ -483,7 +487,8 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                             <Lock className="h-4 w-4" />
                         </span>
                     )}
-                    {row.status === "aprobado" && (
+                    {/* RBAC: Marcar como pagado - Solo visible si tiene permiso */}
+                    {row.status === "aprobado" && canRegisterPayments() && (
                         <Button
                             variant="ghost"
                             size="sm"
@@ -493,6 +498,15 @@ const ProviderPaymentsTab = ({ orderId, onUpdate }) => {
                         >
                             <DollarSign className="h-4 w-4" />
                         </Button>
+                    )}
+                    {/* RBAC: Mostrar icono de bloqueo si no puede registrar pagos */}
+                    {row.status === "aprobado" && !canRegisterPayments() && (
+                        <span
+                            className="p-2 text-slate-300 cursor-not-allowed"
+                            title="No tiene permisos para registrar pagos"
+                        >
+                            <Lock className="h-4 w-4" />
+                        </span>
                     )}
                     <Button
                         variant="ghost"

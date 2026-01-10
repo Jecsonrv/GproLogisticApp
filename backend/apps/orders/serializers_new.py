@@ -328,6 +328,7 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
 
         gravado_subtotal = Decimal('0.00')
         gravado_iva = Decimal('0.00')
+        exento_subtotal = Decimal('0.00')
         no_sujeto_subtotal = Decimal('0.00')
 
         for transfer in transfers:
@@ -337,10 +338,12 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
             if iva_type == 'gravado':
                 gravado_subtotal += base_price
                 gravado_iva += transfer.get_customer_iva_amount()
+            elif iva_type == 'exento':
+                exento_subtotal += base_price
             else:
                 no_sujeto_subtotal += base_price
 
-        total_subtotal = gravado_subtotal + no_sujeto_subtotal
+        total_subtotal = gravado_subtotal + exento_subtotal + no_sujeto_subtotal
         total_iva = gravado_iva
         total_con_iva = total_subtotal + total_iva
 
@@ -349,6 +352,11 @@ class ServiceOrderDetailSerializer(serializers.ModelSerializer):
                 'subtotal': float(gravado_subtotal),
                 'iva': float(gravado_iva),
                 'total': float(gravado_subtotal + gravado_iva)
+            },
+            'exento': {
+                'subtotal': float(exento_subtotal),
+                'iva': 0.0,
+                'total': float(exento_subtotal)
             },
             'no_sujeto': {
                 'subtotal': float(no_sujeto_subtotal),
@@ -641,13 +649,15 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             cost = t.amount
             base_price = cost * (1 + markup / Decimal('100.00'))
             
-            if t.customer_applies_iva:
+            # Obtener tipo de IVA: usar customer_iva_type o fallback a no_sujeto
+            iva_type = getattr(t, 'customer_iva_type', None)
+            if not iva_type:
+                iva_type = 'gravado' if t.customer_applies_iva else 'no_sujeto'
+            
+            if iva_type == 'gravado':
                 iva = base_price * Decimal('0.13')
             else:
                 iva = Decimal('0.00')
-            
-            # Obtener tipo de IVA, fallback a lógica antigua si no existe
-            iva_type = getattr(t, 'customer_iva_type', 'gravado' if t.customer_applies_iva else 'exento')
             
             result.append({
                 'id': t.id,
@@ -657,6 +667,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
                 'markup_percentage': str(markup),
                 'applies_iva': t.customer_applies_iva,
                 'iva_type': iva_type,
+                'customer_iva_type': iva_type,  # También exponer como customer_iva_type para consistencia
                 'subtotal': str(base_price),
                 'iva_amount': str(iva),
                 'total': str(base_price + iva)

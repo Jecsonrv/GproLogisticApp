@@ -20,15 +20,18 @@ const ROLE_PERMISSIONS = {
             account_statements: true,
             provider_statements: true,
             users: true,
+            petty_cash: true,
         },
         actions: {
             approve_payment: true,
+            register_payment: true,
             delete_invoice: true,
             manage_users: true,
             export_data: true,
         },
         is_admin: true,
         can_approve_payments: true,
+        can_register_payments: true,
         can_manage_users: true,
         can_access_finance: true,
     },
@@ -37,22 +40,25 @@ const ROLE_PERMISSIONS = {
             dashboard: true,
             service_orders: true,
             provider_payments: true,
-            catalogs: true,
-            clients: true,
-            services: true,
+            catalogs: false, // NO acceso a catálogos
+            clients: false, // NO acceso a clientes
+            services: false, // NO acceso a servicios
             invoicing: true,
             account_statements: true,
-            provider_statements: true,
+            provider_statements: false, // NO acceso a cuentas por pagar (por ahora)
             users: false, // NO acceso a usuarios
+            petty_cash: true,
         },
         actions: {
             approve_payment: true,
+            register_payment: true,
             delete_invoice: false,
             manage_users: false,
             export_data: true,
         },
         is_admin: false,
         can_approve_payments: true,
+        can_register_payments: true,
         can_manage_users: false,
         can_access_finance: true,
     },
@@ -60,23 +66,26 @@ const ROLE_PERMISSIONS = {
         modules: {
             dashboard: true,
             service_orders: true,
-            provider_payments: true, // Puede ver/editar, pero NO aprobar
-            catalogs: true,
-            clients: true,
-            services: true,
+            provider_payments: true, // Puede ver, pero NO aprobar ni registrar pagos
+            catalogs: false, // NO acceso a catálogos
+            clients: false, // NO acceso a clientes
+            services: false, // NO acceso a servicios
             invoicing: false, // NO acceso
             account_statements: false, // NO acceso
             provider_statements: false, // NO acceso
             users: false, // NO acceso
+            petty_cash: false, // NO acceso
         },
         actions: {
             approve_payment: false, // RESTRICCIÓN CRÍTICA
+            register_payment: false, // RESTRICCIÓN CRÍTICA - No puede registrar/pagar facturas
             delete_invoice: false,
             manage_users: false,
             export_data: false,
         },
         is_admin: false,
         can_approve_payments: false,
+        can_register_payments: false,
         can_manage_users: false,
         can_access_finance: false,
     },
@@ -87,6 +96,7 @@ export const ROUTE_TO_MODULE = {
     "/": "dashboard",
     "/service-orders": "service_orders",
     "/provider-payments": "provider_payments",
+    "/petty-cash": "petty_cash",
     "/catalogs": "catalogs",
     "/clients": "clients",
     "/services": "services",
@@ -182,6 +192,15 @@ const usePermissionStore = create((set, get) => ({
     canApprovePayments: () => {
         const { permissions } = get();
         return permissions?.can_approve_payments === true;
+    },
+
+    /**
+     * Verificar si puede registrar pagos (pagar facturas de costo)
+     * Solo admin y operativo2 pueden
+     */
+    canRegisterPayments: () => {
+        const { permissions } = get();
+        return permissions?.can_register_payments === true;
     },
 
     /**

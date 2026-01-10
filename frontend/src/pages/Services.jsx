@@ -271,9 +271,7 @@ const Services = () => {
             fetchServices();
             handleCloseModal();
         } catch {
-            toast.error(
-                "No se pudo guardar el servicio."
-            );
+            toast.error("No se pudo guardar el servicio.");
         }
     };
 
@@ -1069,6 +1067,10 @@ const Services = () => {
                                         {
                                             id: "gravado",
                                             name: "Gravado (13% IVA)",
+                                        },
+                                        {
+                                            id: "exento",
+                                            name: "Exento",
                                         },
                                         { id: "no_sujeto", name: "No Sujeto" },
                                     ]}

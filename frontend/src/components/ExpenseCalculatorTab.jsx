@@ -42,6 +42,7 @@ const ExpenseCalculatorTab = ({
     // Tipos de IVA según normativa salvadoreña
     const IVA_TYPES = [
         { value: "gravado", label: "Gravado (13%)", rate: 0.13 },
+        { value: "exento", label: "Exento", rate: 0 },
         { value: "no_sujeto", label: "No Sujeto", rate: 0 },
     ];
 
@@ -101,7 +102,9 @@ const ExpenseCalculatorTab = ({
 
                 initialAdjustments[exp.id] = {
                     // Asegurar conversión a número
-                    markup_percentage: parseFloat(exp.customer_markup_percentage || 0),
+                    markup_percentage: parseFloat(
+                        exp.customer_markup_percentage || 0
+                    ),
                     iva_type: ivaType,
                     amount_locked: exp.amount_locked || false,
                     is_billed: !!exp.invoice_id,
@@ -146,15 +149,15 @@ const ExpenseCalculatorTab = ({
     const updateAdjustment = (expenseId, field, value) => {
         setExpenseAdjustments((prev) => {
             const currentAdjustment = prev[expenseId] || {};
-            
+
             // Validar y convertir markup_percentage
             let finalValue = value;
-            if (field === 'markup_percentage') {
+            if (field === "markup_percentage") {
                 // Convertir a número y validar
                 const numValue = parseFloat(value);
                 finalValue = isNaN(numValue) ? 0 : Math.max(0, numValue); // No permitir negativos
             }
-            
+
             return {
                 ...prev,
                 [expenseId]: {
@@ -168,33 +171,54 @@ const ExpenseCalculatorTab = ({
     const handleReset = () => {
         const resetAdjustments = {};
         expenses.forEach((exp) => {
-            resetAdjustments[exp.id] = {
-                markup_percentage: 0,
-                iva_type:
-                    clientType === "internacional" ? "no_sujeto" : "no_sujeto", // Default seguro
-                amount_locked: exp.amount_locked || false,
-                is_billed: !!exp.invoice_id,
-            };
+            const isBilled = !!exp.invoice_id;
+            // Solo resetear gastos NO facturados, mantener los facturados intactos
+            if (isBilled) {
+                // Mantener valores originales para gastos ya facturados
+                resetAdjustments[exp.id] = {
+                    markup_percentage: parseFloat(
+                        exp.customer_markup_percentage || 0
+                    ),
+                    iva_type:
+                        exp.customer_iva_type ||
+                        (exp.customer_applies_iva ? "gravado" : "no_sujeto"),
+                    amount_locked: exp.amount_locked || false,
+                    is_billed: true,
+                };
+            } else {
+                // Resetear solo los no facturados
+                resetAdjustments[exp.id] = {
+                    markup_percentage: 0,
+                    iva_type:
+                        clientType === "internacional"
+                            ? "no_sujeto"
+                            : "no_sujeto",
+                    amount_locked: exp.amount_locked || false,
+                    is_billed: false,
+                };
+            }
         });
         setExpenseAdjustments(resetAdjustments);
         setConfirmReset(false);
-        toast.success("Ajustes restablecidos (No guardado)");
+        toast.success("Ajustes restablecidos para gastos no facturados");
     };
 
     const handleSaveAsCharges = async () => {
         try {
             setSaving(true);
-            
+
             // Filtrar y mapear con validación explícita
             const configs = expenses
                 .filter((expense) => !expenseAdjustments[expense.id]?.is_billed)
                 .map((expense) => {
                     const adj = expenseAdjustments[expense.id] || {};
-                    
+
                     // Conversión explícita y validación
                     const markupValue = parseFloat(adj.markup_percentage);
-                    const markupPercentage = isNaN(markupValue) ? 0 : Math.max(0, markupValue);
-                    
+                    const markupPercentage = isNaN(markupValue)
+                        ? 0
+                        : Math.max(0, markupValue);
+
                     return {
                         expense_id: expense.id,
                         markup_percentage: markupPercentage,
@@ -214,19 +238,25 @@ const ExpenseCalculatorTab = ({
             );
 
             const { updated_count, synced_invoices } = response.data;
-            let message = `✓ ${updated_count} gasto${updated_count !== 1 ? 's' : ''} actualizado${updated_count !== 1 ? 's' : ''}`;
+            let message = `✓ ${updated_count} gasto${
+                updated_count !== 1 ? "s" : ""
+            } actualizado${updated_count !== 1 ? "s" : ""}`;
             if (synced_invoices > 0) {
-                message += ` | ${synced_invoices} factura${synced_invoices !== 1 ? 's' : ''} sincronizada${synced_invoices !== 1 ? 's' : ''}`;
+                message += ` | ${synced_invoices} factura${
+                    synced_invoices !== 1 ? "s" : ""
+                } sincronizada${synced_invoices !== 1 ? "s" : ""}`;
             }
             toast.success(message);
 
             // CRÍTICO: Recargar datos después de guardar
             await fetchData();
-            
+
             if (onUpdate) onUpdate();
         } catch (error) {
             console.error("Error saving configs:", error);
-            const errorMsg = error.response?.data?.error || "Error al guardar la configuración";
+            const errorMsg =
+                error.response?.data?.error ||
+                "Error al guardar la configuración";
             toast.error(errorMsg);
         } finally {
             setSaving(false);
@@ -248,6 +278,9 @@ const ExpenseCalculatorTab = ({
     // La orden es editable si NO está cerrada
     const isEditable = orderStatus !== "cerrada";
 
+    // Verificar si hay gastos no facturados (para mostrar/ocultar botón restablecer)
+    const hasUnbilledExpenses = expenses.some((exp) => !exp.invoice_id);
+
     return (
         <Card>
             <CardContent className="pt-6">
@@ -262,14 +295,16 @@ const ExpenseCalculatorTab = ({
 
                     {isEditable && (
                         <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setConfirmReset(true)}
-                            >
-                                <RotateCcw className="h-4 w-4 mr-1" />
-                                Restablecer
-                            </Button>
+                            {hasUnbilledExpenses && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setConfirmReset(true)}
+                                >
+                                    <RotateCcw className="h-4 w-4 mr-1" />
+                                    Restablecer
+                                </Button>
+                            )}
                             <Button
                                 size="sm"
                                 onClick={handleSaveAsCharges}
@@ -421,23 +456,54 @@ const ExpenseCalculatorTab = ({
                                                             0
                                                         }
                                                         onChange={(e) => {
-                                                            const value = e.target.value;
+                                                            const value =
+                                                                e.target.value;
                                                             // Permitir vacío temporalmente para edición
-                                                            if (value === '') {
-                                                                updateAdjustment(expense.id, 'markup_percentage', 0);
+                                                            if (value === "") {
+                                                                updateAdjustment(
+                                                                    expense.id,
+                                                                    "markup_percentage",
+                                                                    0
+                                                                );
                                                             } else {
-                                                                const numValue = parseFloat(value);
-                                                                if (!isNaN(numValue) && numValue >= 0) {
-                                                                    updateAdjustment(expense.id, 'markup_percentage', numValue);
+                                                                const numValue =
+                                                                    parseFloat(
+                                                                        value
+                                                                    );
+                                                                if (
+                                                                    !isNaN(
+                                                                        numValue
+                                                                    ) &&
+                                                                    numValue >=
+                                                                        0
+                                                                ) {
+                                                                    updateAdjustment(
+                                                                        expense.id,
+                                                                        "markup_percentage",
+                                                                        numValue
+                                                                    );
                                                                 }
                                                             }
                                                         }}
                                                         onBlur={(e) => {
                                                             // Al perder el foco, asegurar que hay un valor válido
-                                                            const value = e.target.value;
-                                                            const numValue = parseFloat(value);
-                                                            if (isNaN(numValue) || numValue < 0) {
-                                                                updateAdjustment(expense.id, 'markup_percentage', 0);
+                                                            const value =
+                                                                e.target.value;
+                                                            const numValue =
+                                                                parseFloat(
+                                                                    value
+                                                                );
+                                                            if (
+                                                                isNaN(
+                                                                    numValue
+                                                                ) ||
+                                                                numValue < 0
+                                                            ) {
+                                                                updateAdjustment(
+                                                                    expense.id,
+                                                                    "markup_percentage",
+                                                                    0
+                                                                );
                                                             }
                                                         }}
                                                         disabled={!canEdit}
@@ -561,7 +627,7 @@ const ExpenseCalculatorTab = ({
                     onClose={() => setConfirmReset(false)}
                     onConfirm={handleReset}
                     title="¿Restablecer configuración?"
-                    description="Todos los márgenes volverán a 0%."
+                    description="Los márgenes de gastos NO facturados volverán a 0%. Los gastos ya facturados no serán afectados."
                     confirmText="Restablecer"
                     cancelText="Cancelar"
                     variant="warning"

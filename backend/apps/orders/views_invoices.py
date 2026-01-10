@@ -628,6 +628,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         }
 
         changes_made = []
+        iva_type_already_set = False
 
         with transaction.atomic():
             # Actualizar margen si se proporciona
@@ -644,15 +645,19 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 new_iva_type = request.data['customer_iva_type']
                 if old_iva_type != new_iva_type:
                     transfer.customer_iva_type = new_iva_type
+                    # Sincronizar customer_applies_iva con el tipo de IVA
+                    transfer.customer_applies_iva = (new_iva_type == 'gravado')
                     changes_made.append(f'Tipo IVA: {old_iva_type} → {new_iva_type}')
+                iva_type_already_set = True
 
-            # Compatibilidad: actualizar legacy applies_iva
-            if 'customer_applies_iva' in request.data:
+            # Compatibilidad: actualizar legacy applies_iva (solo si no se envió customer_iva_type)
+            if 'customer_applies_iva' in request.data and not iva_type_already_set:
                 old_applies = transfer.customer_applies_iva
                 new_applies = request.data['customer_applies_iva']
                 if old_applies != new_applies:
-                    # Sincronizar con customer_iva_type
-                    transfer.customer_iva_type = 'gravado' if new_applies else 'exento'
+                    # Sincronizar con customer_iva_type (usar no_sujeto en lugar de exento)
+                    transfer.customer_iva_type = 'gravado' if new_applies else 'no_sujeto'
+                    transfer.customer_applies_iva = new_applies
                     changes_made.append(f'Aplica IVA: {old_applies} → {new_applies}')
 
             transfer.save()

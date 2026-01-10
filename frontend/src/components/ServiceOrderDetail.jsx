@@ -2017,6 +2017,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 charge.iva_type ===
                                                                                 "gravado"
                                                                                     ? "bg-slate-100 text-slate-700 border-slate-300"
+                                                                                    : charge.iva_type ===
+                                                                                      "exento"
+                                                                                    ? "bg-amber-50 text-amber-700 border-amber-200"
                                                                                     : "bg-slate-50 text-slate-600 border-slate-200"
                                                                             }`}
                                                                         >
