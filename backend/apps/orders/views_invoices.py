@@ -74,6 +74,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 invoice_number = invoice_number.strip()
                 if not invoice_number:
                     invoice_number = ''
+            
+            # VALIDACIÓN CRÍTICA: Verificar que el invoice_number no exista ya
+            # para evitar errores de UniqueViolation
+            if invoice_number:
+                from .models import Invoice
+                if Invoice.objects.filter(invoice_number=invoice_number).exists():
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({
+                        'invoice_number': f'Ya existe una factura con el número {invoice_number}. '
+                                         f'Por favor, verifique o use un número diferente.'
+                    })
 
             # Get dates
             from datetime import datetime

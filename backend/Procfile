@@ -1,1 +1,2 @@
-web: gunicorn config.wsgi --log-file -
+release: python manage.py migrate --noinput
+web: gunicorn config.wsgi --workers=4 --threads=2 --worker-class=gthread --worker-tmp-dir=/dev/shm --timeout=120 --keep-alive=5 --max-requests=1000 --max-requests-jitter=100 --log-file - --access-logfile - --error-logfile -

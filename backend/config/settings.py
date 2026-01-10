@@ -83,6 +83,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.middleware.gzip.GZipMiddleware',  # Compresión gzip para respuestas
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -124,6 +125,11 @@ if 'DATABASE_URL' in os.environ:
             conn_health_checks=True,
             ssl_require=True
         )
+    }
+    # Optimizaciones adicionales para PostgreSQL en producción
+    DATABASES['default']['OPTIONS'] = {
+        'connect_timeout': 10,
+        'options': '-c statement_timeout=30000',  # 30 segundos max por query
     }
 else:
     # Fallback para desarrollo local (SQLite o Postgres manual)
@@ -250,6 +256,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Whitenoise para servir archivos estáticos eficientemente
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -280,8 +289,8 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 60 minutos
-    'REFRESH_TOKEN_LIFETIME': timedelta(hours=24),   # 24 horas
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=2),     # 2 horas (reduce refreshes frecuentes)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 7 días (mejor UX)
     'ROTATE_REFRESH_TOKENS': True,  # Rotar tokens de refresco
     'BLACKLIST_AFTER_ROTATION': False,  # Opcional: activar si se usa blacklist
     'UPDATE_LAST_LOGIN': True,  # Actualizar last_login en cada autenticación

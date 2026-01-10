@@ -56,6 +56,14 @@ class ServiceOrder(SoftDeleteModel):
         verbose_name = "Orden de Servicio"
         verbose_name_plural = "Órdenes de Servicio"
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['order_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['client']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['facturado']),
+            models.Index(fields=['-created_at', 'status']),  # Consulta más común
+        ]
 
     def __str__(self):
         return self.order_number
