@@ -275,9 +275,9 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    # Paginación para evitar cargar todos los registros
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 50,  # 50 registros por página por defecto
+    # Paginación desactivada - frontend espera arrays directos
+    # Activar por ViewSet individual cuando se implemente en frontend
+    'DEFAULT_PAGINATION_CLASS': None,
     # Seguridad: No revelar detalles de errores internos
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
     # Rate limiting para prevenir ataques de fuerza bruta
