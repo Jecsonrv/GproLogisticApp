@@ -603,34 +603,35 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             )
 
         from apps.transfers.models import Transfer
-        try:
-            transfer = Transfer.objects.select_for_update().get(id=transfer_id, invoice=invoice)
-        except Transfer.DoesNotExist:
-            return Response(
-                {'error': 'Gasto no encontrado en esta factura'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # RESTRICCIÓN: El monto base NO es editable
-        if 'amount' in request.data:
-            if not transfer.is_amount_editable():
+        
+        with transaction.atomic():
+            try:
+                transfer = Transfer.objects.select_for_update().get(id=transfer_id, invoice=invoice)
+            except Transfer.DoesNotExist:
                 return Response(
-                    {'error': 'El monto base no es editable. Viene del pago al proveedor y no puede modificarse.'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {'error': 'Gasto no encontrado en esta factura'},
+                    status=status.HTTP_404_NOT_FOUND
                 )
 
-        # Guardar valores anteriores para audit trail
-        previous_values = {
-            'amount': str(transfer.amount),
-            'customer_markup_percentage': str(transfer.customer_markup_percentage),
-            'customer_iva_type': transfer.customer_iva_type,
-            'customer_applies_iva': transfer.customer_applies_iva
-        }
+            # RESTRICCIÓN: El monto base NO es editable
+            if 'amount' in request.data:
+                if not transfer.is_amount_editable():
+                    return Response(
+                        {'error': 'El monto base no es editable. Viene del pago al proveedor y no puede modificarse.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-        changes_made = []
-        iva_type_already_set = False
+            # Guardar valores anteriores para audit trail
+            previous_values = {
+                'amount': str(transfer.amount),
+                'customer_markup_percentage': str(transfer.customer_markup_percentage),
+                'customer_iva_type': transfer.customer_iva_type,
+                'customer_applies_iva': transfer.customer_applies_iva
+            }
 
-        with transaction.atomic():
+            changes_made = []
+            iva_type_already_set = False
+
             # Actualizar margen si se proporciona
             if 'customer_markup_percentage' in request.data:
                 old_markup = transfer.customer_markup_percentage
