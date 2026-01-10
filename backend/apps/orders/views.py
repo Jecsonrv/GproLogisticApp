@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.http import HttpResponse
 from django.core.exceptions import ValidationError
 from .models import ServiceOrder, OrderDocument, OrderCharge
-from .serializers import ServiceOrderSerializer, OrderDocumentSerializer
+from .serializers import ServiceOrderSerializer, ServiceOrderListSerializer, OrderDocumentSerializer
 from .serializers_new import ServiceOrderDetailSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
 import openpyxl
@@ -102,6 +102,8 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user, customs_agent=self.request.user)
 
     def get_serializer_class(self):
+        if self.action == 'list':
+            return ServiceOrderListSerializer  # Serializer ligero sin documents
         if self.action == 'retrieve':
             return ServiceOrderDetailSerializer
         return ServiceOrderSerializer

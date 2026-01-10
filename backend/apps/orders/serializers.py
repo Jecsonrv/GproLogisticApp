@@ -65,6 +65,71 @@ class CreditNoteSerializer(serializers.ModelSerializer):
                 })
         return data
 
+class ServiceOrderListSerializer(serializers.ModelSerializer):
+    """
+    Serializer optimizado para el listado de órdenes de servicio.
+    Excluye documentos y usa anotaciones del queryset para evitar N+1 queries.
+    """
+    client_name = serializers.CharField(source='client.name', read_only=True)
+    sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
+    shipment_type_name = serializers.CharField(source='shipment_type.name', read_only=True)
+    provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
+    customs_agent_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    # Información del cliente para facturación
+    client_payment_condition = serializers.CharField(source='client.payment_condition', read_only=True)
+    client_credit_days = serializers.IntegerField(source='client.credit_days', read_only=True)
+    client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
+    client_type = serializers.CharField(source='client.client_type', read_only=True)
+    
+    # Totales usando anotaciones - sin queries adicionales
+    total_transfers = serializers.SerializerMethodField()
+    total_direct_costs = serializers.SerializerMethodField()
+    total_admin_costs = serializers.SerializerMethodField()
+    total_amount = serializers.SerializerMethodField()
+    total_services = serializers.SerializerMethodField()
+    total_third_party = serializers.SerializerMethodField()
+    total_terceros = serializers.SerializerMethodField()
+    total_propios = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ServiceOrder
+        exclude = ['is_deleted', 'deleted_at']  # Excluir campos innecesarios
+        read_only_fields = ('customs_agent', 'created_at', 'updated_at')
+
+    def get_customs_agent_name(self, obj):
+        if obj.customs_agent:
+            return obj.customs_agent.get_full_name() or obj.customs_agent.username
+        return None
+    
+    def get_total_transfers(self, obj):
+        return getattr(obj, 'annotated_total_transfers', 0) or 0
+    
+    def get_total_direct_costs(self, obj):
+        return getattr(obj, 'annotated_total_propios', 0) or 0
+    
+    def get_total_admin_costs(self, obj):
+        return 0  # No se usa en listado
+    
+    def get_total_amount(self, obj):
+        services = getattr(obj, 'annotated_total_services', 0) or 0
+        terceros = getattr(obj, 'annotated_total_terceros', 0) or 0
+        return services + terceros
+    
+    def get_total_services(self, obj):
+        return getattr(obj, 'annotated_total_services', 0) or 0
+    
+    def get_total_third_party(self, obj):
+        return getattr(obj, 'annotated_total_terceros', 0) or 0
+    
+    def get_total_terceros(self, obj):
+        return getattr(obj, 'annotated_total_terceros', 0) or 0
+    
+    def get_total_propios(self, obj):
+        return getattr(obj, 'annotated_total_propios', 0) or 0
+
+
 class ServiceOrderSerializer(serializers.ModelSerializer):
     documents = OrderDocumentSerializer(many=True, read_only=True)
 
