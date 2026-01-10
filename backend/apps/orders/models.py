@@ -25,7 +25,7 @@ class ServiceOrder(SoftDeleteModel):
     purchase_order = models.CharField(max_length=100, blank=True, verbose_name="PO (Purchase Order)")
     bl_reference = models.CharField(max_length=100, blank=True, verbose_name="BL/Referencia")
     eta = models.DateField(null=True, blank=True, verbose_name="ETA")
-    duca = models.CharField(max_length=100, blank=True, verbose_name="DUCA")
+    duca = models.CharField(max_length=1000, blank=True, verbose_name="DUCA")
     customs = models.ForeignKey(Customs, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Aduana")
 
     # Notas / Información adicional

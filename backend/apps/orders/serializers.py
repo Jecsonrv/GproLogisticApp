@@ -81,7 +81,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     client_is_gran_contribuyente = serializers.BooleanField(source='client.is_gran_contribuyente', read_only=True)
     client_type = serializers.CharField(source='client.client_type', read_only=True)
     
-    # Información de costos
+    # Información de costos - Optimizado para usar anotaciones del queryset
     total_transfers = serializers.SerializerMethodField()
     total_direct_costs = serializers.SerializerMethodField()
     total_admin_costs = serializers.SerializerMethodField()
@@ -105,36 +105,56 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         return None
     
     def get_total_transfers(self, obj):
-        """Total de todas las transferencias de esta OS"""
+        """Total de todas las transferencias - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_transfers'):
+            return obj.annotated_total_transfers or 0
         return obj.transfers.aggregate(Sum('amount'))['amount__sum'] or 0
     
     def get_total_direct_costs(self, obj):
-        """Total de costos directos (costos + propios legacy)"""
+        """Total de costos directos - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_propios'):
+            return obj.annotated_total_propios or 0
         return obj.get_total_direct_costs()
     
     def get_total_admin_costs(self, obj):
         """Total de gastos administrativos/operación"""
+        # Para el listado, retornamos 0 ya que no se usa en la UI del listado
+        # y evitamos una query adicional
+        if hasattr(obj, 'annotated_total_transfers'):
+            return 0  # Optimización: no calcular en listado
         return obj.get_total_admin_costs()
     
     def get_total_amount(self, obj):
         """Total general de la OS (servicios + terceros)"""
+        if hasattr(obj, 'annotated_total_services'):
+            services = obj.annotated_total_services or 0
+            terceros = obj.annotated_total_terceros or 0
+            return services + terceros
         return obj.get_total_amount()
     
     def get_total_services(self, obj):
-        """Total de servicios cobrados"""
+        """Total de servicios cobrados - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_services'):
+            return obj.annotated_total_services or 0
         return obj.get_total_services()
     
     def get_total_third_party(self, obj):
-        """Total de gastos facturables al cliente"""
+        """Total de gastos facturables al cliente - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_terceros'):
+            return obj.annotated_total_terceros or 0
         return obj.get_total_third_party()
     
     # Legacy compatibility
     def get_total_terceros(self, obj):
-        """Total de cargos a terceros (legacy + cargos)"""
+        """Total de cargos a terceros - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_terceros'):
+            return obj.annotated_total_terceros or 0
         return obj.transfers.filter(transfer_type__in=['terceros', 'cargos']).aggregate(Sum('amount'))['amount__sum'] or 0
     
     def get_total_propios(self, obj):
-        """Total de costos propios (legacy + costos)"""
+        """Total de costos propios - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_propios'):
+            return obj.annotated_total_propios or 0
         return obj.transfers.filter(transfer_type__in=['propios', 'costos']).aggregate(Sum('amount'))['amount__sum'] or 0
 
     def validate(self, data):

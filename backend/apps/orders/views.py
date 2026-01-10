@@ -20,15 +20,19 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
+    pagination_class = None  # Desactivar paginación - frontend espera array completo
 
     def get_queryset(self):
         """
         Optimized queryset with select_related/prefetch_related to prevent N+1 queries.
+        Uses annotations to calculate totals in a single query instead of N+1.
         Implements Row-Level Security (IDOR protection):
         - Admins/Operativo2: See all orders.
         - Operativo: See only orders assigned to them (customs_agent) or created by them.
         """
-        from django.db.models import Prefetch, Q
+        from django.db.models import Prefetch, Q, Sum, Value, DecimalField
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal
         user = self.request.user
 
         queryset = ServiceOrder.objects.select_related(
@@ -40,6 +44,41 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
             'created_by',
             'closed_by'
         )
+
+        # Para el listado, usar anotaciones para calcular totales en una sola query
+        if self.action == 'list':
+            queryset = queryset.annotate(
+                # Total de servicios (charges.total)
+                annotated_total_services=Coalesce(
+                    Sum('charges__total', filter=Q(charges__is_deleted=False)),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+                # Total de transfers
+                annotated_total_transfers=Coalesce(
+                    Sum('transfers__amount', filter=Q(transfers__is_deleted=False)),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+                # Total terceros (transfers tipo terceros/cargos)
+                annotated_total_terceros=Coalesce(
+                    Sum('transfers__amount', filter=Q(
+                        transfers__is_deleted=False,
+                        transfers__transfer_type__in=['terceros', 'cargos']
+                    )),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+                # Total propios (transfers tipo propios/costos)
+                annotated_total_propios=Coalesce(
+                    Sum('transfers__amount', filter=Q(
+                        transfers__is_deleted=False,
+                        transfers__transfer_type__in=['propios', 'costos']
+                    )),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+            )
 
         # Para el detalle, prefetch los objetos relacionados
         if self.action == 'retrieve':
