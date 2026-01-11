@@ -417,8 +417,47 @@ function ProviderPayments() {
     const fetchPayments = async () => {
         try {
             setLoading(true);
-            const response = await axios.get("/transfers/transfers/");
-            setPayments(response.data || []);
+            const [transfersRes, invoicesRes] = await Promise.all([
+                axios.get("/transfers/transfers/"),
+                axios.get("/transfers/provider-invoices/")
+            ]);
+            
+            const transfers = (transfersRes.data || []).map(t => ({
+                ...t,
+                source: 'transfer',
+                // Ensure ID is unique if needed, but keeping original ID for API calls
+                original_id: t.id
+            }));
+
+            const invoices = (invoicesRes.data || []).map(inv => ({
+                id: inv.id, // Keeping original ID
+                original_id: inv.id,
+                source: 'provider_invoice',
+                transfer_type: 'costos', // Direct Costs are always 'costos'
+                provider: inv.provider,
+                provider_name: inv.provider_name,
+                amount: inv.total_amount,
+                balance: parseFloat(inv.total_amount) - parseFloat(inv.paid_amount),
+                paid_amount: inv.paid_amount,
+                status: inv.payment_status,
+                transaction_date: inv.issue_date,
+                service_order: inv.service_order,
+                service_order_number: inv.service_order_number,
+                purchase_order: inv.purchase_order,
+                description: inv.notes || `Factura ${inv.invoice_number}`,
+                invoice_number: inv.invoice_number,
+                invoice_file: inv.invoice_file,
+                created_at: inv.created_at,
+                // Provider Invoices don't need 'approval', they are 'approved' by creation/allocation essentially
+                // But for consistency we map status 'pendiente' -> 'pendiente'.
+            }));
+            
+            // Merge and sort
+            const allPayments = [...transfers, ...invoices].sort((a, b) => {
+                return new Date(b.transaction_date) - new Date(a.transaction_date);
+            });
+
+            setPayments(allPayments);
         } catch {
             toast.error("Error al cargar pagos a proveedores");
             setPayments([]);
@@ -800,8 +839,12 @@ function ProviderPayments() {
                 formDataToSend.append("proof_file", payFormData.invoice_file);
             }
 
+            const endpoint = selectedPayment.source === 'provider_invoice'
+                ? `/transfers/provider-invoices/${selectedPayment.id}/register_payment/`
+                : `/transfers/transfers/${selectedPayment.id}/register_payment/`;
+
             await axios.post(
-                `/transfers/transfers/${selectedPayment.id}/register_payment/`,
+                endpoint,
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
@@ -887,10 +930,13 @@ function ProviderPayments() {
 
     const openDetailModal = async (payment) => {
         try {
-            const response = await axios.get(
-                `/transfers/transfers/${payment.id}/detail_with_payments/`
-            );
-            setSelectedPayment(response.data);
+            const endpoint = payment.source === 'provider_invoice'
+                ? `/transfers/provider-invoices/${payment.id}/detail_with_payments/`
+                : `/transfers/transfers/${payment.id}/detail_with_payments/`;
+
+            const response = await axios.get(endpoint);
+            // Ensure source is preserved in selectedPayment
+            setSelectedPayment({ ...response.data, source: payment.source || 'transfer' });
             setIsDetailModalOpen(true);
         } catch {
             toast.error("Error al cargar detalles");
@@ -1213,11 +1259,13 @@ function ProviderPayments() {
             sortable: false,
             cell: (row) => {
                 const osClosed = isPaymentOSClosed(row);
+                const isProviderInvoice = row.source === 'provider_invoice';
+                const canPay = row.status === "aprobado" || row.status === "parcial" || (isProviderInvoice && row.status !== "pagado");
+
                 return (
                     <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
                         <div className="flex justify-center">
-                            {row.status === "aprobado" ||
-                            row.status === "parcial" ? (
+                            {canPay ? (
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -1228,7 +1276,7 @@ function ProviderPayments() {
                                 >
                                     <Banknote className="w-4 h-4" />
                                 </button>
-                            ) : row.status === "pendiente" ? (
+                            ) : (!isProviderInvoice && row.status === "pendiente") ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
                                     title="Requiere Aprobación"
@@ -1238,12 +1286,12 @@ function ProviderPayments() {
                             ) : null}
                         </div>
                         <div className="flex justify-center">
-                            {osClosed ? (
+                            {osClosed || isProviderInvoice ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
-                                    title="OS Cerrada"
+                                    title={osClosed ? "OS Cerrada" : "Edición no disponible"}
                                 >
-                                    <LockIcon className="w-4 h-4" />
+                                    {osClosed ? <LockIcon className="w-4 h-4" /> : <Edit2 className="w-4 h-4 opacity-50" />}
                                 </span>
                             ) : (
                                 <button
@@ -1259,10 +1307,10 @@ function ProviderPayments() {
                             )}
                         </div>
                         <div className="flex justify-center">
-                            {osClosed ? (
+                            {osClosed || isProviderInvoice ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
-                                    title="OS Cerrada"
+                                    title={osClosed ? "OS Cerrada" : "Eliminación restringida"}
                                 >
                                     <LockIcon className="w-4 h-4" />
                                 </span>
@@ -2123,8 +2171,17 @@ function ProviderPayments() {
                                     </div>
                                     <div className="font-mono text-sm">
                                         {selectedPayment.service_order_number ||
+                                         selectedPayment.service_order?.order_number ||
                                             "Gasto Administrativo"}
                                     </div>
+                                    {(selectedPayment.purchase_order || selectedPayment.service_order?.purchase_order) && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
+                                            <span className="font-mono text-xs text-slate-600">
+                                                {selectedPayment.purchase_order || selectedPayment.service_order?.purchase_order}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">

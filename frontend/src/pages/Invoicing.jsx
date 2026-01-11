@@ -495,6 +495,8 @@ const Invoicing = () => {
             client_name: invoice.client_name,
             service_order_number: invoice.service_order_number,
             is_dte_issued: invoice.is_dte_issued || false,
+            generation_code: invoice.generation_code || "",
+            reception_stamp: invoice.reception_stamp || "",
         });
         setIsEditModalOpen(true);
     };
@@ -511,6 +513,13 @@ const Invoicing = () => {
             formData.append("invoice_type", editForm.invoice_type);
             formData.append("issue_date", editForm.issue_date);
             formData.append("notes", editForm.notes);
+            
+            if (editForm.generation_code) {
+                formData.append("generation_code", editForm.generation_code);
+            }
+            if (editForm.reception_stamp) {
+                formData.append("reception_stamp", editForm.reception_stamp);
+            }
 
             if (editForm.dte_number) {
                 formData.append("dte_number", editForm.dte_number);
@@ -1695,28 +1704,6 @@ const Invoicing = () => {
                                     required
                                 />
                             </div>
-                            {editForm.is_dte_issued && (
-                                <div>
-                                    <Label className="mb-1.5 block">
-                                        Número de DTE
-                                    </Label>
-                                    <Input
-                                        value={editForm.dte_number}
-                                        onChange={(e) =>
-                                            setEditForm({
-                                                ...editForm,
-                                                dte_number: e.target.value,
-                                            })
-                                        }
-                                        className="font-mono uppercase"
-                                        placeholder="DTE-12345678"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        Número del documento tributario
-                                        electrónico
-                                    </p>
-                                </div>
-                            )}
                             <div>
                                 <Label
                                     className={cn(
@@ -1793,6 +1780,48 @@ const Invoicing = () => {
                                             due_date: e.target.value,
                                         })
                                     }
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Datos Fiscales DTE */}
+                    <div>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-900" />
+                            Datos Fiscales (DTE El Salvador)
+                        </h4>
+                        <div className="grid grid-cols-1 gap-5">
+                            <div>
+                                <Label className="mb-1.5 block">
+                                    Código de Generación
+                                </Label>
+                                <Input
+                                    value={editForm.generation_code}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            generation_code: e.target.value,
+                                        })
+                                    }
+                                    className="font-mono uppercase"
+                                    placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">
+                                    Sello de Recepción
+                                </Label>
+                                <Input
+                                    value={editForm.reception_stamp}
+                                    onChange={(e) =>
+                                        setEditForm({
+                                            ...editForm,
+                                            reception_stamp: e.target.value,
+                                        })
+                                    }
+                                    className="font-mono"
+                                    placeholder="Sello de Hacienda..."
                                 />
                             </div>
                         </div>
@@ -1950,6 +1979,12 @@ const Invoicing = () => {
                                                 "—"}
                                         </div>
                                     )}
+                                    {selectedInvoice.purchase_order && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
+                                            <span className="font-mono text-xs text-slate-600">{selectedInvoice.purchase_order}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
@@ -2008,6 +2043,34 @@ const Invoicing = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Datos Fiscales DTE */}
+                        {(selectedInvoice.generation_code || selectedInvoice.reception_stamp) && (
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    Datos Fiscales (DTE)
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {selectedInvoice.generation_code && (
+                                        <div>
+                                            <p className="text-xs text-slate-500 mb-0.5">Código de Generación</p>
+                                            <p className="font-mono text-sm font-medium text-slate-700 select-all">
+                                                {selectedInvoice.generation_code}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {selectedInvoice.reception_stamp && (
+                                        <div>
+                                            <p className="text-xs text-slate-500 mb-0.5">Sello de Recepción</p>
+                                            <p className="font-mono text-sm font-medium text-slate-700 select-all">
+                                                {selectedInvoice.reception_stamp}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="pt-4 border-t border-slate-200">
                             <InvoiceItemsEditor

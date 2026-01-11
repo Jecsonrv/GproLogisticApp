@@ -69,6 +69,7 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
     """
     Serializer optimizado para el listado de órdenes de servicio.
     Excluye documentos y usa anotaciones del queryset para evitar N+1 queries.
+    Actualizado: 2026-01-10
     """
     client_name = serializers.CharField(source='client.name', read_only=True)
     sub_client_name = serializers.CharField(source='sub_client.name', read_only=True, allow_null=True)
@@ -103,31 +104,41 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
             return obj.customs_agent.get_full_name() or obj.customs_agent.username
         return None
     
+    def _get_annotated_value(self, obj, attr_name, fallback_method=None):
+        """Helper para obtener valor anotado o calcular con fallback"""
+        value = getattr(obj, attr_name, None)
+        if value is not None:
+            return float(value)
+        # Fallback: calcular usando método del modelo si existe
+        if fallback_method and hasattr(obj, fallback_method):
+            return float(getattr(obj, fallback_method)() or 0)
+        return 0
+    
     def get_total_transfers(self, obj):
-        return getattr(obj, 'annotated_total_transfers', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_transfers')
     
     def get_total_direct_costs(self, obj):
-        return getattr(obj, 'annotated_total_propios', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_propios', 'get_total_direct_costs')
     
     def get_total_admin_costs(self, obj):
-        return 0  # No se usa en listado
+        return 0  # No se usa en listado, evitar query
     
     def get_total_amount(self, obj):
-        services = getattr(obj, 'annotated_total_services', 0) or 0
-        terceros = getattr(obj, 'annotated_total_terceros', 0) or 0
+        services = self._get_annotated_value(obj, 'annotated_total_services')
+        terceros = self._get_annotated_value(obj, 'annotated_total_terceros')
         return services + terceros
     
     def get_total_services(self, obj):
-        return getattr(obj, 'annotated_total_services', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_services', 'get_total_services')
     
     def get_total_third_party(self, obj):
-        return getattr(obj, 'annotated_total_terceros', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_terceros', 'get_total_third_party')
     
     def get_total_terceros(self, obj):
-        return getattr(obj, 'annotated_total_terceros', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_terceros')
     
     def get_total_propios(self, obj):
-        return getattr(obj, 'annotated_total_propios', 0) or 0
+        return self._get_annotated_value(obj, 'annotated_total_propios')
 
 
 class ServiceOrderSerializer(serializers.ModelSerializer):
@@ -259,17 +270,6 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
                 )
         return value
 
-class ServiceOrderListSerializer(serializers.ModelSerializer):
-    """Serializer simplificado para listados"""
-    client_name = serializers.CharField(source='client.name', read_only=True)
-    shipment_type_name = serializers.CharField(source='shipment_type.name', read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-
-    class Meta:
-        model = ServiceOrder
-        fields = ['id', 'order_number', 'client_name', 'shipment_type_name',
-                  'purchase_order', 'eta', 'duca', 'status', 'status_display', 'created_at']
-
 
 class InvoicePaymentSerializer(serializers.ModelSerializer):
     """Serializer for invoice payments"""
@@ -288,6 +288,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     client_id = serializers.SerializerMethodField()
     client_is_gran_contribuyente = serializers.SerializerMethodField()
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
@@ -302,6 +303,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = [
             'id', 'invoice_number', 'invoice_type', 'invoice_type_display', 'service_order', 'service_order_number',
+            'purchase_order',
             'client_id', 'client_name', 'client_is_gran_contribuyente', 'issue_date', 'due_date',
             # Desglose fiscal completo
             'subtotal_services', 'iva_services', 'total_services',
@@ -313,6 +315,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             # Documentación y notas
             'notes', 'payments', 'credit_notes', 'days_overdue', 'ccf', 'pdf_file', 'dte_file',
             'is_dte_issued', 'is_editable',
+            'generation_code', 'reception_stamp',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ('paid_amount', 'credited_amount', 'balance', 'subtotal_neto', 'iva_total', 'retencion', 'created_at', 'updated_at')
@@ -353,6 +356,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     client_is_gran_contribuyente = serializers.SerializerMethodField()
     service_order = serializers.IntegerField(source='service_order.id', read_only=True)
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
@@ -363,11 +367,13 @@ class InvoiceListSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = [
             'id', 'invoice_number', 'invoice_type', 'invoice_type_display', 'service_order', 'service_order_number',
+            'purchase_order',
             'client_id', 'client_name', 'client_is_gran_contribuyente', 'issue_date', 'due_date',
             'subtotal_neto', 'iva_total', 'retencion', 'total_amount',
             'paid_amount', 'credited_amount', 'balance', 'status',
             'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes',
-            'is_dte_issued', 'is_editable'
+            'is_dte_issued', 'is_editable',
+            'generation_code', 'reception_stamp'
         ]
 
     def get_client_name(self, obj):

@@ -43,30 +43,51 @@ class ProviderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def account_statement(self, request, pk=None):
-        from apps.transfers.models import Transfer
-        from django.db.models import Sum
+        from apps.transfers.models import Transfer, ProviderInvoice
+        from django.db.models import Sum, F
         from datetime import datetime
 
         provider = self.get_object()
         
-        # Filtros
-        year = request.query_params.get('year', datetime.now().year)
+        # Filtros: Si year viene vacío (?year=), es "Todo el tiempo". Si no viene, default al actual.
+        year_param = request.query_params.get('year')
+        year = int(year_param) if year_param and year_param.isdigit() else (datetime.now().year if year_param is None else None)
         
-        # Transfers pendientes de pago (deuda total)
+        # ========== TRANSFERS (Gastos terceros, propios, admin) ==========
         unpaid_transfers = Transfer.objects.filter(
             provider=provider,
             status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
         ).order_by('transaction_date')
         
-        total_debt = unpaid_transfers.aggregate(Sum('balance'))['balance__sum'] or 0
+        transfer_debt = unpaid_transfers.aggregate(Sum('balance'))['balance__sum'] or 0
         
-        # Historial del año seleccionado (pagados y pendientes)
-        history = Transfer.objects.filter(
+        # ========== PROVIDER INVOICES (Costos Directos / Tercerizados) ==========
+        unpaid_invoices = ProviderInvoice.objects.filter(
             provider=provider,
-            transaction_date__year=year
-        ).select_related('service_order').order_by('-transaction_date')
+            payment_status__in=['pendiente', 'parcial']
+        ).order_by('issue_date')
         
-        # Aging Analysis
+        # Calcular balance de facturas de proveedor (total - pagado)
+        invoice_debt = sum(
+            float(inv.total_amount) - float(inv.paid_amount)
+            for inv in unpaid_invoices
+        )
+        
+        total_debt = float(transfer_debt) + invoice_debt
+        
+        # Historial - TRANSFERS
+        transfers_qs = Transfer.objects.filter(provider=provider)
+        if year:
+            transfers_qs = transfers_qs.filter(transaction_date__year=year)
+        history_transfers = transfers_qs.select_related('service_order').order_by('-transaction_date')
+        
+        # Historial - PROVIDER INVOICES
+        invoices_qs = ProviderInvoice.objects.filter(provider=provider)
+        if year:
+            invoices_qs = invoices_qs.filter(issue_date__year=year)
+        history_invoices = invoices_qs.select_related('service_order').order_by('-issue_date')
+        
+        # Aging Analysis (combinado)
         aging = {
             'current': 0.0,  # 0-30 días
             '1-30': 0.0,     # 31-60 días (1-30 vencido)
@@ -77,8 +98,8 @@ class ProviderViewSet(viewsets.ModelViewSet):
         
         today = datetime.now().date()
         
+        # Aging de Transfers
         for transfer in unpaid_transfers:
-            # Antigüedad desde la fecha de factura/transacción
             age_days = (today - transfer.transaction_date).days
             amount = float(transfer.balance)
             
@@ -92,22 +113,69 @@ class ProviderViewSet(viewsets.ModelViewSet):
                 aging['61-90'] += amount
             else:
                 aging['90+'] += amount
-                
-        transfers_data = [{
-            'id': t.id,
-            'transaction_date': t.transaction_date,
-            'service_order': t.service_order.order_number if t.service_order else 'Gastos Admin',
-            'service_order_id': t.service_order.id if t.service_order else None,
-            'type': t.get_transfer_type_display(),
-            'amount': float(t.amount),
-            'balance': float(t.balance),
-            'paid_amount': float(t.paid_amount),
-            'status': t.status,
-            'status_display': t.get_status_display(),
-            'description': t.description,
-            'invoice_number': t.invoice_number or 'S/N',
-            'invoice_file': t.invoice_file.url if t.invoice_file else None
-        } for t in history]
+        
+        # Aging de ProviderInvoices (costos directos)
+        for inv in unpaid_invoices:
+            age_days = (today - inv.issue_date).days
+            amount = float(inv.total_amount) - float(inv.paid_amount)
+            
+            if age_days <= 30:
+                aging['current'] += amount
+            elif age_days <= 60:
+                aging['1-30'] += amount
+            elif age_days <= 90:
+                aging['31-60'] += amount
+            elif age_days <= 120:
+                aging['61-90'] += amount
+            else:
+                aging['90+'] += amount
+        
+        # Construir lista unificada de "transfers" (gastos a pagar)
+        transfers_data = []
+        
+        # Agregar Transfers normales
+        for t in history_transfers:
+            transfers_data.append({
+                'id': t.id,
+                'source': 'transfer',  # Para identificar el origen
+                'transaction_date': t.transaction_date,
+                'service_order': t.service_order.order_number if t.service_order else 'Gastos Admin',
+                'service_order_id': t.service_order.id if t.service_order else None,
+                'purchase_order': t.service_order.purchase_order if t.service_order else '',
+                'type': t.get_transfer_type_display(),
+                'amount': float(t.amount),
+                'balance': float(t.balance),
+                'paid_amount': float(t.paid_amount),
+                'status': t.status,
+                'status_display': t.get_status_display(),
+                'description': t.description,
+                'invoice_number': t.invoice_number or 'S/N',
+                'invoice_file': t.invoice_file.url if t.invoice_file else None
+            })
+        
+        # Agregar ProviderInvoices (costos directos)
+        for inv in history_invoices:
+            balance = float(inv.total_amount) - float(inv.paid_amount)
+            transfers_data.append({
+                'id': inv.id,
+                'source': 'provider_invoice',  # Para identificar el origen
+                'transaction_date': inv.issue_date,
+                'service_order': inv.service_order.order_number if inv.service_order else 'Sin OS',
+                'service_order_id': inv.service_order.id if inv.service_order else None,
+                'purchase_order': inv.service_order.purchase_order if inv.service_order else '',
+                'type': 'Costo Directo',  # Tipo especial para costos tercerizados
+                'amount': float(inv.total_amount),
+                'balance': balance,
+                'paid_amount': float(inv.paid_amount),
+                'status': inv.payment_status,
+                'status_display': dict(ProviderInvoice.PAYMENT_STATUS_CHOICES).get(inv.payment_status, inv.payment_status),
+                'description': inv.notes or f'Factura {inv.invoice_number}',
+                'invoice_number': inv.invoice_number or 'S/N',
+                'invoice_file': inv.invoice_file.url if inv.invoice_file else None
+            })
+        
+        # Ordenar por fecha descendente
+        transfers_data.sort(key=lambda x: x['transaction_date'], reverse=True)
         
         return Response({
             'provider': {
@@ -115,7 +183,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
                 'name': provider.name,
                 'nit': provider.nit
             },
-            'total_debt': float(total_debt),
+            'total_debt': total_debt,
             'aging': aging,
             'transfers': transfers_data,
             'year': year
@@ -124,7 +192,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def export_statement_excel(self, request, pk=None):
         """Exportar estado de cuenta del proveedor a Excel"""
-        from apps.transfers.models import Transfer
+        from apps.transfers.models import Transfer, ProviderInvoice
         from django.http import HttpResponse
         from datetime import datetime
         import openpyxl
@@ -132,16 +200,22 @@ class ProviderViewSet(viewsets.ModelViewSet):
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
         provider = self.get_object()
-        year = request.query_params.get('year', datetime.now().year)
-
-        # Filtros opcionales
-        # (Aquí podríamos agregar filtros si fueran necesarios, por ahora exportamos todo lo del año)
         
-        # Historial del año seleccionado
-        transfers = Transfer.objects.filter(
-            provider=provider,
-            transaction_date__year=year
-        ).select_related('service_order').order_by('transaction_date')
+        # Filtros: Si year viene vacío (?year=), es "Todo el tiempo". Si no viene, default al actual.
+        year_param = request.query_params.get('year')
+        year = int(year_param) if year_param and year_param.isdigit() else (datetime.now().year if year_param is None else None)
+
+        # Historial - TRANSFERS
+        transfers_qs = Transfer.objects.filter(provider=provider)
+        if year:
+            transfers_qs = transfers_qs.filter(transaction_date__year=year)
+        transfers = transfers_qs.select_related('service_order').order_by('transaction_date')
+        
+        # Historial - PROVIDER INVOICES (Costos Directos)
+        invoices_qs = ProviderInvoice.objects.filter(provider=provider)
+        if year:
+            invoices_qs = invoices_qs.filter(issue_date__year=year)
+        provider_invoices = invoices_qs.select_related('service_order').order_by('issue_date')
 
         # Crear workbook
         wb = openpyxl.Workbook()
@@ -200,7 +274,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
         ws.merge_cells(f'A{start_row}:J{start_row}')
 
         # Headers de la tabla
-        headers = ['Fecha', 'Factura Prov.', 'Orden de Servicio', 'Tipo', 'Descripción',
+        headers = ['Fecha', 'Factura Prov.', 'Orden de Servicio', 'PO', 'Tipo', 'Descripción',
                    'Estado', 'Total', 'Pagado', 'Saldo', 'Comprobante']
         header_row = start_row + 1
 
@@ -214,68 +288,106 @@ class ProviderViewSet(viewsets.ModelViewSet):
         # Datos
         data_row = header_row + 1
         totals = {'total': 0, 'paid': 0, 'balance': 0}
-
+        
+        # Combinar transfers y provider_invoices en una lista unificada
+        all_items = []
+        
         for transfer in transfers:
-            ws.cell(row=data_row, column=1, value=transfer.transaction_date.strftime('%d/%m/%Y')).border = thin_border
-            ws.cell(row=data_row, column=2, value=transfer.invoice_number or 'S/N').border = thin_border
-            ws.cell(row=data_row, column=3, value=transfer.service_order.order_number if transfer.service_order else 'Gastos Admin').border = thin_border
-            ws.cell(row=data_row, column=4, value=transfer.get_transfer_type_display()).border = thin_border
-            ws.cell(row=data_row, column=5, value=transfer.description or '').border = thin_border
-            ws.cell(row=data_row, column=6, value=transfer.get_status_display()).border = thin_border
+            all_items.append({
+                'date': transfer.transaction_date,
+                'invoice_number': transfer.invoice_number or 'S/N',
+                'service_order': transfer.service_order.order_number if transfer.service_order else 'Gastos Admin',
+                'purchase_order': transfer.service_order.purchase_order if transfer.service_order else '',
+                'type': transfer.get_transfer_type_display(),
+                'description': transfer.description or '',
+                'status': transfer.get_status_display(),
+                'amount': float(transfer.amount),
+                'paid': float(transfer.paid_amount),
+                'balance': float(transfer.balance),
+                'has_file': bool(transfer.invoice_file)
+            })
+        
+        for inv in provider_invoices:
+            balance = float(inv.total_amount) - float(inv.paid_amount)
+            all_items.append({
+                'date': inv.issue_date,
+                'invoice_number': inv.invoice_number or 'S/N',
+                'service_order': inv.service_order.order_number if inv.service_order else 'Sin OS',
+                'purchase_order': inv.service_order.purchase_order if inv.service_order else '',
+                'type': 'Costo Directo',
+                'description': inv.notes or f'Factura de proveedor',
+                'status': dict(ProviderInvoice.PAYMENT_STATUS_CHOICES).get(inv.payment_status, inv.payment_status),
+                'amount': float(inv.total_amount),
+                'paid': float(inv.paid_amount),
+                'balance': balance,
+                'has_file': bool(inv.invoice_file)
+            })
+        
+        # Ordenar por fecha
+        all_items.sort(key=lambda x: x['date'])
+
+        for item in all_items:
+            ws.cell(row=data_row, column=1, value=item['date'].strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=2, value=item['invoice_number']).border = thin_border
+            ws.cell(row=data_row, column=3, value=item['service_order']).border = thin_border
+            ws.cell(row=data_row, column=4, value=item['purchase_order']).border = thin_border
+            ws.cell(row=data_row, column=5, value=item['type']).border = thin_border
+            ws.cell(row=data_row, column=6, value=item['description']).border = thin_border
+            ws.cell(row=data_row, column=7, value=item['status']).border = thin_border
 
             # Montos
-            total_cell = ws.cell(row=data_row, column=7, value=float(transfer.amount))
+            total_cell = ws.cell(row=data_row, column=8, value=item['amount'])
             total_cell.number_format = currency_format
             total_cell.border = thin_border
             total_cell.alignment = Alignment(horizontal='right')
 
-            paid_cell = ws.cell(row=data_row, column=8, value=float(transfer.paid_amount))
+            paid_cell = ws.cell(row=data_row, column=9, value=item['paid'])
             paid_cell.number_format = currency_format
             paid_cell.border = thin_border
             paid_cell.alignment = Alignment(horizontal='right')
 
-            balance_cell = ws.cell(row=data_row, column=9, value=float(transfer.balance))
+            balance_cell = ws.cell(row=data_row, column=10, value=item['balance'])
             balance_cell.number_format = currency_format
             balance_cell.border = thin_border
             balance_cell.alignment = Alignment(horizontal='right')
 
-            ws.cell(row=data_row, column=10, value="Sí" if transfer.invoice_file else "No").border = thin_border
-            ws.cell(row=data_row, column=10).alignment = Alignment(horizontal='center')
+            ws.cell(row=data_row, column=11, value="Sí" if item['has_file'] else "No").border = thin_border
+            ws.cell(row=data_row, column=11).alignment = Alignment(horizontal='center')
 
-            totals['total'] += float(transfer.amount)
-            totals['paid'] += float(transfer.paid_amount)
-            totals['balance'] += float(transfer.balance)
+            totals['total'] += item['amount']
+            totals['paid'] += item['paid']
+            totals['balance'] += item['balance']
 
             data_row += 1
 
         # Fila de totales
         ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
         ws.cell(row=data_row, column=1).border = thin_border
-        for col in range(2, 7):
+        for col in range(2, 8):
             ws.cell(row=data_row, column=col).border = thin_border
 
-        total_total = ws.cell(row=data_row, column=7, value=totals['total'])
+        total_total = ws.cell(row=data_row, column=8, value=totals['total'])
         total_total.number_format = currency_format
         total_total.font = Font(bold=True)
         total_total.border = thin_border
         total_total.alignment = Alignment(horizontal='right')
 
-        total_paid = ws.cell(row=data_row, column=8, value=totals['paid'])
+        total_paid = ws.cell(row=data_row, column=9, value=totals['paid'])
         total_paid.number_format = currency_format
         total_paid.font = Font(bold=True)
         total_paid.border = thin_border
         total_paid.alignment = Alignment(horizontal='right')
 
-        total_balance = ws.cell(row=data_row, column=9, value=totals['balance'])
+        total_balance = ws.cell(row=data_row, column=10, value=totals['balance'])
         total_balance.number_format = currency_format
         total_balance.font = Font(bold=True)
         total_balance.border = thin_border
         total_balance.alignment = Alignment(horizontal='right')
 
-        ws.cell(row=data_row, column=10).border = thin_border
+        ws.cell(row=data_row, column=11).border = thin_border
 
         # Ajustar anchos
-        column_widths = [12, 15, 18, 15, 30, 12, 15, 15, 15, 10]
+        column_widths = [12, 15, 18, 15, 15, 30, 12, 15, 15, 15, 10]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 

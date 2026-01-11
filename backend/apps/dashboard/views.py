@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Value
 from django.conf import settings
 from apps.orders.models import ServiceOrder, Invoice, OrderCharge
 from apps.transfers.models import Transfer
@@ -209,16 +209,36 @@ class DashboardView(APIView):
 
         # Common logic (Trends, Top Clients aggregation, etc.)
 
-        # Top 5 clientes - Calcular desde Invoice (facturas emitidas, no canceladas)
-        # Esto da un monto más preciso de lo facturado por cliente
+        # Top 5 clientes - Calcular desde OrderCharge (servicios) como fuente primaria
+        # Si no hay servicios, usar facturas como fallback
+        # Esto muestra el valor real de los servicios prestados, facturados o no
+        from django.db.models import OuterRef, Subquery, DecimalField as DField
+        from django.db.models.functions import Coalesce as CoalesceFunc
+        
         top_clients = top_clients_qs.values(
             'client__id',
             'client__name'
         ).annotate(
             total_orders=Count('id'),
-            total_amount=Sum(
-                'invoices__total_amount',
-                filter=~Q(invoices__status='cancelled')
+            # Calcular total de servicios (charges) como métrica principal
+            total_services=CoalesceFunc(
+                Sum('charges__total', filter=Q(charges__is_deleted=False)),
+                Value(0),
+                output_field=DField()
+            ),
+            # Facturado como métrica secundaria
+            total_invoiced=CoalesceFunc(
+                Sum('invoices__total_amount', filter=~Q(invoices__status='cancelled')),
+                Value(0),
+                output_field=DField()
+            )
+        ).annotate(
+            # Usar el mayor entre servicios e facturado para el ranking
+            total_amount=CoalesceFunc(
+                Sum('charges__total', filter=Q(charges__is_deleted=False)),
+                Sum('invoices__total_amount', filter=~Q(invoices__status='cancelled')),
+                Value(0),
+                output_field=DField()
             )
         ).order_by('-total_amount')[:5]
 

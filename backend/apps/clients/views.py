@@ -127,7 +127,10 @@ class ClientViewSet(viewsets.ModelViewSet):
         ).select_related('service_order').prefetch_related('payments')
 
         if year:
-            invoices_qs = invoices_qs.filter(issue_date__year=year)
+            # Mostrar facturas del año seleccionado O facturas con saldo pendiente de cualquier año
+            invoices_qs = invoices_qs.filter(
+                Q(issue_date__year=year) | Q(balance__gt=0)
+            ).distinct()
 
         # Serializar facturas con información completa
         invoices_data = InvoiceListSerializer(invoices_qs, many=True).data
@@ -215,6 +218,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         pending_orders_data = [{
             'id': order.id,
             'order_number': order.order_number,
+            'purchase_order': order.purchase_order,
             'date': order.created_at.date(),
             'eta': order.eta,
             'duca': order.duca,
@@ -283,7 +287,10 @@ class ClientViewSet(viewsets.ModelViewSet):
         ).select_related('service_order').prefetch_related('payments').order_by('-issue_date')
 
         if year:
-            invoices = invoices.filter(issue_date__year=year)
+            # Mostrar facturas del año seleccionado O facturas con saldo pendiente de cualquier año
+            invoices = invoices.filter(
+                Q(issue_date__year=year) | Q(balance__gt=0)
+            ).distinct()
             
         if status_filter:
             invoices = invoices.filter(status=status_filter)
@@ -377,8 +384,8 @@ class ClientViewSet(viewsets.ModelViewSet):
         ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
         ws.merge_cells(f'A{start_row}:L{start_row}')
 
-        # Headers de la tabla (añadimos DUCA, BL, Total Servicios, Total Gastos)
-        headers = ['No. Factura', 'Orden de Servicio', 'DUCA', 'BL', 'Fecha Emisión', 'Vencimiento',
+        # Headers de la tabla (añadimos DUCA, BL, PO, Cód. Generación, Sello Recepción, Total Servicios, Total Gastos)
+        headers = ['No. Factura', 'Cód. Generación', 'Sello Recepción', 'Orden de Servicio', 'PO', 'DUCA', 'BL', 'Fecha Emisión', 'Vencimiento',
                    'Total Servicios', 'Total Gastos', 'Total Factura', 'Pagado', 'Saldo', 'Estado']
         header_row = start_row + 1
 
@@ -411,51 +418,61 @@ class ClientViewSet(viewsets.ModelViewSet):
             # Columna 1: No. Factura
             ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
             
-            # Columna 2: Orden de Servicio
-            ws.cell(row=data_row, column=2, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
+            # Columna 2: Código de Generación
+            ws.cell(row=data_row, column=2, value=invoice.generation_code or '').border = thin_border
             
-            # Columna 3: DUCA (desde la orden de servicio)
+            # Columna 3: Sello de Recepción
+            ws.cell(row=data_row, column=3, value=invoice.reception_stamp or '').border = thin_border
+            
+            # Columna 4: Orden de Servicio
+            ws.cell(row=data_row, column=4, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
+            
+            # Columna 5: PO (desde la orden de servicio)
+            po_value = invoice.service_order.purchase_order if invoice.service_order and invoice.service_order.purchase_order else ''
+            ws.cell(row=data_row, column=5, value=po_value).border = thin_border
+            
+            # Columna 6: DUCA (desde la orden de servicio)
             duca_value = invoice.service_order.duca if invoice.service_order and invoice.service_order.duca else ''
-            ws.cell(row=data_row, column=3, value=duca_value).border = thin_border
+            ws.cell(row=data_row, column=6, value=duca_value).border = thin_border
             
-            # Columna 4: BL (desde la orden de servicio)
+            # Columna 7: BL (desde la orden de servicio)
             bl_value = invoice.service_order.bl_reference if invoice.service_order and invoice.service_order.bl_reference else ''
-            ws.cell(row=data_row, column=4, value=bl_value).border = thin_border
+            ws.cell(row=data_row, column=7, value=bl_value).border = thin_border
             
-            # Columna 5: Fecha Emisión
-            ws.cell(row=data_row, column=5, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            # Columna 8: Fecha Emisión
+            ws.cell(row=data_row, column=8, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
             
-            # Columna 6: Vencimiento
-            ws.cell(row=data_row, column=6, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
+            # Columna 9: Vencimiento
+            ws.cell(row=data_row, column=9, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
 
-            # Columna 7: Total Servicios
-            total_services_cell = ws.cell(row=data_row, column=7, value=float(invoice.total_services))
+            # Columna 10: Total Servicios
+            total_services_cell = ws.cell(row=data_row, column=10, value=float(invoice.total_services))
             total_services_cell.number_format = currency_format
             total_services_cell.border = thin_border
 
-            # Columna 8: Total Gastos a Terceros
-            total_third_party_cell = ws.cell(row=data_row, column=8, value=float(invoice.total_third_party))
+            # Columna 11: Total Gastos a Terceros
+            total_third_party_cell = ws.cell(row=data_row, column=11, value=float(invoice.total_third_party))
             total_third_party_cell.number_format = currency_format
             total_third_party_cell.border = thin_border
 
-            # Columna 9: Total Factura
-            total_cell = ws.cell(row=data_row, column=9, value=float(invoice.total_amount))
+            # Columna 12: Total Factura
+            total_cell = ws.cell(row=data_row, column=12, value=float(invoice.total_amount))
             total_cell.number_format = currency_format
             total_cell.border = thin_border
 
-            # Columna 10: Pagado
-            paid_cell = ws.cell(row=data_row, column=10, value=float(invoice.paid_amount))
+            # Columna 13: Pagado
+            paid_cell = ws.cell(row=data_row, column=13, value=float(invoice.paid_amount))
             paid_cell.number_format = currency_format
             paid_cell.border = thin_border
 
-            # Columna 11: Saldo
-            balance_cell = ws.cell(row=data_row, column=11, value=float(invoice.balance))
+            # Columna 14: Saldo
+            balance_cell = ws.cell(row=data_row, column=14, value=float(invoice.balance))
             balance_cell.number_format = currency_format
             balance_cell.border = thin_border
 
-            # Columna 12: Estado
+            # Columna 15: Estado
             status_text = status_display.get(invoice.status, invoice.status) + days_overdue
-            ws.cell(row=data_row, column=12, value=status_text).border = thin_border
+            ws.cell(row=data_row, column=15, value=status_text).border = thin_border
 
             # Sumar totales
             totals['total_services'] += float(invoice.total_services)
@@ -469,43 +486,43 @@ class ClientViewSet(viewsets.ModelViewSet):
         # Fila de totales
         ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
         ws.cell(row=data_row, column=1).border = thin_border
-        for col in range(2, 7):
+        for col in range(2, 10):
             ws.cell(row=data_row, column=col).border = thin_border
 
         # Total Servicios
-        total_services_sum = ws.cell(row=data_row, column=7, value=totals['total_services'])
+        total_services_sum = ws.cell(row=data_row, column=10, value=totals['total_services'])
         total_services_sum.number_format = currency_format
         total_services_sum.font = Font(bold=True)
         total_services_sum.border = thin_border
 
         # Total Gastos a Terceros
-        total_third_party_sum = ws.cell(row=data_row, column=8, value=totals['total_third_party'])
+        total_third_party_sum = ws.cell(row=data_row, column=11, value=totals['total_third_party'])
         total_third_party_sum.number_format = currency_format
         total_third_party_sum.font = Font(bold=True)
         total_third_party_sum.border = thin_border
 
         # Total Factura
-        total_total = ws.cell(row=data_row, column=9, value=totals['total'])
+        total_total = ws.cell(row=data_row, column=12, value=totals['total'])
         total_total.number_format = currency_format
         total_total.font = Font(bold=True)
         total_total.border = thin_border
 
         # Total Pagado
-        total_paid = ws.cell(row=data_row, column=10, value=totals['paid'])
+        total_paid = ws.cell(row=data_row, column=13, value=totals['paid'])
         total_paid.number_format = currency_format
         total_paid.font = Font(bold=True)
         total_paid.border = thin_border
 
         # Total Saldo
-        total_balance = ws.cell(row=data_row, column=11, value=totals['balance'])
+        total_balance = ws.cell(row=data_row, column=14, value=totals['balance'])
         total_balance.number_format = currency_format
         total_balance.font = Font(bold=True)
         total_balance.border = thin_border
 
-        ws.cell(row=data_row, column=12).border = thin_border
+        ws.cell(row=data_row, column=15).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [18, 18, 16, 16, 14, 14, 16, 16, 16, 14, 14, 16]
+        column_widths = [18, 35, 20, 18, 16, 16, 14, 14, 16, 16, 16, 14, 14, 16, 16]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 

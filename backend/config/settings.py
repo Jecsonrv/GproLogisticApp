@@ -279,7 +279,7 @@ REST_FRAMEWORK = {
     # Activar por ViewSet individual cuando se implemente en frontend
     'DEFAULT_PAGINATION_CLASS': None,
     # Seguridad: No revelar detalles de errores internos
-    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'EXCEPTION_HANDLER': 'apps.core.exceptions.custom_exception_handler',
     # Rate limiting para prevenir ataques de fuerza bruta
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',

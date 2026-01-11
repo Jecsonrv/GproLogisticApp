@@ -334,7 +334,7 @@ class TransferViewSet(viewsets.ModelViewSet):
         ws.merge_cells(f'A{start_row}:J{start_row}')
 
         # Headers de tabla
-        headers = ['Fecha', 'Tipo', 'Estado', 'Monto', 'Descripción', 'OS',
+        headers = ['Fecha', 'Tipo', 'Estado', 'Monto', 'Descripción', 'OS', 'PO',
                    'Proveedor', 'Método Pago', 'Factura', 'Fecha Pago']
         header_row = start_row + 1
 
@@ -362,10 +362,11 @@ class TransferViewSet(viewsets.ModelViewSet):
 
             ws.cell(row=data_row, column=5, value=transfer.description or '').border = thin_border
             ws.cell(row=data_row, column=6, value=transfer.service_order.order_number if transfer.service_order else '').border = thin_border
-            ws.cell(row=data_row, column=7, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '').border = thin_border
-            ws.cell(row=data_row, column=8, value=transfer.get_payment_method_display() if transfer.payment_method else '').border = thin_border
-            ws.cell(row=data_row, column=9, value=transfer.invoice_number or '').border = thin_border
-            ws.cell(row=data_row, column=10, value=transfer.payment_date.strftime('%d/%m/%Y') if transfer.payment_date else '').border = thin_border
+            ws.cell(row=data_row, column=7, value=transfer.service_order.purchase_order if transfer.service_order else '').border = thin_border
+            ws.cell(row=data_row, column=8, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '').border = thin_border
+            ws.cell(row=data_row, column=9, value=transfer.get_payment_method_display() if transfer.payment_method else '').border = thin_border
+            ws.cell(row=data_row, column=10, value=transfer.invoice_number or '').border = thin_border
+            ws.cell(row=data_row, column=11, value=transfer.payment_date.strftime('%d/%m/%Y') if transfer.payment_date else '').border = thin_border
 
             total_amount += float(transfer.amount)
             data_row += 1
@@ -382,11 +383,11 @@ class TransferViewSet(viewsets.ModelViewSet):
         total_cell.border = thin_border
         total_cell.alignment = Alignment(horizontal='right')
 
-        for col in range(5, 11):
+        for col in range(5, 12):
             ws.cell(row=data_row, column=col).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [12, 14, 12, 14, 30, 15, 25, 16, 15, 12]
+        column_widths = [12, 14, 12, 14, 30, 15, 15, 25, 16, 15, 12]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1649,6 +1650,117 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
 
         serializer = ProviderInvoiceListSerializer(invoices, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    def register_payment(self, request, pk=None):
+        """Registrar un pago parcial o total a una factura de proveedor (costo directo)"""
+        from decimal import Decimal
+        
+        provider_invoice = self.get_object()
+        
+        # Calcular saldo pendiente
+        balance = provider_invoice.total_amount - provider_invoice.paid_amount
+        
+        # Validar que no esté completamente pagada
+        if provider_invoice.payment_status == 'pagado' and balance <= 0:
+            return Response(
+                {'error': 'Esta factura ya está completamente pagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar datos requeridos
+        amount = request.data.get('amount')
+        if not amount:
+            return Response(
+                {'error': 'El monto es requerido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            amount = Decimal(str(amount))
+            if amount <= 0:
+                return Response(
+                    {'error': 'El monto debe ser mayor a cero'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validar que el monto no exceda el saldo pendiente
+            if amount > balance:
+                return Response(
+                    {'error': f'El monto excede el saldo pendiente de ${balance}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Monto inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Actualizar la factura de proveedor
+        provider_invoice.paid_amount += amount
+        
+        # Actualizar fecha de pago si se proporciona
+        payment_date = request.data.get('payment_date')
+        if payment_date:
+            from datetime import datetime
+            try:
+                provider_invoice.payment_date = datetime.strptime(payment_date, '%Y-%m-%d').date()
+            except ValueError:
+                pass  # Ignorar fecha inválida
+        
+        provider_invoice.save()
+        
+        # Refrescar para obtener el status actualizado
+        provider_invoice.refresh_from_db()
+        
+        return Response({
+            'message': 'Pago registrado exitosamente',
+            'payment': {
+                'amount': str(amount),
+                'payment_date': payment_date
+            },
+            'provider_invoice': {
+                'id': provider_invoice.id,
+                'paid_amount': str(provider_invoice.paid_amount),
+                'balance': str(provider_invoice.total_amount - provider_invoice.paid_amount),
+                'payment_status': provider_invoice.payment_status,
+                'status_display': dict(ProviderInvoice.PAYMENT_STATUS_CHOICES).get(
+                    provider_invoice.payment_status, provider_invoice.payment_status
+                )
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def detail_with_payments(self, request, pk=None):
+        """Obtener detalle de la factura de proveedor (formato compatible con Transfer)"""
+        provider_invoice = self.get_object()
+        balance = float(provider_invoice.total_amount) - float(provider_invoice.paid_amount)
+        
+        return Response({
+            'id': provider_invoice.id,
+            'source': 'provider_invoice',
+            'invoice_number': provider_invoice.invoice_number,
+            'provider': {
+                'id': provider_invoice.provider.id,
+                'name': provider_invoice.provider.name
+            },
+            'service_order': {
+                'id': provider_invoice.service_order.id,
+                'order_number': provider_invoice.service_order.order_number,
+                'purchase_order': provider_invoice.service_order.purchase_order
+            } if provider_invoice.service_order else None,
+            'amount': float(provider_invoice.total_amount),
+            'paid_amount': float(provider_invoice.paid_amount),
+            'balance': balance,
+            'status': provider_invoice.payment_status,
+            'status_display': dict(ProviderInvoice.PAYMENT_STATUS_CHOICES).get(
+                provider_invoice.payment_status, provider_invoice.payment_status
+            ),
+            'description': provider_invoice.notes or f'Factura {provider_invoice.invoice_number}',
+            'transaction_date': provider_invoice.issue_date,
+            'invoice_file': provider_invoice.invoice_file.url if provider_invoice.invoice_file else None,
+            'payments': []  # ProviderInvoice no tiene historial de pagos separado
+        })
 
 
 class DirectCostAllocationViewSet(viewsets.ModelViewSet):

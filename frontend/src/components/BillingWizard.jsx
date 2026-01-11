@@ -686,6 +686,18 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                         </span>
                                     </div>
 
+                                    {/* Explicación IVA 0 en Exportación */}
+                                    {selectedTotals.iva === 0 &&
+                                        selectedTotals.baseGravadaServicios > 0 &&
+                                        (formData.invoice_type === "FEX" ||
+                                            formData.invoice_type ===
+                                                "INTL") && (
+                                            <div className="text-[10px] text-amber-600 bg-amber-50 p-1.5 rounded mt-1 border border-amber-100">
+                                                <Info className="w-3 h-3 inline mr-1 -mt-0.5" />
+                                                El IVA es $0.00 por ser factura de exportación. Cambie el tipo a "DTE" si requiere cobrar IVA.
+                                            </div>
+                                        )}
+
                                     {/* Retención si aplica */}
                                     {selectedTotals.retencion > 0 && (
                                         <div className="flex justify-between text-sm">
@@ -774,6 +786,18 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         const hasCost =
                                                             charge.cost_amount >
                                                             0;
+                                                        
+                                                        // Si es exportación, el IVA unitario es 0
+                                                        const isExport =
+                                                            formData.invoice_type ===
+                                                                "FEX" ||
+                                                            formData.invoice_type ===
+                                                                "INTL";
+                                                        const displayIva = isExport
+                                                            ? 0
+                                                            : parseFloat(
+                                                                  charge.iva_amount
+                                                              );
 
                                                         return (
                                                             <tr
@@ -899,10 +923,10 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right tabular-nums text-slate-600">
-                                                                    {charge.iva_amount >
+                                                                    {displayIva >
                                                                     0 ? (
                                                                         formatCurrency(
-                                                                            charge.iva_amount
+                                                                            displayIva
                                                                         )
                                                                     ) : (
                                                                         <span className="text-slate-300">

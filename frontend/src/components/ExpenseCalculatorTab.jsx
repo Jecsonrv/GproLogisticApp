@@ -100,14 +100,17 @@ const ExpenseCalculatorTab = ({
                     }
                 }
 
+                const markup = parseFloat(exp.customer_markup_percentage || 0);
+                const cost = parseFloat(exp.amount || 0);
+                const price = cost * (1 + markup / 100);
+
                 initialAdjustments[exp.id] = {
                     // Asegurar conversión a número
-                    markup_percentage: parseFloat(
-                        exp.customer_markup_percentage || 0
-                    ),
+                    markup_percentage: markup,
                     iva_type: ivaType,
                     amount_locked: exp.amount_locked || false,
                     is_billed: !!exp.invoice_id,
+                    price: price.toFixed(2), // Initialize with formatted price
                 };
             });
             setExpenseAdjustments(initialAdjustments);
@@ -149,21 +152,33 @@ const ExpenseCalculatorTab = ({
     const updateAdjustment = (expenseId, field, value) => {
         setExpenseAdjustments((prev) => {
             const currentAdjustment = prev[expenseId] || {};
+            const expense = expenses.find(e => e.id === expenseId);
+            const cost = parseFloat(expense?.amount || 0);
 
-            // Validar y convertir markup_percentage
-            let finalValue = value;
-            if (field === "markup_percentage") {
-                // Convertir a número y validar
+            let newAdjustment = { ...currentAdjustment };
+
+            if (field === "price") {
+                newAdjustment.price = value; // Keep raw string
+                const numPrice = parseFloat(value);
+                if (!isNaN(numPrice) && cost > 0) {
+                    const rawMarkup = ((numPrice / cost) - 1) * 100;
+                    newAdjustment.markup_percentage = parseFloat(rawMarkup.toFixed(4));
+                } else if (!isNaN(numPrice) && cost === 0) {
+                     newAdjustment.markup_percentage = 0; 
+                }
+            } else if (field === "markup_percentage") {
                 const numValue = parseFloat(value);
-                finalValue = isNaN(numValue) ? 0 : Math.max(0, numValue); // No permitir negativos
+                newAdjustment.markup_percentage = isNaN(numValue) ? 0 : Math.max(0, numValue);
+                // Update price derived from markup
+                const newPrice = cost * (1 + newAdjustment.markup_percentage / 100);
+                newAdjustment.price = newPrice.toFixed(2);
+            } else {
+                newAdjustment[field] = value;
             }
 
             return {
                 ...prev,
-                [expenseId]: {
-                    ...currentAdjustment,
-                    [field]: finalValue,
-                },
+                [expenseId]: newAdjustment,
             };
         });
     };
@@ -443,85 +458,33 @@ const ExpenseCalculatorTab = ({
                                                 </div>
                                             </td>
 
-                                            {/* Margen % Input */}
+                                            {/* Margen % (Calculado - Solo Lectura) */}
+                                            <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 font-medium">
+                                                {parseFloat(adjustment.markup_percentage || 0).toFixed(2)}%
+                                            </td>
+
+                                            {/* Precio Venta Base (Editable) */}
                                             <td className="px-3 py-2.5 text-right">
-                                                <div className="flex items-center justify-end">
+                                                <div className="flex items-center justify-end relative">
+                                                    <span className="absolute left-2 text-slate-400 text-xs">$</span>
                                                     <Input
                                                         type="number"
                                                         step="0.01"
                                                         min="0"
-                                                        max="1000"
-                                                        value={
-                                                            adjustment.markup_percentage ||
-                                                            0
-                                                        }
+                                                        value={adjustment.price}
                                                         onChange={(e) => {
-                                                            const value =
-                                                                e.target.value;
-                                                            // Permitir vacío temporalmente para edición
-                                                            if (value === "") {
-                                                                updateAdjustment(
-                                                                    expense.id,
-                                                                    "markup_percentage",
-                                                                    0
-                                                                );
-                                                            } else {
-                                                                const numValue =
-                                                                    parseFloat(
-                                                                        value
-                                                                    );
-                                                                if (
-                                                                    !isNaN(
-                                                                        numValue
-                                                                    ) &&
-                                                                    numValue >=
-                                                                        0
-                                                                ) {
-                                                                    updateAdjustment(
-                                                                        expense.id,
-                                                                        "markup_percentage",
-                                                                        numValue
-                                                                    );
-                                                                }
-                                                            }
-                                                        }}
-                                                        onBlur={(e) => {
-                                                            // Al perder el foco, asegurar que hay un valor válido
-                                                            const value =
-                                                                e.target.value;
-                                                            const numValue =
-                                                                parseFloat(
-                                                                    value
-                                                                );
-                                                            if (
-                                                                isNaN(
-                                                                    numValue
-                                                                ) ||
-                                                                numValue < 0
-                                                            ) {
-                                                                updateAdjustment(
-                                                                    expense.id,
-                                                                    "markup_percentage",
-                                                                    0
-                                                                );
-                                                            }
+                                                            updateAdjustment(
+                                                                expense.id,
+                                                                "price",
+                                                                e.target.value
+                                                            );
                                                         }}
                                                         disabled={!canEdit}
-                                                        className="h-8 w-16 text-right px-1 py-1"
-                                                        placeholder="0"
+                                                        className={`h-8 w-28 text-right pl-4 pr-2 py-1 font-bold ${
+                                                            isBilled ? "text-slate-500 bg-slate-100" : "text-emerald-700 bg-white"
+                                                        }`}
                                                     />
                                                 </div>
-                                            </td>
-
-                                            {/* Precio Venta Base */}
-                                            <td
-                                                className={`px-3 py-2.5 text-right font-medium tabular-nums ${
-                                                    isBilled
-                                                        ? "text-slate-500"
-                                                        : "text-slate-900"
-                                                }`}
-                                            >
-                                                {formatCurrency(basePrice)}
                                             </td>
 
                                             {/* Selector Tipo IVA */}

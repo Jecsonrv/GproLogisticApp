@@ -124,6 +124,7 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'client', 'client_name',
             'customs_agent_name', 'duca', 'bl_reference',
+            'purchase_order',
             'eta', 'mes', 'status', 'status_display', 'facturado',
             'total_services', 'total_third_party', 'total_amount',
             'created_at'
@@ -509,6 +510,7 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
 class InvoiceListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listado de facturas"""
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True)
     client_name = serializers.CharField(source='service_order.client.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
@@ -520,11 +522,12 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'service_order_number', 'client_name',
+            'id', 'invoice_number', 'service_order_number', 'purchase_order', 'client_name',
             'invoice_type', 'invoice_type_display',
             'issue_date', 'due_date', 'total_amount',
             'paid_amount', 'balance', 'status', 'status_display',
             'is_dte_issued', 'dte_issued_at', 'dte_number', 'is_editable',
+            'generation_code', 'reception_stamp',
             'can_delete', 'hours_until_locked', 'days_overdue'
         ]
 
@@ -539,6 +542,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
 class InvoiceDetailSerializer(serializers.ModelSerializer):
     """Serializer completo para detalle de factura"""
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True)
     service_order_data = ServiceOrderListSerializer(source='service_order', read_only=True)
     client_name = serializers.CharField(source='service_order.client.name', read_only=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
@@ -562,7 +566,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'service_order', 'service_order_number', 'service_order_data',
+            'id', 'service_order', 'service_order_number', 'purchase_order', 'service_order_data',
             'client_name', 'client_is_gran_contribuyente',
             'invoice_number', 'invoice_type', 'invoice_type_display',
             'issue_date', 'due_date',
@@ -573,6 +577,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'payment_condition', 'payment_condition_display',
             'is_dte_issued', 'dte_issued_at', 'dte_number', 'is_editable',
+            'generation_code', 'reception_stamp',
             'can_delete', 'hours_until_locked',
             'dte_file', 'pdf_file', 'notes',
             'payments', 'credit_notes', 'billed_charges', 'billed_expenses',

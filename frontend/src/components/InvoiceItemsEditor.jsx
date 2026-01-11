@@ -161,9 +161,15 @@ const InvoiceItemsEditor = ({
             if (!ivaType) {
                 ivaType = item.applies_iva ? "gravado" : "no_sujeto";
             }
+            // Calculate initial price for editing
+            const cost = parseFloat(item.cost || 0);
+            const markup = parseFloat(item.markup_percentage || 0);
+            const price = cost * (1 + markup / 100);
+            
             setEditForm({
                 amount: item.cost,
                 markup_percentage: item.markup_percentage,
+                price: price.toFixed(2),
                 applies_iva: item.applies_iva,
                 iva_type: ivaType,
             });
@@ -976,9 +982,25 @@ const InvoiceItemsEditor = ({
                                                         )}
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium align-middle">
-                                                        {formatCurrency(
-                                                            editPrice
-                                                        )}
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            className={`${editInputClass} w-24`}
+                                                            value={editForm.price}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                const newPrice = parseFloat(val);
+                                                                let newMarkup = 0;
+                                                                if (!isNaN(newPrice) && costAmount > 0) {
+                                                                    newMarkup = parseFloat((((newPrice / costAmount) - 1) * 100).toFixed(4));
+                                                                }
+                                                                setEditForm({
+                                                                    ...editForm,
+                                                                    price: val,
+                                                                    markup_percentage: newMarkup
+                                                                });
+                                                            }}
+                                                        />
                                                     </td>
                                                     <td className="px-3 py-2 text-right tabular-nums align-middle">
                                                         <span
@@ -995,32 +1017,9 @@ const InvoiceItemsEditor = ({
                                                     </td>
                                                     <td className="px-3 py-2 text-right align-middle">
                                                         <div className="flex justify-end">
-                                                            <div className="relative">
-                                                                <Input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    className={`${editInputClass} w-20 pr-5`}
-                                                                    value={
-                                                                        editForm.markup_percentage
-                                                                    }
-                                                                    onChange={(
-                                                                        e
-                                                                    ) =>
-                                                                        setEditForm(
-                                                                            {
-                                                                                ...editForm,
-                                                                                markup_percentage:
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                            }
-                                                                        )
-                                                                    }
-                                                                />
-                                                                <span className="absolute right-1.5 top-2.5 text-[10px] text-slate-400">
-                                                                    %
-                                                                </span>
-                                                            </div>
+                                                            <span className="text-[11px] font-medium text-slate-600">
+                                                                {parseFloat(editForm.markup_percentage || 0).toFixed(2)}%
+                                                            </span>
                                                         </div>
                                                     </td>
                                                     <td className="px-3 py-2 text-center align-middle">
@@ -1136,7 +1135,7 @@ const InvoiceItemsEditor = ({
                                                             }`}
                                                         >
                                                             {marginPercent.toFixed(
-                                                                1
+                                                                2
                                                             )}
                                                             %
                                                         </span>

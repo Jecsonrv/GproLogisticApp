@@ -464,7 +464,7 @@ class Transfer(SoftDeleteModel):
     
     # Configuración de Cobro al Cliente (para Calculadora de Gastos)
     customer_markup_percentage = models.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal('0.00'),
+        max_digits=10, decimal_places=2, default=Decimal('0.00'),
         verbose_name="Margen Cobro Cliente %"
     )
     # Campo legacy para compatibilidad

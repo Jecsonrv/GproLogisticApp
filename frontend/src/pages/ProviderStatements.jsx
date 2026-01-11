@@ -384,12 +384,16 @@ const ProviderStatements = () => {
         }
     };
 
-    const fetchTransferDetails = async (transferId) => {
+    const fetchTransferDetails = async (transferId, source = "transfer") => {
         try {
-            const response = await axios.get(
-                `/transfers/transfers/${transferId}/detail_with_payments/`
-            );
-            setSelectedTransfer(response.data);
+            // Determinar el endpoint según el tipo
+            const endpoint =
+                source === "provider_invoice"
+                    ? `/transfers/provider-invoices/${transferId}/detail_with_payments/`
+                    : `/transfers/transfers/${transferId}/detail_with_payments/`;
+
+            const response = await axios.get(endpoint);
+            setSelectedTransfer({ ...response.data, source });
         } catch {
             toast.error("Error al cargar detalles");
         }
@@ -575,7 +579,10 @@ const ProviderStatements = () => {
         e.preventDefault();
         if (!selectedTransfer) return;
 
-        if (!paymentForm.proof_file) {
+        if (
+            !paymentForm.proof_file &&
+            selectedTransfer.source !== "provider_invoice"
+        ) {
             toast.error("El comprobante es obligatorio para registrar el pago");
             return;
         }
@@ -589,14 +596,16 @@ const ProviderStatements = () => {
                 }
             });
 
-            await axios.post(
-                `/transfers/transfers/${selectedTransfer.id}/register_payment/`,
-                formData,
-                {
-                    headers: { "Content-Type": "multipart/form-data" },
-                    _skipErrorToast: true,
-                }
-            );
+            // Determinar endpoint según el tipo
+            const endpoint =
+                selectedTransfer.source === "provider_invoice"
+                    ? `/transfers/provider-invoices/${selectedTransfer.id}/register_payment/`
+                    : `/transfers/transfers/${selectedTransfer.id}/register_payment/`;
+
+            await axios.post(endpoint, formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+                _skipErrorToast: true,
+            });
 
             toast.success("Pago registrado exitosamente");
             setIsPaymentModalOpen(false);
@@ -742,7 +751,7 @@ const ProviderStatements = () => {
     // ... (rest of the file)
 
     const openDetailModal = async (transfer) => {
-        await fetchTransferDetails(transfer.id);
+        await fetchTransferDetails(transfer.id, transfer.source || "transfer");
         setIsDetailModalOpen(true);
     };
 
@@ -811,22 +820,30 @@ const ProviderStatements = () => {
         {
             header: "Orden de Servicio",
             accessor: "service_order",
-            cell: (row) =>
-                row.service_order_id ? (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/service-orders/${row.service_order_id}`);
-                        }}
-                        className="font-medium text-slate-700 hover:text-slate-900 hover:underline"
-                    >
-                        {row.service_order}
-                    </button>
-                ) : (
-                    <span className="font-medium text-slate-500">
-                        {row.service_order}
-                    </span>
-                ),
+            cell: (row) => (
+                <div className="flex flex-col">
+                    {row.service_order_id ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/service-orders/${row.service_order_id}`);
+                            }}
+                            className="font-medium text-slate-700 hover:text-slate-900 hover:underline text-left"
+                        >
+                            {row.service_order}
+                        </button>
+                    ) : (
+                        <span className="font-medium text-slate-500">
+                            {row.service_order}
+                        </span>
+                    )}
+                    {row.purchase_order && (
+                        <span className="text-[10px] text-slate-500 font-medium truncate max-w-[120px]" title={row.purchase_order}>
+                            PO: {row.purchase_order}
+                        </span>
+                    )}
+                </div>
+            ),
         },
         {
             header: "Tipo",
@@ -1029,14 +1046,17 @@ const ProviderStatements = () => {
                 <SelectERP
                     value={selectedYear}
                     onChange={setSelectedYear}
-                    options={Array.from({ length: 5 }, (_, i) => {
-                        const year = new Date().getFullYear() - i;
-                        return { id: year, name: String(year) };
-                    })}
+                    options={[
+                        { id: "", name: "Todo el tiempo" },
+                        ...Array.from({ length: 5 }, (_, i) => {
+                            const year = new Date().getFullYear() - i;
+                            return { id: year, name: String(year) };
+                        })
+                    ]}
                     getOptionLabel={(o) => o.name}
                     getOptionValue={(o) => o.id}
                     size="sm"
-                    className="w-24"
+                    className="w-32"
                 />
                 <Button
                     variant="outline"
@@ -1752,8 +1772,17 @@ const ProviderStatements = () => {
                                     </div>
                                     <div className="font-mono text-sm">
                                         {selectedTransfer.service_order_number ||
+                                         selectedTransfer.service_order?.order_number ||
                                             "Gasto Administrativo"}
                                     </div>
+                                    {(selectedTransfer.purchase_order || selectedTransfer.service_order?.purchase_order) && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
+                                            <span className="font-mono text-xs text-slate-600">
+                                                {selectedTransfer.purchase_order || selectedTransfer.service_order?.purchase_order}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">

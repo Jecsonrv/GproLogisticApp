@@ -67,6 +67,7 @@ class ProviderInvoiceListSerializer(serializers.ModelSerializer):
     """Serializer para listado de facturas de proveedor (costos directos)"""
     provider_name = serializers.CharField(source='provider.name', read_only=True)
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
     allocations_count = serializers.SerializerMethodField()
@@ -77,7 +78,7 @@ class ProviderInvoiceListSerializer(serializers.ModelSerializer):
         model = ProviderInvoice
         fields = [
             'id', 'invoice_number', 'provider', 'provider_name',
-            'service_order', 'service_order_number',
+            'service_order', 'service_order_number', 'purchase_order',
             'total_amount', 'allocated_amount', 'unallocated_amount',
             'status', 'status_display', 'payment_status', 'payment_status_display',
             'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
@@ -102,6 +103,7 @@ class ProviderInvoiceDetailSerializer(serializers.ModelSerializer):
     """Serializer detallado con asignaciones"""
     provider_name = serializers.CharField(source='provider.name', read_only=True)
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True, allow_null=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
     allocations = DirectCostAllocationSerializer(many=True, read_only=True)
@@ -112,7 +114,7 @@ class ProviderInvoiceDetailSerializer(serializers.ModelSerializer):
         model = ProviderInvoice
         fields = [
             'id', 'invoice_number', 'provider', 'provider_name',
-            'service_order', 'service_order_number',
+            'service_order', 'service_order_number', 'purchase_order',
             'total_amount', 'allocated_amount', 'unallocated_amount',
             'status', 'status_display', 'payment_status', 'payment_status_display',
             'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
@@ -205,6 +207,7 @@ class DirectCostAllocationCreateSerializer(serializers.ModelSerializer):
 
 class TransferSerializer(serializers.ModelSerializer):
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True, allow_null=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True, allow_null=True)
     client_name = serializers.CharField(source='service_order.client.name', read_only=True, allow_null=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
@@ -221,7 +224,7 @@ class TransferSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transfer
         fields = [
-            'id', 'service_order', 'service_order_number', 'client_name',
+            'id', 'service_order', 'service_order_number', 'purchase_order', 'client_name',
             'provider', 'provider_name', 'beneficiary_name',
             'transfer_type', 'transfer_type_display',
             'amount', 'currency', 'exchange_rate',
@@ -251,6 +254,7 @@ class TransferSerializer(serializers.ModelSerializer):
 class TransferListSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listados"""
     service_order_number = serializers.CharField(source='service_order.order_number', read_only=True, allow_null=True)
+    purchase_order = serializers.CharField(source='service_order.purchase_order', read_only=True, allow_null=True)
     provider_name = serializers.CharField(source='provider.name', read_only=True, allow_null=True)
     bank_name = serializers.CharField(source='bank.name', read_only=True, allow_null=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
@@ -269,7 +273,7 @@ class TransferListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transfer
         fields = ['id', 'transfer_type', 'transfer_type_display', 'status', 'status_display',
-                  'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number',
+                  'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number', 'purchase_order',
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
                   'customer_markup_percentage', 'customer_applies_iva', 'customer_iva_type',

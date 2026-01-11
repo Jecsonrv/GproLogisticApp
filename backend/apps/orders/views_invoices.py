@@ -1226,9 +1226,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         ws.cell(row=start_row, column=1, value="DETALLE DE FACTURAS").font = subtitle_font
         ws.merge_cells(f'A{start_row}:N{start_row}')
 
-        # Headers de la tabla (añadidos DUCA, BL, Total Servicios, Total Gastos)
+        # Headers de la tabla (añadidos DUCA, BL, PO, Total Servicios, Total Gastos)
         headers = [
-            'No. Factura', 'Cliente', 'Orden de Servicio', 'DUCA', 'BL', 'CCF',
+            'No. Factura', 'Cliente', 'Orden de Servicio', 'PO', 'DUCA', 'BL', 'CCF',
             'Fecha Emisión', 'Fecha Vencimiento', 'Total Servicios', 'Total Gastos',
             'Total Factura', 'Pagado', 'Saldo', 'Estado'
         ]
@@ -1264,55 +1264,59 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # Columna 3: Orden de Servicio
             ws.cell(row=data_row, column=3, value=invoice.service_order.order_number if invoice.service_order else '').border = thin_border
             
-            # Columna 4: DUCA (desde la orden de servicio)
+            # Columna 4: PO
+            po_value = invoice.service_order.purchase_order if invoice.service_order else ''
+            ws.cell(row=data_row, column=4, value=po_value).border = thin_border
+            
+            # Columna 5: DUCA (desde la orden de servicio)
             duca_value = invoice.service_order.duca if invoice.service_order and invoice.service_order.duca else ''
-            ws.cell(row=data_row, column=4, value=duca_value).border = thin_border
+            ws.cell(row=data_row, column=5, value=duca_value).border = thin_border
             
-            # Columna 5: BL (desde la orden de servicio)
+            # Columna 6: BL (desde la orden de servicio)
             bl_value = invoice.service_order.bl_reference if invoice.service_order and invoice.service_order.bl_reference else ''
-            ws.cell(row=data_row, column=5, value=bl_value).border = thin_border
+            ws.cell(row=data_row, column=6, value=bl_value).border = thin_border
             
-            # Columna 6: CCF
-            ws.cell(row=data_row, column=6, value=invoice.ccf or '').border = thin_border
+            # Columna 7: CCF
+            ws.cell(row=data_row, column=7, value=invoice.ccf or '').border = thin_border
             
-            # Columna 7: Fecha Emisión
-            ws.cell(row=data_row, column=7, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
+            # Columna 8: Fecha Emisión
+            ws.cell(row=data_row, column=8, value=invoice.issue_date.strftime('%d/%m/%Y') if invoice.issue_date else '').border = thin_border
             
-            # Columna 8: Fecha Vencimiento
-            ws.cell(row=data_row, column=8, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
+            # Columna 9: Fecha Vencimiento
+            ws.cell(row=data_row, column=9, value=invoice.due_date.strftime('%d/%m/%Y') if invoice.due_date else '').border = thin_border
 
-            # Columna 9: Total Servicios
-            total_services_cell = ws.cell(row=data_row, column=9, value=float(invoice.total_services))
+            # Columna 10: Total Servicios
+            total_services_cell = ws.cell(row=data_row, column=10, value=float(invoice.total_services))
             total_services_cell.number_format = currency_format
             total_services_cell.border = thin_border
             total_services_cell.alignment = Alignment(horizontal='right')
 
-            # Columna 10: Total Gastos a Terceros
-            total_third_party_cell = ws.cell(row=data_row, column=10, value=float(invoice.total_third_party))
+            # Columna 11: Total Gastos a Terceros
+            total_third_party_cell = ws.cell(row=data_row, column=11, value=float(invoice.total_third_party))
             total_third_party_cell.number_format = currency_format
             total_third_party_cell.border = thin_border
             total_third_party_cell.alignment = Alignment(horizontal='right')
 
-            # Columna 11: Total Factura
-            total_cell = ws.cell(row=data_row, column=11, value=float(invoice.total_amount))
+            # Columna 12: Total Factura
+            total_cell = ws.cell(row=data_row, column=12, value=float(invoice.total_amount))
             total_cell.number_format = currency_format
             total_cell.border = thin_border
             total_cell.alignment = Alignment(horizontal='right')
 
-            # Columna 12: Pagado
-            paid_cell = ws.cell(row=data_row, column=12, value=float(invoice.paid_amount))
+            # Columna 13: Pagado
+            paid_cell = ws.cell(row=data_row, column=13, value=float(invoice.paid_amount))
             paid_cell.number_format = currency_format
             paid_cell.border = thin_border
             paid_cell.alignment = Alignment(horizontal='right')
 
-            # Columna 13: Saldo
-            balance_cell = ws.cell(row=data_row, column=13, value=float(invoice.balance))
+            # Columna 14: Saldo
+            balance_cell = ws.cell(row=data_row, column=14, value=float(invoice.balance))
             balance_cell.number_format = currency_format
             balance_cell.border = thin_border
             balance_cell.alignment = Alignment(horizontal='right')
 
-            # Columna 14: Estado
-            ws.cell(row=data_row, column=14, value=status_display.get(invoice.status, invoice.status)).border = thin_border
+            # Columna 15: Estado
+            ws.cell(row=data_row, column=15, value=status_display.get(invoice.status, invoice.status)).border = thin_border
 
             # Sumar totales
             totals['total_services'] += float(invoice.total_services)
@@ -1326,48 +1330,48 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Fila de totales
         ws.cell(row=data_row, column=1, value="TOTALES").font = Font(bold=True)
         ws.cell(row=data_row, column=1).border = thin_border
-        for col in range(2, 9):
+        for col in range(2, 10):
             ws.cell(row=data_row, column=col).border = thin_border
 
         # Total Servicios
-        total_services_sum = ws.cell(row=data_row, column=9, value=totals['total_services'])
+        total_services_sum = ws.cell(row=data_row, column=10, value=totals['total_services'])
         total_services_sum.number_format = currency_format
         total_services_sum.font = Font(bold=True)
         total_services_sum.border = thin_border
         total_services_sum.alignment = Alignment(horizontal='right')
 
         # Total Gastos a Terceros
-        total_third_party_sum = ws.cell(row=data_row, column=10, value=totals['total_third_party'])
+        total_third_party_sum = ws.cell(row=data_row, column=11, value=totals['total_third_party'])
         total_third_party_sum.number_format = currency_format
         total_third_party_sum.font = Font(bold=True)
         total_third_party_sum.border = thin_border
         total_third_party_sum.alignment = Alignment(horizontal='right')
 
         # Total Factura
-        total_total = ws.cell(row=data_row, column=11, value=totals['total'])
+        total_total = ws.cell(row=data_row, column=12, value=totals['total'])
         total_total.number_format = currency_format
         total_total.font = Font(bold=True)
         total_total.border = thin_border
         total_total.alignment = Alignment(horizontal='right')
 
         # Total Pagado
-        total_paid = ws.cell(row=data_row, column=12, value=totals['paid'])
+        total_paid = ws.cell(row=data_row, column=13, value=totals['paid'])
         total_paid.number_format = currency_format
         total_paid.font = Font(bold=True)
         total_paid.border = thin_border
         total_paid.alignment = Alignment(horizontal='right')
 
         # Total Saldo
-        total_balance = ws.cell(row=data_row, column=13, value=totals['balance'])
+        total_balance = ws.cell(row=data_row, column=14, value=totals['balance'])
         total_balance.number_format = currency_format
         total_balance.font = Font(bold=True)
         total_balance.border = thin_border
         total_balance.alignment = Alignment(horizontal='right')
 
-        ws.cell(row=data_row, column=14).border = thin_border
+        ws.cell(row=data_row, column=15).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [18, 30, 18, 16, 16, 15, 14, 14, 16, 16, 16, 14, 14, 15]
+        column_widths = [18, 30, 18, 15, 16, 16, 15, 14, 14, 16, 16, 16, 14, 14, 15]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 

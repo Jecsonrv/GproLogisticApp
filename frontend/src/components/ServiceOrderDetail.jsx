@@ -331,8 +331,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     // Mostrar warning si existe
                     if (allocResponse.data?.warning) {
                         toast(allocResponse.data.warning, {
+                            id: "warning-margin",
                             icon: "⚠️",
-                            duration: 6000,
+                            duration: 5000,
                             style: {
                                 background: "#fef3c7",
                                 color: "#92400e",
@@ -349,7 +350,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 }
             }
 
-            toast.success("Cargo agregado exitosamente");
+            toast.success("Cargo agregado exitosamente", { id: "success-add" });
             fetchOrderDetail(false);
             fetchProviderInvoices(); // Refrescar facturas
             setIsAddingCharge(false);
@@ -369,7 +370,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
         try {
             await api.delete(`/orders/charges/${id}/`);
-            toast.success("Cargo eliminado exitosamente");
+            toast.success("Cargo eliminado exitosamente", { id: "success-delete" });
             fetchOrderDetail(false);
             fetchProviderInvoices(); // Refrescar facturas disponibles
             if (onUpdate) onUpdate(); // Update parent list totals
@@ -422,7 +423,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                 }
             );
 
-            toast.success("Servicio actualizado correctamente");
+            toast.success("Servicio actualizado correctamente", { id: "success-update" });
             setEditingChargeId(null);
             fetchOrderDetail(false); // Refresh sin loader
         } catch {
@@ -465,6 +466,11 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     <h2 className="text-2xl font-bold text-slate-900 break-words">
                         OS: {order.order_number}
                     </h2>
+                    {order.purchase_order && (
+                        <div className="text-sm text-slate-500 font-medium mt-0.5">
+                            PO: {order.purchase_order}
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-2">
                         <div className="w-full sm:w-48">
                             <SelectERP
@@ -1364,13 +1370,11 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </span>
                                                                     </div>
 
-                                                                    {/* Monto de Costo y Margen */}
+                                                                    {/* Monto de Costo y Precio de Venta */}
                                                                     <div className="grid grid-cols-2 gap-3">
                                                                         <div>
                                                                             <Label className="mb-1.5 block text-xs">
-                                                                                Costo
-                                                                                Base
-                                                                                (Unitario)
+                                                                                Costo Base (Unitario)
                                                                             </Label>
                                                                             <div className="relative">
                                                                                 <span className="absolute left-3 top-2 text-slate-500 text-sm">
@@ -1394,9 +1398,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                             e
                                                                                                 .target
                                                                                                 .value;
-                                                                                        if (
-                                                                                            val ===
-                                                                                                "" ||
+                                                                                        const cost = parseFloat(val);
+                                                                                        const price = parseFloat(chargeForm.unit_price);
+                                                                                        let margin = chargeForm.margin_percentage;
+
+                                                                                                                                                if (!isNaN(cost) && cost > 0 && !isNaN(price)) {
+                                                                                                                                                    margin = parseFloat((((price / cost) - 1) * 100).toFixed(4));
+                                                                                                                                                }
+                                                                                        
+                                                                                                                                                if (
+                                                                                                                                                    val ===                                                                                                "" ||
                                                                                             parseFloat(
                                                                                                 val
                                                                                             ) >=
@@ -1407,6 +1418,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                                     ...chargeForm,
                                                                                                     cost_amount:
                                                                                                         val,
+                                                                                                    margin_percentage: margin
                                                                                                 }
                                                                                             );
                                                                                         }
@@ -1426,53 +1438,38 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </div>
                                                                         <div>
                                                                             <Label className="mb-1.5 block text-xs">
-                                                                                Margen
-                                                                                de
-                                                                                Ganancia
-                                                                                (%)
+                                                                                Precio Venta (Unitario)
                                                                             </Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                step="0.1"
-                                                                                min="0"
-                                                                                max="1000"
-                                                                                value={
-                                                                                    chargeForm.margin_percentage
-                                                                                }
-                                                                                onChange={(
-                                                                                    e
-                                                                                ) => {
-                                                                                    const val =
-                                                                                        e
-                                                                                            .target
-                                                                                            .value;
-                                                                                    if (
-                                                                                        val ===
-                                                                                            "" ||
-                                                                                        parseFloat(
-                                                                                            val
-                                                                                        ) >=
-                                                                                            0
-                                                                                    ) {
-                                                                                        setChargeForm(
-                                                                                            {
-                                                                                                ...chargeForm,
-                                                                                                margin_percentage:
-                                                                                                    val,
-                                                                                            }
-                                                                                        );
-                                                                                    }
-                                                                                }}
-                                                                                placeholder="20"
-                                                                                required
-                                                                            />
+                                                                            <div className="relative">
+                                                                                <span className="absolute left-3 top-2 text-slate-500 text-sm">$</span>
+                                                                                <Input
+                                                                                    className="pl-7"
+                                                                                    type="number"
+                                                                                    step="0.01"
+                                                                                    min="0"
+                                                                                    value={chargeForm.unit_price}
+                                                                                    onChange={(e) => {
+                                                                                        const val = e.target.value;
+                                                                                        const price = parseFloat(val);
+                                                                                        const cost = parseFloat(chargeForm.cost_amount);
+                                                                                        let margin = 0;
+
+                                                                                        if (!isNaN(price) && !isNaN(cost) && cost > 0) {
+                                                                                            margin = parseFloat((((price / cost) - 1) * 100).toFixed(4));
+                                                                                        }
+
+                                                                                        setChargeForm({
+                                                                                            ...chargeForm,
+                                                                                            unit_price: val,
+                                                                                            margin_percentage: margin
+                                                                                        });
+                                                                                    }}
+                                                                                    placeholder="0.00"
+                                                                                    required
+                                                                                />
+                                                                            </div>
                                                                             <p className="text-xs text-slate-500 mt-1">
-                                                                                Ej:
-                                                                                20
-                                                                                =
-                                                                                20%
-                                                                                sobre
-                                                                                costo
+                                                                                Margen calc: {chargeForm.margin_percentage ? parseFloat(chargeForm.margin_percentage).toFixed(2) : 0}%
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -1940,25 +1937,58 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 {/* Margen */}
                                                                 <td className="px-3 py-2.5 text-right text-xs tabular-nums">
                                                                     {charge.cost_allocation_info ? (
-                                                                        <span
-                                                                            className={`${
-                                                                                charge
-                                                                                    .cost_allocation_info
-                                                                                    .margin_percentage >=
-                                                                                0
-                                                                                    ? isBilled
-                                                                                        ? "text-slate-500"
-                                                                                        : "text-slate-600"
-                                                                                    : isBilled
-                                                                                    ? "text-red-600/70"
-                                                                                    : "text-red-700"
-                                                                            }`}
-                                                                        >
-                                                                            {charge.cost_allocation_info.margin_percentage.toFixed(
-                                                                                1
-                                                                            )}
-                                                                            %
-                                                                        </span>
+                                                                        editingChargeId ===
+                                                                        charge.id ? (
+                                                                            <span className="text-slate-600 font-bold bg-slate-100 px-1 py-0.5 rounded">
+                                                                                {(() => {
+                                                                                    const cost =
+                                                                                        parseFloat(
+                                                                                            charge
+                                                                                                .cost_allocation_info
+                                                                                                .cost_amount
+                                                                                        ) || 0;
+                                                                                    const price =
+                                                                                        parseFloat(
+                                                                                            editChargeForm.unit_price
+                                                                                        ) || 0;
+                                                                                    if (
+                                                                                        cost >
+                                                                                        0
+                                                                                    ) {
+                                                                                        return (
+                                                                                            ((price /
+                                                                                                cost) -
+                                                                                                1) *
+                                                                                            100
+                                                                                        ).toFixed(
+                                                                                            2
+                                                                                        );
+                                                                                    }
+                                                                                    return "0.00";
+                                                                                })()}
+                                                                                %
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span
+                                                                                className={`${
+                                                                                    charge
+                                                                                        .cost_allocation_info
+                                                                                        .margin_percentage >=
+                                                                                    0
+                                                                                        ? isBilled
+                                                                                            ? "text-slate-500"
+                                                                                            : "text-slate-600"
+                                                                                        : isBilled
+                                                                                        ? "text-red-600/70"
+                                                                                        : "text-red-700"
+                                                                                }`}
+                                                                            >
+                                                                                {charge.cost_allocation_info.margin_percentage.toFixed(
+                                                                                    2
+                                                                                )}
+                                                                                %
+                                                                            </span>
+                                                                        )
                                                                     ) : (
                                                                         <span className="text-slate-300">
                                                                             -

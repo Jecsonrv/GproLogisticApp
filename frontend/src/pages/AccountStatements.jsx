@@ -236,6 +236,7 @@ const ClientCard = ({ client, isSelected, onClick }) => {
 // YEAR OPTIONS
 // ============================================
 const YEAR_OPTIONS = [
+    { id: "", name: "Todo el tiempo" },
     { id: 2026, name: "2026" },
     { id: 2025, name: "2025" },
     { id: 2024, name: "2024" },
@@ -547,10 +548,13 @@ function AccountStatements() {
     // Filtered invoices
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
-            // Filtro por año
+            // Filtro por año (Permitir facturas de otros años si tienen saldo pendiente)
             if (selectedYear) {
                 const invDate = new Date(inv.issue_date);
-                if (invDate.getFullYear() !== selectedYear) return false;
+                const isSameYear = invDate.getFullYear() === selectedYear;
+                const hasBalance = parseFloat(inv.balance || 0) > 0.01;
+                
+                if (!isSameYear && !hasBalance) return false;
             }
 
             // Búsqueda por texto
@@ -1717,6 +1721,12 @@ function AccountStatements() {
                                                 "—"}
                                         </div>
                                     )}
+                                    {selectedInvoice.purchase_order && (
+                                        <div className="mt-1 flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
+                                            <span className="font-mono text-xs text-slate-600">{selectedInvoice.purchase_order}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
@@ -1790,6 +1800,34 @@ function AccountStatements() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Datos Fiscales DTE */}
+                        {(selectedInvoice.generation_code || selectedInvoice.reception_stamp) && (
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                                    Datos Fiscales (DTE)
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {selectedInvoice.generation_code && (
+                                        <div>
+                                            <p className="text-xs text-slate-500 mb-0.5">Código de Generación</p>
+                                            <p className="font-mono text-sm font-medium text-slate-700 select-all">
+                                                {selectedInvoice.generation_code}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {selectedInvoice.reception_stamp && (
+                                        <div>
+                                            <p className="text-xs text-slate-500 mb-0.5">Sello de Recepción</p>
+                                            <p className="font-mono text-sm font-medium text-slate-700 select-all">
+                                                {selectedInvoice.reception_stamp}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="pt-4 border-t border-slate-200">
                             <InvoiceItemsEditor
