@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from apps.orders.models import ServiceOrder, Invoice
+from django.db.utils import ProgrammingError, OperationalError
 from apps.transfers.models import Transfer
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -100,24 +101,28 @@ class AlertsView(APIView):
         # === 2. ALERTAS FINANCIERAS (CXC) ===
 
         # Facturas Vencidas
-        overdue_invoices = Invoice.objects.filter(
-            Q(status='overdue') |
-            (Q(balance__gt=0) & Q(due_date__lt=today) & ~Q(status__in=['paid', 'cancelled']))
-        ).select_related('service_order__client')
+        try:
+            overdue_invoices = Invoice.objects.filter(
+                Q(status='overdue') |
+                (Q(balance__gt=0) & Q(due_date__lt=today) & ~Q(status__in=['paid', 'cancelled']))
+            ).select_related('service_order__client')
 
-        for inv in overdue_invoices:
-            days = inv.days_overdue()
-            if not days and inv.due_date:
-                days = max((today - inv.due_date).days, 0)
-            alerts.append({
-                'id': f'cxc_overdue_{inv.id}',
-                'severity': 'high',
-                'type': 'invoice_overdue',
-                'message': f"Factura {inv.invoice_number}: Vencida hace {days} días (${inv.balance})",
-                'client': inv.service_order.client.name,
-                'link': f"/invoicing",
-                'date': inv.due_date
-            })
+            for inv in overdue_invoices:
+                days = inv.days_overdue()
+                if not days and inv.due_date:
+                    days = max((today - inv.due_date).days, 0)
+                alerts.append({
+                    'id': f'cxc_overdue_{inv.id}',
+                    'severity': 'high',
+                    'type': 'invoice_overdue',
+                    'message': f"Factura {inv.invoice_number}: Vencida hace {days} días (${inv.balance})",
+                    'client': inv.service_order.client.name,
+                    'link': f"/invoicing",
+                    'date': inv.due_date
+                })
+        except (ProgrammingError, OperationalError):
+            # DB schema not updated in production yet; skip invoice alerts for now
+            pass
 
         # === 3. ALERTAS DE PROVEEDORES (CXP) ===
         

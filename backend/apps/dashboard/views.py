@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q, Value
+from django.db.utils import ProgrammingError, OperationalError
 from django.conf import settings
 from apps.orders.models import ServiceOrder, Invoice, OrderCharge
 from apps.transfers.models import Transfer
@@ -207,8 +208,9 @@ class DashboardView(APIView):
                 created_at__month=current_month
             )
 
-        # Common logic (Trends, Top Clients aggregation, etc.)
-
+        try:
+            # Common logic (Trends, Top Clients aggregation, etc.)
+            
         # Top 5 clientes - Calcular desde OrderCharge (servicios) como fuente primaria
         # Si no hay servicios, usar facturas como fallback
         # Esto muestra el valor real de los servicios prestados, facturados o no
@@ -400,7 +402,7 @@ class DashboardView(APIView):
             for order in recent_orders
         ]
 
-        data = {
+            data = {
             'current_month': {
                 'total_os_month': total_os_month,
                 'billed_amount': float(billed_amount),
@@ -445,4 +447,46 @@ class DashboardView(APIView):
             'alerts': alerts,
             'recent_orders': recent_orders_data
         }
-        return data
+            return data
+        except (ProgrammingError, OperationalError) as e:
+            # Likely schema drift (migrations not applied). Return safe partial payload
+            try:
+                import logging
+                logging.getLogger(__name__).exception('Dashboard partial fallback due to DB error')
+            except Exception:
+                pass
+
+            return {
+                'current_month': {
+                    'total_os_month': 0,
+                    'billed_amount': 0.0,
+                    'operating_costs': 0.0,
+                    'admin_costs': 0.0,
+                    'os_abiertas_month': 0,
+                    'os_cerradas_month': 0,
+                },
+                'previous_month': {
+                    'total_os': 0,
+                    'billed_amount': 0.0,
+                    'operating_costs': 0.0,
+                },
+                'trends': {'os_trend': 0, 'billing_trend': 0, 'costs_trend': 0},
+                'overall': {
+                    'os_abiertas': 0,
+                    'os_pendiente': 0,
+                    'os_en_transito': 0,
+                    'os_en_puerto': 0,
+                    'os_en_almacen': 0,
+                    'os_finalizada': 0,
+                    'os_cerradas': 0,
+                    'pending_transfers': 0,
+                    'pending_transfers_amount': 0.0,
+                    'total_clients': 0,
+                    'pending_invoices': 0,
+                },
+                'top_clients': [],
+                'monthly_breakdown': [],
+                'alerts': [],
+                'recent_orders': [],
+                'warning': 'Partial dashboard: database schema not up-to-date. Apply migrations.'
+            }
