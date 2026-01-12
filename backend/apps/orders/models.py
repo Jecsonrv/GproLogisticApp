@@ -13,7 +13,7 @@ from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
 
 class ServiceOrder(SoftDeleteModel):
     order_number = models.CharField(max_length=20, unique=True, blank=True, verbose_name="Número de Orden")
-    is_manual_os = models.BooleanField(default=False, verbose_name="OS Manual", help_text="Permite ingresar número de OS manualmente (solo para años anteriores)")
+    is_manual_os = models.BooleanField(default=False, verbose_name="OS Manual", help_text="Permite ingresar número de OS manualmente")
     client = models.ForeignKey(Client, on_delete=models.PROTECT, verbose_name="Cliente")
     sub_client = models.ForeignKey(SubClient, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Subcliente")
 
@@ -113,10 +113,6 @@ class ServiceOrder(SoftDeleteModel):
                 manual_year = int(self.order_number.split('-')[1])
             except (ValueError, IndexError):
                 raise ValidationError("Formato de año inválido en el número de OS")
-
-            # Validar que el año sea anterior al actual
-            if manual_year >= current_year:
-                raise ValidationError(f"Las OS manuales solo pueden ser de años anteriores. Año actual: {current_year}")
 
             # Validar que no exista duplicado (solo para nuevas OS)
             if not self.pk:

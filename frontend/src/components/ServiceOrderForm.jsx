@@ -97,12 +97,6 @@ const ServiceOrderForm = ({
                 toast.error("Formato inválido. Use NNN-YYYY (ejemplo: 75-2023, 075-2023, 1550-2023)");
                 return;
             }
-            const currentYear = new Date().getFullYear();
-            const osYear = parseInt(osNumber.split('-')[1]);
-            if (osYear >= currentYear) {
-                toast.error(`Las OS manuales solo pueden ser de años anteriores. Año actual: ${currentYear}`);
-                return;
-            }
         }
 
         // Prepare data for submission
@@ -201,10 +195,10 @@ const ServiceOrderForm = ({
                                 htmlFor="is_manual_os"
                                 className="block text-sm font-medium text-slate-900 cursor-pointer"
                             >
-                                Crear OS Manualmente (Solo para años anteriores)
+                                Crear OS Manualmente
                             </label>
                             <p className="text-xs text-slate-600 mt-0.5">
-                                Activa esta opción para ingresar manualmente el número de una OS de años anteriores (2023, 2024, 2025, etc.)
+                                Activa esta opción para ingresar manualmente el número de una OS.
                             </p>
                         </div>
                     </div>
