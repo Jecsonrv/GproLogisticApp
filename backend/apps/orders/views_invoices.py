@@ -2053,6 +2053,142 @@ class RetentionControlView(APIView):
         # Filtro por cliente
         if client_id:
             base_qs = base_qs.filter(service_order__client_id=client_id)
+            
+        # === EXPORTACIÓN A EXCEL ===
+        if request.query_params.get('export') == 'excel':
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Control de Retenciones"
+
+            # Estilos profesionales - Diseño GPRO
+            header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
+            header_font = Font(color="FFFFFF", bold=True, size=10)
+            title_font = Font(size=16, bold=True, color="0F2E4D")
+            subtitle_font = Font(size=12, bold=True, color="1A4C7A")
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            currency_format = '"$"#,##0.00'
+
+            # Header Info
+            ws['A1'] = "REPORTE DE CONTROL DE RETENCIONES (F-910)"
+            ws['A1'].font = title_font
+            ws.merge_cells('A1:L1')
+
+            ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
+            ws['A2'].font = Font(size=11, color="666666")
+            ws.merge_cells('A2:P2')
+
+            # Meses en español
+            months_es = {
+                1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+                5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+                9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+            }
+            period_text = f"Año {year}" if month == 0 else f"{months_es.get(month, '')} {year}"
+            ws['A3'] = f"Período: {period_text} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            ws['A3'].font = Font(size=9, italic=True, color="999999")
+            ws.merge_cells('A3:P3')
+
+            # Table Headers
+            headers = [
+                'Factura', 'OS', 'PO', 'DUCA', 'BL', 'Fecha Emisión', 'Cliente', 'NIT Cliente', 
+                'Total Factura', 'Monto Retención (1%)', 'Estado',
+                'No. Comprobante', 'Fecha Recepción', 'Código Generación', 
+                'Sello Recepción', 'Registrado Por'
+            ]
+            
+            start_row = 5
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=start_row, column=col_num, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = thin_border
+
+            # Data Rows
+            data_row = start_row + 1
+            total_retention = 0
+            
+            status_map = {'received': 'Recibido', 'pending': 'Pendiente'}
+
+            for invoice in base_qs:
+                # Get retention payment info
+                retention_payment = invoice.payments.filter(
+                    payment_method='retencion',
+                    is_deleted=False
+                ).first()
+                
+                has_comprobante = retention_payment is not None
+                status = 'received' if has_comprobante else 'pending'
+                
+                # Apply status filter for export too
+                if status_filter and status_filter != 'all' and status != status_filter:
+                    continue
+
+                # Columns
+                ws.cell(row=data_row, column=1, value=invoice.invoice_number).border = thin_border
+                
+                # Campos de OS
+                os = invoice.service_order
+                ws.cell(row=data_row, column=2, value=os.order_number if os else '').border = thin_border
+                ws.cell(row=data_row, column=3, value=os.purchase_order if os else '').border = thin_border
+                ws.cell(row=data_row, column=4, value=os.duca if os else '').border = thin_border
+                ws.cell(row=data_row, column=5, value=os.bl_reference if os else '').border = thin_border
+                
+                ws.cell(row=data_row, column=6, value=invoice.issue_date.strftime('%d/%m/%Y')).border = thin_border
+                ws.cell(row=data_row, column=7, value=os.client.name if os and os.client else '').border = thin_border
+                ws.cell(row=data_row, column=8, value=os.client.nit if os and os.client else '').border = thin_border
+                
+                # Financials
+                total_cell = ws.cell(row=data_row, column=9, value=float(invoice.total_amount))
+                total_cell.number_format = currency_format
+                total_cell.border = thin_border
+                
+                ret_cell = ws.cell(row=data_row, column=10, value=float(invoice.retencion))
+                ret_cell.number_format = currency_format
+                ret_cell.border = thin_border
+                
+                # Status
+                ws.cell(row=data_row, column=11, value=status_map.get(status, status)).border = thin_border
+                
+                # Certificate Details
+                if has_comprobante:
+                    ws.cell(row=data_row, column=12, value=retention_payment.numero_comprobante_retencion).border = thin_border
+                    ws.cell(row=data_row, column=13, value=retention_payment.payment_date.strftime('%d/%m/%Y')).border = thin_border
+                    ws.cell(row=data_row, column=14, value=retention_payment.retention_generation_code or '').border = thin_border
+                    ws.cell(row=data_row, column=15, value=retention_payment.retention_reception_stamp or '').border = thin_border
+                    ws.cell(row=data_row, column=16, value=retention_payment.created_by.get_full_name() if retention_payment.created_by else '').border = thin_border
+                else:
+                    for c in range(12, 17):
+                        ws.cell(row=data_row, column=c, value='-').border = thin_border
+                
+                total_retention += float(invoice.retencion)
+                data_row += 1
+
+            # Totals
+            ws.cell(row=data_row, column=9, value="TOTAL RETENCIONES").font = Font(bold=True)
+            ws.cell(row=data_row, column=9).border = thin_border
+            
+            total_ret_cell = ws.cell(row=data_row, column=10, value=total_retention)
+            total_ret_cell.number_format = currency_format
+            total_ret_cell.font = Font(bold=True)
+            total_ret_cell.border = thin_border
+
+            # Auto-width (ajustado para 16 columnas)
+            column_widths = [15, 12, 15, 20, 15, 12, 30, 15, 15, 18, 12, 20, 15, 35, 35, 20]
+            for i, width in enumerate(column_widths, 1):
+                ws.column_dimensions[get_column_letter(i)].width = width
+
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename=control_retenciones_{year}_{month}.xlsx'
+            wb.save(response)
+            return response
         
         # Calcular KPIs
         total_retenciones = Decimal('0.00')

@@ -36,6 +36,7 @@ import {
     Badge,
     SkeletonTable,
 } from "../components/ui";
+import ExportButton from "../components/ui/ExportButton";
 import api from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn } from "../lib/utils";
@@ -148,6 +149,8 @@ function RetentionControl() {
         receipt_file: null,
         notes: "",
     });
+    
+    const [isExporting, setIsExporting] = useState(false);
 
     // Fetch data from API
     const fetchData = async () => {
@@ -181,6 +184,41 @@ function RetentionControl() {
             setClients(response.data.results || response.data || []);
         } catch (error) {
             console.error('Error fetching clients:', error);
+        }
+    };
+    
+    const handleExportExcel = async () => {
+        try {
+            setIsExporting(true);
+            const params = {
+                year: selectedYear,
+                month: selectedMonth,
+                export: 'excel'
+            };
+            
+            if (selectedClient) params.client_id = selectedClient;
+            if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+
+            const response = await api.get('/orders/retention-control/', { 
+                params,
+                responseType: 'blob'
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", `control_retenciones_${selectedYear}_${selectedMonth}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            
+            toast.success("Reporte exportado exitosamente");
+        } catch (error) {
+            console.error('Export error:', error);
+            toast.error("Error al exportar reporte");
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -529,6 +567,18 @@ function RetentionControl() {
                                 facturas
                             </div>
                             <div className="h-6 w-px bg-slate-200 hidden lg:block" />
+
+                            <ExportButton
+                                onExportAll={handleExportExcel}
+                                onExportFiltered={handleExportExcel}
+                                isExporting={isExporting}
+                                totalCount={filteredInvoices.length}
+                                filteredCount={filteredInvoices.length}
+                                allLabel="Exportar Reporte"
+                                allDescription="Descargar Excel con los filtros actuales"
+                                filteredLabel="Exportar Vista Actual"
+                                filteredDescription="Descargar exactamente lo que se ve en pantalla"
+                            />
 
                             <Button
                                 variant="outline"
