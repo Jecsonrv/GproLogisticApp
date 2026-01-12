@@ -405,7 +405,7 @@ const ServiceOrderForm = ({
                     </div>
                     <div className="sm:col-span-2">
                         <Label className="mb-1.5 block">
-                            Notas / Información Adicional
+                            Concepto / Información Adicional
                         </Label>
                         <Textarea
                             value={formData.notes}
@@ -415,7 +415,7 @@ const ServiceOrderForm = ({
                                     notes: e.target.value,
                                 })
                             }
-                            placeholder="Observaciones, instrucciones especiales, información relevante..."
+                            placeholder="Concepto de la orden, observaciones, instrucciones especiales..."
                             rows={3}
                             className="bg-white resize-none"
                         />

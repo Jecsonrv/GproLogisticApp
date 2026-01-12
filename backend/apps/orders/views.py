@@ -20,22 +20,31 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOperativo]
     filterset_fields = ['status', 'client', 'provider']
     search_fields = ['order_number', 'duca', 'purchase_order']
+    ordering_fields = ['order_number', 'created_at', 'eta', 'total_amount']
+    ordering = ['order_year_sort', 'order_num_sort'] # Orden por defecto: más antiguas primero
     pagination_class = None  # Desactivar paginación - frontend espera array completo
 
     def get_queryset(self):
         """
         Optimized queryset with select_related/prefetch_related to prevent N+1 queries.
         Uses annotations to calculate totals in a single query instead of N+1.
-        Implements Row-Level Security (IDOR protection):
-        - Admins/Operativo2: See all orders.
-        - Operativo: See only orders assigned to them (customs_agent) or created by them.
+        Adds sorting annotations for order_number (format XXX-YYYY).
         """
-        from django.db.models import Prefetch, Q, Sum, Value, DecimalField
-        from django.db.models.functions import Coalesce
+        from django.db.models import Prefetch, Q, Sum, Value, DecimalField, IntegerField
+        from django.db.models.functions import Coalesce, Right, Left, Length, Cast, Substr, StrIndex
         from decimal import Decimal
         user = self.request.user
 
-        queryset = ServiceOrder.objects.select_related(
+        # Anotaciones de ordenamiento basadas en el formato NNN-YYYY o NNNN-YYYY
+        # 1. Extraer el año (últimos 4 caracteres)
+        # 2. Extraer el número (todo lo antes del guion)
+        queryset = ServiceOrder.objects.annotate(
+            order_year_sort=Cast(Right('order_number', 4), output_field=IntegerField()),
+            order_num_sort=Cast(
+                Substr('order_number', 1, StrIndex('order_number', Value('-')) - 1),
+                output_field=IntegerField()
+            )
+        ).select_related(
             'client',
             'sub_client',
             'shipment_type',
@@ -711,7 +720,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         ws.merge_cells(f'A{start_row}:J{start_row}')
 
         # Headers de la tabla
-        headers = ['Número Orden', 'Cliente', 'Subcliente', 'Tipo Embarque',
+        headers = ['Número Orden', 'Cliente', 'Concepto', 'Subcliente', 'Tipo Embarque',
                    'Proveedor', 'PO', 'ETA', 'DUCA', 'Estado', 'Fecha Creación']
         header_row = start_row + 1
 
@@ -729,18 +738,19 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         for order in queryset:
             ws.cell(row=data_row, column=1, value=order.order_number).border = thin_border
             ws.cell(row=data_row, column=2, value=order.client.name if order.client else '').border = thin_border
-            ws.cell(row=data_row, column=3, value=order.sub_client.name if order.sub_client else '').border = thin_border
-            ws.cell(row=data_row, column=4, value=order.shipment_type.name if order.shipment_type else '').border = thin_border
-            ws.cell(row=data_row, column=5, value=order.provider.name if order.provider else '').border = thin_border
-            ws.cell(row=data_row, column=6, value=order.purchase_order or '').border = thin_border
-            ws.cell(row=data_row, column=7, value=order.eta.strftime('%d/%m/%Y') if order.eta else '').border = thin_border
-            ws.cell(row=data_row, column=8, value=order.duca or '').border = thin_border
-            ws.cell(row=data_row, column=9, value=order.get_status_display()).border = thin_border
-            ws.cell(row=data_row, column=10, value=order.created_at.strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=3, value=order.notes or '').border = thin_border
+            ws.cell(row=data_row, column=4, value=order.sub_client.name if order.sub_client else '').border = thin_border
+            ws.cell(row=data_row, column=5, value=order.shipment_type.name if order.shipment_type else '').border = thin_border
+            ws.cell(row=data_row, column=6, value=order.provider.name if order.provider else '').border = thin_border
+            ws.cell(row=data_row, column=7, value=order.purchase_order or '').border = thin_border
+            ws.cell(row=data_row, column=8, value=order.eta.strftime('%d/%m/%Y') if order.eta else '').border = thin_border
+            ws.cell(row=data_row, column=9, value=order.duca or '').border = thin_border
+            ws.cell(row=data_row, column=10, value=order.get_status_display()).border = thin_border
+            ws.cell(row=data_row, column=11, value=order.created_at.strftime('%d/%m/%Y')).border = thin_border
             data_row += 1
 
         # Ajustar anchos de columna
-        column_widths = [18, 25, 20, 18, 25, 15, 12, 15, 15, 14]
+        column_widths = [18, 25, 30, 20, 18, 25, 15, 12, 15, 15, 14]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1059,21 +1069,19 @@ class OrderChargeViewSet(viewsets.ModelViewSet):
         return self.queryset.select_related('service_order', 'service')
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a charge only if the order is still open (not closed/cerrada)"""
+        """Delete a charge only if it hasn't been invoiced and the order is not closed"""
         charge = self.get_object()
 
-        # CORREGIDO: Usar estado valido 'cerrada' en lugar de 'abierta' que no existe
-        # Estados validos: pendiente, en_puerto, en_transito, en_almacen, finalizada, cerrada
         if charge.service_order.status == 'cerrada':
             return Response(
                 {'error': 'No se pueden eliminar cargos de una orden cerrada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validar tambien si la orden esta facturada
-        if charge.service_order.facturado:
+        # Validar si este cargo específico ya está en una factura
+        if charge.invoice_id:
             return Response(
-                {'error': 'No se pueden eliminar cargos de una orden facturada'},
+                {'error': 'No se puede eliminar un cargo que ya ha sido facturado'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

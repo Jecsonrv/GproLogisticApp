@@ -135,12 +135,13 @@ class AlertsView(APIView):
         ).select_related('provider')
 
         for t in stale_payments:
+            provider_name = t.provider.name if t.provider else "Proveedor N/A"
             alerts.append({
                 'id': f'cxp_stale_{t.id}',
                 'severity': 'warning',
                 'type': 'payment_stale',
-                'message': f"Pago a {t.provider.name}: Aprobado hace >15 días (${t.balance})",
-                'client': t.provider.name, # Reusing client field for provider name to fit UI
+                'message': f"Pago a {provider_name}: Aprobado hace >15 días (${t.balance})",
+                'client': provider_name, # Reusing client field for provider name to fit UI
                 'link': f"/transfers", 
                 'date': t.transaction_date
             })

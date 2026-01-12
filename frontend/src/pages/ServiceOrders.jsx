@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Plus,
     Eye,
@@ -167,6 +168,8 @@ const KPICard = ({ label, value, icon: Icon }) => {
 };
 
 const ServiceOrders = () => {
+    const navigate = useNavigate();
+
     // Data state
     const [orders, setOrders] = useState([]);
     const [clients, setClients] = useState([]);
@@ -177,6 +180,7 @@ const ServiceOrders = () => {
 
     // UI state
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState("activas"); // "activas", "finalizadas", "cerradas"
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -353,12 +357,6 @@ const ServiceOrders = () => {
         }
     };
 
-    // ... (rest of the component, unmodified parts like export logic, filters, columns)
-
-    // (Inside the JSX return)
-    // Replace the Modal content with ServiceOrderForm
-
-
     const handleExportExcel = async (exportType = "all") => {
         const dataToExport =
             exportType === "filtered" ? filteredOrders : orders;
@@ -417,8 +415,22 @@ const ServiceOrders = () => {
         setSearchQuery("");
     };
 
+    // Tabs classification logic
+    const tabData = useMemo(() => {
+        const activas = orders.filter(o => ["pendiente", "en_transito", "en_puerto", "en_almacen"].includes(o.status));
+        const finalizadas = orders.filter(o => o.status === "finalizada");
+        const cerradas = orders.filter(o => o.status === "cerrada");
+        return { activas, finalizadas, cerradas };
+    }, [orders]);
+
     const filteredOrders = useMemo(() => {
-        return orders.filter((order) => {
+        // Base: filter by current tab
+        let baseList = [];
+        if (activeTab === "activas") baseList = tabData.activas;
+        else if (activeTab === "finalizadas") baseList = tabData.finalizadas;
+        else if (activeTab === "cerradas") baseList = tabData.cerradas;
+
+        return baseList.filter((order) => {
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
                 const matchesSearch =
@@ -435,14 +447,14 @@ const ServiceOrders = () => {
                 return false;
 
             if (filters.dateFrom) {
-                if (!order.eta) return false; // Excluir órdenes sin ETA
+                if (!order.eta) return false;
                 const orderDate = new Date(order.eta);
                 const fromDate = new Date(filters.dateFrom);
                 if (orderDate < fromDate) return false;
             }
 
             if (filters.dateTo) {
-                if (!order.eta) return false; // Excluir órdenes sin ETA
+                if (!order.eta) return false;
                 const orderDate = new Date(order.eta);
                 const toDate = new Date(filters.dateTo);
                 toDate.setHours(23, 59, 59);
@@ -451,7 +463,7 @@ const ServiceOrders = () => {
 
             return true;
         });
-    }, [orders, searchQuery, filters]);
+    }, [tabData, activeTab, searchQuery, filters]);
 
     const kpis = useMemo(() => {
         const total = orders.length;
@@ -501,20 +513,28 @@ const ServiceOrders = () => {
             ),
         },
         {
-            header: "Cliente",
+            header: "Cliente / Concepto",
             accessor: "client_name",
-            className: "min-w-[200px]",
+            className: "min-w-[250px]",
             sortable: false,
             cell: (row) => (
-                <div>
+                <div className="flex flex-col gap-1 py-1">
                     <div
-                        className="font-semibold text-slate-900 text-sm truncate max-w-[220px]"
+                        className="font-semibold text-slate-900 text-sm truncate max-w-[240px]"
                         title={row.client_name}
                     >
                         {row.client_name}
                     </div>
+                    {row.notes && (
+                        <div 
+                            className="text-[11px] text-slate-500 italic leading-tight truncate max-w-[240px]"
+                            title={row.notes}
+                        >
+                            {row.notes}
+                        </div>
+                    )}
                     {row.shipment_type_name && (
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
                             {row.shipment_type_name}
                         </div>
                     )}
@@ -614,7 +634,7 @@ const ServiceOrders = () => {
             sortable: false,
             cell: (row) => (
                 <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
-                    {row.status !== "cerrada" && row.status !== "cancelada" ? (
+                    {row.status !== "cerrada" ? (
                         <>
                             <div className="flex justify-center">
                                 <button
@@ -654,9 +674,24 @@ const ServiceOrders = () => {
                             </div>
                         </>
                     ) : (
-                        <div className="col-span-3 text-center text-xs text-slate-300 italic">
-                            Cerrada
-                        </div>
+                        <>
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEdit(row);
+                                    }}
+                                    className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
+                                    title="Editar (Admin)"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="col-span-2 flex items-center justify-center">
+                                <Lock className="w-3.5 h-3.5 text-slate-300" />
+                                <span className="text-[10px] text-slate-300 font-bold ml-1 uppercase">Cerrada</span>
+                            </div>
+                        </>
                     )}
                 </div>
             ),
@@ -678,7 +713,7 @@ const ServiceOrders = () => {
 
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
-            {/* Bloque Superior (Estratégico): KPIs - Responsive */}
+            {/* Bloque Superior (Estratégico): KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
                 <KPICard
                     label="Total órdenes"
@@ -709,15 +744,73 @@ const ServiceOrders = () => {
 
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
             <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
-                {/* Barra de Herramientas - Responsive: columna en móvil, fila en desktop */}
-                <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-slate-50/30">
+                {/* Tabs de Navegación por Estado */}
+                <div className="bg-slate-50/50 border-b border-slate-100 p-1.5 flex items-center gap-1">
+                    <button
+                        onClick={() => setActiveTab("activas")}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
+                            activeTab === "activas"
+                                ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        )}
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Activas
+                        <span className={cn(
+                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                            activeTab === "activas" ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600"
+                        )}>
+                            {tabData.activas.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("finalizadas")}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
+                            activeTab === "finalizadas"
+                                ? "bg-white text-emerald-700 shadow-sm border border-emerald-100"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        )}
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Finalizadas
+                        <span className={cn(
+                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                            activeTab === "finalizadas" ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
+                        )}>
+                            {tabData.finalizadas.length}
+                        </span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("cerradas")}
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
+                            activeTab === "cerradas"
+                                ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        )}
+                    >
+                        <Lock className="w-3.5 h-3.5" />
+                        Cerradas
+                        <span className={cn(
+                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                            activeTab === "cerradas" ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600"
+                        )}>
+                            {tabData.cerradas.length}
+                        </span>
+                    </button>
+                </div>
+
+                {/* Barra de Herramientas */}
+                <div className="p-3 sm:p-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-white">
                     {/* Izquierda: Búsqueda y Filtros */}
                     <div className="flex items-center gap-2 sm:gap-3 flex-1 lg:max-w-xl">
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                             <input
                                 type="text"
-                                placeholder="Buscar por OS, cliente, DUCA..."
+                                placeholder={`Buscar en ${activeTab}...`}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
@@ -744,16 +837,16 @@ const ServiceOrders = () => {
                     </div>
 
                     {/* Derecha: Botones de Acción */}
-                    <div className="flex items-center gap-2 sm:gap-3 justify-end lg:justify-end">
+                    <div className="flex items-center gap-2 sm:gap-3 justify-end">
                         <ExportButton
                             onExportAll={() => handleExportExcel("all")}
                             onExportFiltered={() =>
                                 handleExportExcel("filtered")
                             }
                             filteredCount={filteredOrders.length}
-                            totalCount={orders.length}
+                            totalCount={activeTab === 'activas' ? tabData.activas.length : activeTab === 'finalizadas' ? tabData.finalizadas.length : tabData.cerradas.length}
                             isExporting={isExporting}
-                            allLabel="Todas las Órdenes"
+                            allLabel={`Todas las ${activeTab}`}
                             allDescription="Exportar registro completo"
                             filteredLabel="Filtradas"
                             filteredDescription="Solo visibles"
@@ -770,34 +863,29 @@ const ServiceOrders = () => {
                     </div>
                 </div>
 
-                {/* Expanded Filters Panel */}
+                {/* Filtros Expandidos */}
                 {isFiltersOpen && (
                     <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
                             <div>
                                 <SelectERP
-                                    label="Estado"
+                                    label="Sub-estado"
                                     value={filters.status}
                                     onChange={(val) =>
                                         setFilters({ ...filters, status: val })
                                     }
-                                    options={[
-                                        { id: "pendiente", name: "Pendiente" },
-                                        {
-                                            id: "en_transito",
-                                            name: "En Tránsito",
-                                        },
-                                        { id: "en_puerto", name: "En Puerto" },
-                                        {
-                                            id: "en_almacen",
-                                            name: "En Almacenadora",
-                                        },
-                                        {
-                                            id: "finalizada",
-                                            name: "Finalizada",
-                                        },
-                                        { id: "cerrada", name: "Cerrada" },
-                                    ]}
+                                    options={
+                                        activeTab === 'activas' 
+                                        ? [
+                                            { id: "pendiente", name: "Pendiente" },
+                                            { id: "en_transito", name: "En Tránsito" },
+                                            { id: "en_puerto", name: "En Puerto" },
+                                            { id: "en_almacen", name: "En Almacenadora" }
+                                          ]
+                                        : activeTab === 'finalizadas'
+                                        ? [{ id: "finalizada", name: "Finalizada" }]
+                                        : [{ id: "cerrada", name: "Cerrada" }]
+                                    }
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}
                                     clearable
@@ -828,7 +916,6 @@ const ServiceOrders = () => {
                                             dateFrom: e.target.value,
                                         })
                                     }
-                                    placeholder="Fecha inicial"
                                 />
                             </div>
                             <div>
@@ -842,7 +929,6 @@ const ServiceOrders = () => {
                                             dateTo: e.target.value,
                                         })
                                     }
-                                    placeholder="Fecha final"
                                 />
                             </div>
                         </div>
@@ -864,11 +950,10 @@ const ServiceOrders = () => {
                     loading={loading}
                     searchable={false}
                     onRowClick={handleViewDetail}
-                    emptyMessage="No se encontraron órdenes de servicio"
+                    emptyMessage={`No se encontraron órdenes ${activeTab}`}
                 />
             </div>
 
-            {/* Create/Edit Modal */}
             <Modal
                 isOpen={isCreateModalOpen}
                 onClose={() => {
@@ -898,7 +983,6 @@ const ServiceOrders = () => {
                 />
             </Modal>
 
-            {/* Detail Modal */}
             <Modal
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}

@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.core.exceptions import ValidationError
 from django.db.models import Q, Sum
 from django.db import transaction
 from django.http import HttpResponse, FileResponse
@@ -1500,6 +1501,21 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
             return ProviderInvoiceCreateSerializer
         return ProviderInvoiceDetailSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar una factura de proveedor con manejo de errores de validación.
+        """
+        instance = self.get_object()
+        try:
+            instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValidationError as e:
+            error_message = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
+            return Response(
+                {'error': error_message, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
     @action(detail=True, methods=['post'])
     def allocate_cost(self, request, pk=None):
         """
@@ -1785,20 +1801,17 @@ class DirectCostAllocationViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Eliminar una asignación de costo.
+        Eliminar una asignación de costo con manejo de errores de validación.
         No permite eliminar si el servicio ya fue facturado al cliente.
         """
         allocation = self.get_object()
 
-        # Validar que no esté facturado
-        if allocation.order_charge and allocation.order_charge.billing_status == 'facturado':
+        try:
+            allocation.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValidationError as e:
+            error_message = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
             return Response(
-                {
-                    'error': 'No se puede eliminar porque el servicio ya fue facturado al cliente',
-                    'code': 'SERVICE_BILLED'
-                },
+                {'error': error_message, 'code': 'VALIDATION_ERROR'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        allocation.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)

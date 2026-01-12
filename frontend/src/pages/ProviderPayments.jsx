@@ -498,32 +498,52 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
+            const isDirectCostWithOS = formData.transfer_type === 'costos' && formData.service_order;
+            const endpoint = isDirectCostWithOS ? "/transfers/provider-invoices/" : "/transfers/transfers/";
+            
             const formDataToSend = new FormData();
 
-            Object.keys(formData).forEach((key) => {
-                if (
-                    key !== "invoice_file" &&
-                    formData[key] !== null &&
-                    formData[key] !== ""
-                ) {
-                    formDataToSend.append(key, formData[key]);
-                }
-            });
+            if (isDirectCostWithOS) {
+                // Mapping for ProviderInvoice
+                formDataToSend.append("invoice_number", formData.invoice_number || "S/N");
+                formDataToSend.append("provider", formData.provider);
+                formDataToSend.append("service_order", formData.service_order);
+                formDataToSend.append("total_amount", formData.amount);
+                formDataToSend.append("issue_date", formData.transaction_date);
+                formDataToSend.append("notes", formData.description + (formData.notes ? ` - ${formData.notes}` : ""));
+            } else {
+                // Standard mapping for Transfer
+                Object.keys(formData).forEach((key) => {
+                    if (
+                        key !== "invoice_file" &&
+                        formData[key] !== null &&
+                        formData[key] !== ""
+                    ) {
+                        formDataToSend.append(key, formData[key]);
+                    }
+                });
 
-            if (formData.invoice_file instanceof File) {
-                formDataToSend.append("invoice_file", formData.invoice_file);
+                // Specific defaults for consistency with Service Order detail view
+                if (formData.transfer_type === 'cargos') {
+                    formDataToSend.append("is_pass_through", "true");
+                    formDataToSend.append("customer_markup_percentage", "0");
+                }
             }
 
-            await axios.post("/transfers/transfers/", formDataToSend, {
+            if (formData.invoice_file instanceof File) {
+                formDataToSend.append(isDirectCostWithOS ? "invoice_file" : "invoice_file", formData.invoice_file);
+            }
+
+            await axios.post(endpoint, formDataToSend, {
                 headers: { "Content-Type": undefined },
             });
 
-            toast.success("Gasto registrado exitosamente");
+            toast.success(isDirectCostWithOS ? "Costo directo registrado exitosamente" : "Gasto registrado exitosamente");
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
-        } catch {
-            // El interceptor de axios ya muestra el toast de error
+        } catch (error) {
+            // Error handled by interceptor
         } finally {
             setIsSubmitting(false);
         }
@@ -535,36 +555,51 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
+            const isProviderInvoice = selectedPayment.source === 'provider_invoice';
+            const endpoint = isProviderInvoice 
+                ? `/transfers/provider-invoices/${selectedPayment.id}/`
+                : `/transfers/transfers/${selectedPayment.id}/`;
+
             const formDataToSend = new FormData();
 
-            Object.keys(formData).forEach((key) => {
-                if (
-                    key !== "invoice_file" &&
-                    formData[key] !== null &&
-                    formData[key] !== ""
-                ) {
-                    formDataToSend.append(key, formData[key]);
-                }
-            });
+            if (isProviderInvoice) {
+                // Mapping for ProviderInvoice update
+                formDataToSend.append("invoice_number", formData.invoice_number || "S/N");
+                formDataToSend.append("provider", formData.provider);
+                formDataToSend.append("total_amount", formData.amount);
+                formDataToSend.append("issue_date", formData.transaction_date);
+                formDataToSend.append("notes", formData.description);
+            } else {
+                // Standard mapping for Transfer
+                Object.keys(formData).forEach((key) => {
+                    if (
+                        key !== "invoice_file" &&
+                        formData[key] !== null &&
+                        formData[key] !== ""
+                    ) {
+                        formDataToSend.append(key, formData[key]);
+                    }
+                });
+            }
 
             if (formData.invoice_file instanceof File) {
-                formDataToSend.append("invoice_file", formData.invoice_file);
+                formDataToSend.append(isProviderInvoice ? "invoice_file" : "invoice_file", formData.invoice_file);
             }
 
             await axios.patch(
-                `/transfers/transfers/${selectedPayment.id}/`,
+                endpoint,
                 formDataToSend,
                 {
                     headers: { "Content-Type": undefined },
                 }
             );
 
-            toast.success("Gasto actualizado exitosamente");
+            toast.success("Registro actualizado exitosamente");
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
         } catch {
-            // El interceptor de axios ya muestra el toast de error
+            // Error handled by interceptor
         } finally {
             setIsSubmitting(false);
         }
@@ -581,14 +616,22 @@ function ProviderPayments() {
                 toast.success("Nota de crédito eliminada correctamente");
                 fetchCreditNotes();
             } else {
-                await axios.delete(`/transfers/transfers/${deleteConfirm.id}/`);
-                toast.success("Gasto eliminado correctamente");
+                // Check if it's a provider_invoice or a transfer
+                const payment = payments.find(p => p.id === deleteConfirm.id && (p.source === deleteConfirm.source || !deleteConfirm.source));
+                const source = payment?.source || 'transfer';
+                
+                const endpoint = source === 'provider_invoice'
+                    ? `/transfers/provider-invoices/${deleteConfirm.id}/`
+                    : `/transfers/transfers/${deleteConfirm.id}/`;
+
+                await axios.delete(endpoint);
+                toast.success("Registro eliminado correctamente");
                 fetchPayments();
             }
         } catch {
-            // El interceptor de axios ya muestra el toast de error
+            // Error handled by interceptor
         } finally {
-            setDeleteConfirm({ open: false, id: null, type: null });
+            setDeleteConfirm({ open: false, id: null, type: null, source: null });
         }
     };
 
@@ -1286,12 +1329,12 @@ function ProviderPayments() {
                             ) : null}
                         </div>
                         <div className="flex justify-center">
-                            {osClosed || isProviderInvoice ? (
+                            {osClosed ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
-                                    title={osClosed ? "OS Cerrada" : "Edición no disponible"}
+                                    title="OS Cerrada"
                                 >
-                                    {osClosed ? <LockIcon className="w-4 h-4" /> : <Edit2 className="w-4 h-4 opacity-50" />}
+                                    <LockIcon className="w-4 h-4" />
                                 </span>
                             ) : (
                                 <button
@@ -1307,10 +1350,10 @@ function ProviderPayments() {
                             )}
                         </div>
                         <div className="flex justify-center">
-                            {osClosed || isProviderInvoice ? (
+                            {osClosed ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
-                                    title={osClosed ? "OS Cerrada" : "Eliminación restringida"}
+                                    title="OS Cerrada"
                                 >
                                     <LockIcon className="w-4 h-4" />
                                 </span>
@@ -1322,6 +1365,7 @@ function ProviderPayments() {
                                             open: true,
                                             id: row.id,
                                             type: "payment",
+                                            source: row.source,
                                         });
                                     }}
                                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"

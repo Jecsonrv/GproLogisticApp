@@ -157,6 +157,15 @@ class ProviderInvoice(SoftDeleteModel):
         return f"{self.invoice_number} - {self.provider.name} - ${self.total_amount}"
 
     def save(self, *args, **kwargs):
+        # Bloquear cambios en el monto si ya hay servicios facturados
+        if self.pk:
+            old_instance = ProviderInvoice.objects.get(pk=self.pk)
+            if old_instance.total_amount != self.total_amount:
+                if self.status == 'facturado' or self.allocations.filter(is_deleted=False, order_charge__invoice__isnull=False).exists():
+                    raise ValidationError(
+                        "No se puede modificar el monto de una factura de proveedor con servicios ya facturados al cliente."
+                    )
+
         # Calcular monto sin asignar
         self.unallocated_amount = self.total_amount - self.allocated_amount
 
@@ -185,6 +194,23 @@ class ProviderInvoice(SoftDeleteModel):
             self.payment_status = 'pendiente'
 
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """
+        Bloquea la eliminación si la factura ya tiene servicios facturados al cliente.
+        """
+        if self.status == 'facturado':
+            raise ValidationError(
+                "No se puede eliminar la factura de proveedor porque sus servicios ya fueron facturados al cliente."
+            )
+        
+        # Verificar si alguna asignación activa está vinculada a un cargo facturado
+        if self.allocations.filter(is_deleted=False, order_charge__invoice__isnull=False).exists():
+            raise ValidationError(
+                "No se puede eliminar la factura porque contiene desgloses ya incluidos en facturas de clientes."
+            )
+
+        super().delete(*args, **kwargs)
 
     def recalculate_allocated(self):
         """Recalcula el monto asignado desde las asignaciones"""
@@ -322,6 +348,12 @@ class DirectCostAllocation(SoftDeleteModel):
         """Al eliminar, actualizar factura y desmarcar servicio"""
         order_charge = self.order_charge
         provider_invoice = self.provider_invoice
+
+        # Bloquear eliminación si el cargo ya está facturado
+        if order_charge and order_charge.invoice_id:
+            raise ValidationError(
+                "No se puede eliminar la asignación de costo porque el servicio ya fue facturado al cliente."
+            )
 
         super().delete(*args, **kwargs)
 

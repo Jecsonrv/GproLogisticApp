@@ -12,7 +12,7 @@ from apps.core.models import SoftDeleteModel
 from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
 
 class ServiceOrder(SoftDeleteModel):
-    order_number = models.CharField(max_length=20, unique=True, blank=True, verbose_name="Número de Orden")
+    order_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name="Número de Orden")
     is_manual_os = models.BooleanField(default=False, verbose_name="OS Manual", help_text="Permite ingresar número de OS manualmente")
     client = models.ForeignKey(Client, on_delete=models.PROTECT, verbose_name="Cliente")
     sub_client = models.ForeignKey(SubClient, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Subcliente")
@@ -72,6 +72,12 @@ class ServiceOrder(SoftDeleteModel):
         from django.db import transaction
         from django.db.models import Max
         import re
+
+        # Si la orden está marcada como eliminada, permitimos el guardado sin validar formato
+        # para que el sufijo de borrado no cause errores
+        if self.is_deleted:
+            super().save(*args, **kwargs)
+            return
 
         current_year = timezone.now().year
 
@@ -230,16 +236,35 @@ class ServiceOrder(SoftDeleteModel):
     def delete(self, using=None, keep_parents=False):
         """
         Sobreescritura de delete para validaciones de negocio antes del soft-delete.
+        Libera el número de OS para que pueda ser reutilizado.
         """
-        # Validar si tiene facturas de venta asociadas
+        # 1. Validar si tiene facturas de venta asociadas
         if self.invoices.exists():
             raise ValidationError("No se puede eliminar la orden porque tiene facturas de venta asociadas.")
         
-        # Validar si tiene gastos/transferencias asociadas (activas)
-        if self.transfers.filter(is_deleted=False).exists():
-            raise ValidationError("No se puede eliminar la orden porque tiene facturas de costos/gastos asociadas.")
+        # 2. Validar si tiene cargos a clientes (calculadora de servicios)
+        if self.charges.filter(is_deleted=False).exists():
+            raise ValidationError("No se puede eliminar la orden porque tiene cargos a clientes (servicios) asociados. Elimine los cargos primero.")
 
-        super().delete(using=using, keep_parents=keep_parents)
+        # 3. Validar si tiene costos directos (ProviderInvoice) asociados
+        # Usamos el related_name si existe o la búsqueda inversa
+        if hasattr(self, 'provider_invoices') and self.provider_invoices.filter(is_deleted=False).exists():
+            raise ValidationError("No se puede eliminar la orden porque tiene costos directos (facturas de proveedores) asociados.")
+        
+        # 4. Validar si tiene gastos/transferencias asociadas (activas)
+        if self.transfers.filter(is_deleted=False).exists():
+            raise ValidationError("No se puede eliminar la orden porque tiene transferencias o gastos asociados.")
+
+        # Realizar el borrado lógico y liberar el número
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        
+        # Guardamos el número original para el log si fuera necesario
+        original_number = self.order_number
+        # Añadimos sufijo para liberar el número original (ej: 031-2026-DEL-1715456123)
+        self.order_number = f"{original_number}-DEL-{int(self.deleted_at.timestamp())}"
+        
+        self.save()
 
 class OrderDocument(models.Model):
     """Documentos asociados a una Orden de Servicio"""

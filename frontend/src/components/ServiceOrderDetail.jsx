@@ -691,7 +691,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         {order.notes && (
                                             <div className="pt-3 border-t border-slate-100">
                                                 <dt className="text-sm font-medium text-slate-500">
-                                                    Notas
+                                                    Concepto / Información Adicional
                                                 </dt>
                                                 <dd className="mt-1 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap">
                                                     {order.notes}
@@ -1323,7 +1323,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 opt.invoice_number
                                                                             } - ${
                                                                                 opt.provider_name
-                                                                            } (Disp: ${formatCurrency(
+                                                                            } ${opt.notes ? `(${opt.notes}) ` : ''}(Disp: ${formatCurrency(
                                                                                 opt.unallocated_amount
                                                                             )})`
                                                                         }
