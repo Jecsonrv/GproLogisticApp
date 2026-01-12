@@ -510,19 +510,19 @@ function Dashboard() {
                                     </p>
                                 </div>
                             ) : (
-                                <table className="w-full text-sm">
-                                    <thead>
+                                <table className="w-full text-sm border-separate border-spacing-0">
+                                    <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm">
                                         <tr className="border-b-2 border-slate-300">
-                                            <th className="px-4 py-3.5 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                            <th className="px-4 py-3.5 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                                                 Cliente
                                             </th>
-                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
                                                 Facturación
                                             </th>
-                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
                                                 Servicios
                                             </th>
-                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
                                                 Préstamos
                                             </th>
                                         </tr>
@@ -551,8 +551,9 @@ function Dashboard() {
                                                 </tr>
                                             );
                                         })}
-                                        {/* Totals Row */}
-                                        <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold">
+                                    </tbody>
+                                    <tfoot className="sticky bottom-0 z-10 bg-slate-100 border-t-2 border-slate-300 font-bold shadow-[0_-2px_4px_rgba(0,0,0,0.1)]">
+                                        <tr>
                                             <td className="px-4 py-4 text-slate-900 uppercase text-xs tracking-wide">
                                                 Total General
                                             </td>
@@ -574,7 +575,7 @@ function Dashboard() {
                                                 )}
                                             </td>
                                         </tr>
-                                    </tbody>
+                                    </tfoot>
                                 </table>
                             )}
                         </div>
