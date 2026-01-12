@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import ServiceOrderViewSet, OrderDocumentViewSet, OrderChargeViewSet, OrderHistoryViewSet
-from .views_invoices import InvoiceViewSet, InvoicePaymentViewSet, CreditNoteViewSet
+from .views_invoices import InvoiceViewSet, InvoicePaymentViewSet, CreditNoteViewSet, RetentionControlView
 
 router = DefaultRouter()
 router.register(r'service-orders', ServiceOrderViewSet, basename='service-order')
@@ -14,4 +14,5 @@ router.register(r'credit-notes', CreditNoteViewSet, basename='credit-note')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('retention-control/', RetentionControlView.as_view(), name='retention-control'),
 ]

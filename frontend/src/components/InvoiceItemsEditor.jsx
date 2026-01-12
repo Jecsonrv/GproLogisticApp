@@ -1339,13 +1339,18 @@ const InvoiceItemsEditor = ({
                                                 : payment.payment_method ===
                                                   "tarjeta"
                                                 ? "Tarjeta"
+                                                : payment.payment_method ===
+                                                  "retencion"
+                                                ? "Retención F-910"
                                                 : payment.payment_method || "—"}
                                         </td>
                                         <td className="px-3 py-2 text-slate-700 text-sm">
                                             {payment.bank_name || "—"}
                                         </td>
                                         <td className="px-3 py-2 text-slate-600 text-sm font-mono">
-                                            {payment.reference_number || "—"}
+                                            {payment.payment_method === "retencion" 
+                                                ? (payment.numero_comprobante_retencion || "—")
+                                                : (payment.reference_number || "—")}
                                             {payment.notes && (
                                                 <div className="text-[10px] text-slate-400 mt-0.5 font-sans">
                                                     {payment.notes}

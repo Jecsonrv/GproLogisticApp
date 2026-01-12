@@ -114,7 +114,10 @@ export function PaymentDetailModal({ isOpen, onClose, payment, onUpdate }) {
             cheque: "Cheque",
             tarjeta: "Tarjeta de Crédito/Débito",
             deposito: "Depósito Bancario",
+            retencion: "Comprobante de Retención F-910",
         }[payment.payment_method] || payment.payment_method;
+
+    const isRetention = payment.payment_method === "retencion";
 
     return (
         <Modal
@@ -174,13 +177,43 @@ export function PaymentDetailModal({ isOpen, onClose, payment, onUpdate }) {
                                 </span>
                             </div>
                         )}
-                        {payment.reference_number && (
+                        {payment.reference_number && !isRetention && (
                             <div>
                                 <span className="text-slate-500 block mb-1">
                                     Referencia:
                                 </span>
                                 <span className="font-mono text-slate-700 block">
                                     {payment.reference_number}
+                                </span>
+                            </div>
+                        )}
+                        {isRetention && payment.numero_comprobante_retencion && (
+                            <div>
+                                <span className="text-slate-500 block mb-1">
+                                    Número Comprobante F-910:
+                                </span>
+                                <span className="font-mono text-slate-700 block font-semibold">
+                                    {payment.numero_comprobante_retencion}
+                                </span>
+                            </div>
+                        )}
+                        {isRetention && payment.retention_generation_code && (
+                            <div>
+                                <span className="text-slate-500 block mb-1">
+                                    Código de Generación:
+                                </span>
+                                <span className="font-mono text-slate-700 block text-xs break-all">
+                                    {payment.retention_generation_code}
+                                </span>
+                            </div>
+                        )}
+                        {isRetention && payment.retention_reception_stamp && (
+                            <div className="sm:col-span-2">
+                                <span className="text-slate-500 block mb-1">
+                                    Sello de Recepción:
+                                </span>
+                                <span className="font-mono text-slate-700 block text-xs break-all">
+                                    {payment.retention_reception_stamp}
                                 </span>
                             </div>
                         )}

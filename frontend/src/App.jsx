@@ -25,6 +25,7 @@ const ProviderStatements = lazy(() => import("./pages/ProviderStatements"));
 const Catalogs = lazy(() => import("./pages/Catalogs"));
 const Profile = lazy(() => import("./pages/Profile"));
 const PettyCash = lazy(() => import("./pages/PettyCash"));
+const RetentionControl = lazy(() => import("./pages/RetentionControl.jsx"));
 
 // Loading fallback component
 function LoadingFallback() {
@@ -99,6 +100,10 @@ function App() {
                             element={<ProviderStatements />}
                         />
                         <Route path="petty-cash" element={<PettyCash />} />
+                        <Route
+                            path="retention-control"
+                            element={<RetentionControl />}
+                        />
                         <Route path="profile" element={<Profile />} />
                     </Route>
                 </Routes>

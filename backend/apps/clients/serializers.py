@@ -95,6 +95,7 @@ class ClientListSerializer(serializers.ModelSerializer):
     credit_available = serializers.SerializerMethodField()
     taxpayer_type_display = serializers.CharField(source='get_taxpayer_type_display', read_only=True)
     taxpayer_type_short = serializers.SerializerMethodField()
+    total_pending = serializers.SerializerMethodField()
 
     class Meta:
         model = Client
@@ -104,7 +105,7 @@ class ClientListSerializer(serializers.ModelSerializer):
             'payment_condition', 'credit_days', 'credit_limit', 'credit_available',
             'taxpayer_type', 'taxpayer_type_display', 'taxpayer_type_short',
             'is_gran_contribuyente',  # Legacy field for compatibility
-            'is_active', 'notes',
+            'is_active', 'notes', 'total_pending',
             'created_at', 'updated_at'
         ]
 
@@ -113,3 +114,9 @@ class ClientListSerializer(serializers.ModelSerializer):
 
     def get_taxpayer_type_short(self, obj):
         return obj.get_taxpayer_type_display_short()
+    
+    def get_total_pending(self, obj):
+        """Retorna el saldo pendiente (CXC) del cliente. Prioriza valor anotado."""
+        if hasattr(obj, 'annotated_total_pending'):
+            return obj.annotated_total_pending or 0
+        return obj.get_credit_used()

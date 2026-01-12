@@ -21,6 +21,11 @@ import {
     Trash2,
     Lock as LockIcon,
     Building2,
+    TrendingUp,
+    TrendingDown,
+    ArrowUpRight,
+    User,
+    Receipt,
 } from "lucide-react";
 import {
     Button,
@@ -49,6 +54,16 @@ import usePermissionStore from "../stores/permissionStore";
 // ============================================
 // HELPERS
 // ============================================
+const getYearOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const options = [{ id: "", name: "Todo el tiempo" }];
+    // Current year + 3 past years
+    for (let i = 0; i <= 3; i++) {
+        options.push({ id: currentYear - i, name: String(currentYear - i) });
+    }
+    return options;
+};
+
 const formatDateSafe = (dateStr, variant = "short") => {
     if (!dateStr) return "—";
     try {
@@ -129,6 +144,37 @@ const StatusBadge = ({ status }) => {
             />
             {config.label}
         </span>
+    );
+};
+
+// ============================================
+// KPI CARD COMPONENT
+// ============================================
+const KPICard = ({ label, value, subtext, icon: Icon }) => {
+    return (
+        <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 lg:p-5 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="min-w-0 flex-1">
+                <p
+                    className="text-[10px] sm:text-xs lg:text-sm font-medium text-slate-500 mb-0.5 sm:mb-1 truncate"
+                    title={label}
+                >
+                    {label}
+                </p>
+                <p className="text-base sm:text-xl lg:text-2xl font-bold text-slate-900 tabular-nums tracking-tight truncate">
+                    {value}
+                </p>
+                {subtext && (
+                    <p className="text-[9px] sm:text-[10px] text-slate-400 font-medium mt-0.5 truncate">
+                        {subtext}
+                    </p>
+                )}
+            </div>
+            <div className="p-2 sm:p-3 lg:p-4 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100 flex-shrink-0">
+                {Icon && (
+                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-slate-400" />
+                )}
+            </div>
+        </div>
     );
 };
 
@@ -248,6 +294,7 @@ const ProviderStatements = () => {
 
     // Data
     const [providers, setProviders] = useState([]);
+    const [generalStats, setGeneralStats] = useState(null);
     const [banks, setBanks] = useState([]);
     const [selectedProvider, setSelectedProvider] = useState(null);
     const [statement, setStatement] = useState(null);
@@ -258,7 +305,16 @@ const ProviderStatements = () => {
     const [loadingStatement, setLoadingStatement] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    
+    // Initialize selectedYear from sessionStorage or default to "" (All time)
+    const [selectedYear, setSelectedYear] = useState(() => {
+        const saved = sessionStorage.getItem("providerStatements_year");
+        if (saved === "" || (saved && !isNaN(saved))) {
+            return saved === "" ? "" : parseInt(saved);
+        }
+        return "";
+    });
+
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isBatchPaymentModalOpen, setIsBatchPaymentModalOpen] =
         useState(false);
@@ -272,6 +328,7 @@ const ProviderStatements = () => {
         id: null,
     });
 
+    // ... (Forms state remains same)
     // Forms
     const [paymentForm, setPaymentForm] = useState({
         amount: "",
@@ -305,10 +362,24 @@ const ProviderStatements = () => {
 
     useEffect(() => {
         fetchProviders();
+        fetchGeneralStats();
         fetchBanks();
         // fetchProviders/fetchBanks stable enough; deps intentionally empty
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Persist selectedYear changes
+    useEffect(() => {
+        if (selectedYear === "") {
+            sessionStorage.setItem("providerStatements_year", "");
+        } else {
+            sessionStorage.setItem("providerStatements_year", String(selectedYear));
+        }
+        
+        if (!selectedProvider) {
+            fetchGeneralStats();
+        }
+    }, [selectedYear]);
 
     useEffect(() => {
         if (selectedProvider) {
@@ -319,36 +390,19 @@ const ProviderStatements = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProvider, selectedYear]);
 
-    // ... (fetch functions remain the same)
-
     const fetchProviders = async () => {
         try {
             setLoading(true);
+            // Carga optimizada: solo lista simple.
+            // Nota: Para mostrar "Deuda pendiente" en sidebar sin N+1, idealmente el backend
+            // debería anotarlo en el listado (igual que hicimos con Clients).
+            // Por ahora, cargaremos la lista base y si se requiere el total exacto en sidebar,
+            // se implementará la optimización en backend después.
             const response = await axios.get("/catalogs/providers/");
-
-            // Enriquecer proveedores con información de deuda
-            const enrichedProviders = await Promise.all(
-                response.data.map(async (provider) => {
-                    try {
-                        const stmtRes = await axios.get(
-                            `/catalogs/providers/${provider.id}/account_statement/`
-                        );
-                        return {
-                            ...provider,
-                            total_debt: stmtRes.data.total_debt || 0,
-                        };
-                    } catch {
-                        return {
-                            ...provider,
-                            total_debt: 0,
-                        };
-                    }
-                })
-            );
-            setProviders(enrichedProviders);
+            setProviders(response.data);
 
             if (providerIdFromUrl) {
-                const found = enrichedProviders.find(
+                const found = response.data.find(
                     (p) => p.id === parseInt(providerIdFromUrl)
                 );
                 if (found) setSelectedProvider(found);
@@ -357,6 +411,17 @@ const ProviderStatements = () => {
             toast.error("Error al cargar proveedores");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchGeneralStats = async () => {
+        try {
+            const response = await axios.get("/catalogs/providers/general_summary/", {
+                params: { year: selectedYear }
+            });
+            setGeneralStats(response.data);
+        } catch (error) {
+            console.error("Error loading general stats:", error);
         }
     };
 
@@ -1046,13 +1111,7 @@ const ProviderStatements = () => {
                 <SelectERP
                     value={selectedYear}
                     onChange={setSelectedYear}
-                    options={[
-                        { id: "", name: "Todo el tiempo" },
-                        ...Array.from({ length: 5 }, (_, i) => {
-                            const year = new Date().getFullYear() - i;
-                            return { id: year, name: String(year) };
-                        })
-                    ]}
+                    options={getYearOptions()}
                     getOptionLabel={(o) => o.name}
                     getOptionValue={(o) => o.id}
                     size="sm"
@@ -1060,8 +1119,14 @@ const ProviderStatements = () => {
                 />
                 <Button
                     variant="outline"
-                    onClick={() => fetchStatement(selectedProvider?.id)}
-                    disabled={!selectedProvider}
+                    onClick={() => {
+                        fetchProviders();
+                        fetchGeneralStats();
+                        if (selectedProvider) {
+                            fetchStatement(selectedProvider.id);
+                        }
+                    }}
+                    disabled={loading}
                 >
                     <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
                 </Button>
@@ -1071,7 +1136,7 @@ const ProviderStatements = () => {
                     disabled={!selectedProvider}
                     totalCount={statement?.transfers?.length || 0}
                     allLabel="Estado de Cuenta"
-                    allDescription={`Exportar movimientos del año ${selectedYear}`}
+                    allDescription={`Exportar movimientos del año ${selectedYear || "actual"}`}
                     className="ml-2"
                 />
             </div>
@@ -1124,21 +1189,122 @@ const ProviderStatements = () => {
                 {/* Contenido Principal */}
                 <div className="lg:col-span-9 space-y-6">
                     {!selectedProvider ? (
-                        <Card>
-                            <CardContent className="py-16">
-                                <div className="text-center">
-                                    <Truck className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                        Selecciona un Proveedor
-                                    </h3>
-                                    <p className="text-gray-500 max-w-md mx-auto">
-                                        Selecciona un proveedor de la lista para
-                                        ver su estado de cuenta, historial de
-                                        facturas y registrar pagos.
-                                    </p>
+                        <div className="space-y-6 animate-fade-in">
+                            {/* General Stats - Tabular Display */}
+                            {generalStats && (
+                                <div className="space-y-6 mb-6">
+                                    {/* Financial Stats Table */}
+                                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                <DollarSign className="w-4 h-4" />
+                                                Resumen Financiero Global
+                                            </h3>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3">Total a Pagar (Facturado)</th>
+                                                        <th className="px-4 py-3">Total Pagado</th>
+                                                        <th className="px-4 py-3 text-right">Deuda Pendiente</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    <tr className="hover:bg-slate-50/50">
+                                                        <td className="px-4 py-3 font-semibold text-slate-900">
+                                                            {formatCurrency(generalStats.financial.total_amount)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-emerald-600 font-medium">
+                                                            {formatCurrency(generalStats.financial.total_paid)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-bold text-red-600">
+                                                            {formatCurrency(generalStats.financial.total_pending)}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* Provider Metrics Table */}
+                                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                <Truck className="w-4 h-4" />
+                                                Métricas de Proveedores
+                                            </h3>
+                                        </div>
+                                        <div className="grid grid-cols-3 divide-x divide-slate-100">
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Proveedores</p>
+                                                <p className="text-xl font-bold text-slate-900">{generalStats.providers.total}</p>
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Proveedores al Día</p>
+                                                <p className="text-xl font-bold text-emerald-600">{generalStats.providers.up_to_date}</p>
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Proveedores con Deuda</p>
+                                                <p className="text-xl font-bold text-red-600">{generalStats.providers.with_debt}</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            )}
+
+                            {/* Top Creditors - Single Column */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                        <TrendingUp className="w-4 h-4 text-red-500" />
+                                        Proveedores con Mayor Deuda Pendiente
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-0">
+                                    <div className="space-y-3">
+                                        {providers
+                                            .filter(p => (p.total_debt || 0) > 0)
+                                            .sort((a, b) => (b.total_debt || 0) - (a.total_debt || 0))
+                                            .slice(0, 5)
+                                            .map((provider) => (
+                                                <div
+                                                    key={provider.id}
+                                                    onClick={() => setSelectedProvider(provider)}
+                                                    className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors border border-slate-200"
+                                                >
+                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                        <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-semibold text-xs text-slate-700 flex-shrink-0">
+                                                            {provider.name?.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="font-medium text-sm text-slate-900 truncate">
+                                                                {provider.name}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500 truncate">
+                                                                {provider.nit || 'Sin NIT'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right ml-3 flex-shrink-0">
+                                                        <p className="font-bold text-sm text-red-600 tabular-nums">
+                                                            {formatCurrency(provider.total_debt || 0)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        {providers.filter(p => (p.total_debt || 0) > 0).length === 0 && (
+                                            <div className="text-center py-8 text-slate-500">
+                                                <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500 mb-2" />
+                                                <p className="text-sm font-medium">
+                                                    ¡Excelente! Todos los proveedores están al día
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
                     ) : (
                         <>
                             {/* Header Provider */}

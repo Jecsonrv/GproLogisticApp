@@ -58,9 +58,15 @@ export function PaymentItemsModal({
         payment_method: "transferencia",
         bank: "",
         reference: "",
+        numero_comprobante_retencion: "",
+        retention_generation_code: "",
+        retention_reception_stamp: "",
         notes: "",
         receipt_file: null,
     });
+
+    // Estado para controlar el modo automático de retención
+    const [isAutoRetentionMode, setIsAutoRetentionMode] = useState(false);
 
     // Cargar items de la factura cuando se abre el modal
     const fetchPaymentItems = useCallback(async () => {
@@ -71,21 +77,79 @@ export function PaymentItemsModal({
             const response = await axios.get(
                 `/orders/invoices/${invoice.id}/payment_items/`
             );
-            setPaymentItems(response.data.items || []);
+            const items = response.data.items || [];
+            setPaymentItems(items);
 
             // Inicializar allocations vacías
             const initialAllocations = {};
-            (response.data.items || []).forEach((item) => {
+            items.forEach((item) => {
                 initialAllocations[item.id] = "";
             });
             setItemAllocations(initialAllocations);
+
+            // LÓGICA DE DETECCIÓN INTELIGENTE DE RETENCIÓN
+            // Si el saldo pendiente es igual a la retención (con margen de error de $0.05)
+            // Y no se ha pagado la retención aún
+            const balance = parseFloat(invoice.balance || 0);
+            const retention = parseFloat(invoice.retencion || 0);
+            const hasRetention = invoice.payments?.some(p => p.payment_method === 'retencion' && !p.is_deleted);
+
+            if (retention > 0 && !hasRetention && Math.abs(balance - retention) < 0.05) {
+                setIsAutoRetentionMode(true);
+                
+                // Configurar formulario automáticamente para retención
+                setPaymentForm(prev => ({
+                    ...prev,
+                    payment_method: 'retencion',
+                    amount: retention.toFixed(2)
+                }));
+
+                // DISTRIBUCIÓN AUTOMÁTICA PROPORCIONAL
+                // Distribuir el monto de retención SOLO entre los items gravados
+                const gravadoItems = items.filter(item => item.iva_type === 'gravado');
+                const totalGravadoPending = gravadoItems.reduce((sum, item) => sum + parseFloat(item.pending || 0), 0);
+                
+                const newAllocations = {};
+                
+                // Si hay items gravados, distribuir proporcionalmente
+                if (totalGravadoPending > 0) {
+                    let distributedSum = 0;
+                    
+                    gravadoItems.forEach((item, index) => {
+                        const itemPending = parseFloat(item.pending || 0);
+                        // Calcular proporción: (Pendiente Item / Total Pendiente Gravado) * Monto Retención
+                        let amount = (itemPending / totalGravadoPending) * retention;
+                        
+                        // Ajuste por redondeo en el último item
+                        if (index === gravadoItems.length - 1) {
+                            amount = retention - distributedSum;
+                        } else {
+                            distributedSum += amount;
+                        }
+                        
+                        // Solo asignar si el monto es positivo y tiene sentido
+                        if (amount > 0) {
+                            newAllocations[item.id] = amount.toFixed(2);
+                        }
+                    });
+                    
+                    setItemAllocations(newAllocations);
+                    toast.success("Se detectó saldo de retención. Modo de liquidación automática activado.", {
+                        duration: 5000,
+                        icon: '🧾'
+                    });
+                }
+            } else {
+                setIsAutoRetentionMode(false);
+            }
+
         } catch (error) {
             console.error("Error loading payment items:", error);
             toast.error("Error al cargar los items de la factura");
         } finally {
             setIsLoading(false);
         }
-    }, [invoice?.id]);
+    }, [invoice?.id, invoice?.balance, invoice?.retencion, invoice?.payments]);
 
     useEffect(() => {
         if (isOpen && invoice?.id) {
@@ -97,11 +161,20 @@ export function PaymentItemsModal({
                 payment_method: "transferencia",
                 bank: "",
                 reference: "",
+                numero_comprobante_retencion: "",
                 notes: "",
                 receipt_file: null,
             });
         }
     }, [isOpen, invoice?.id, fetchPaymentItems]);
+
+    // Verificar si ya existe un pago de retención
+    const hasRetentionPayment = () => {
+        if (!invoice?.payments) return false;
+        return invoice.payments.some(
+            payment => payment.payment_method === 'retencion' && !payment.is_deleted
+        );
+    };
 
     // Calcular suma de asignaciones
     const totalAllocated = Object.values(itemAllocations).reduce((sum, val) => {
@@ -114,23 +187,45 @@ export function PaymentItemsModal({
         return sum + parseFloat(item.pending || 0);
     }, 0);
 
-    // Actualizar monto total cuando cambian las asignaciones
+    // Actualizar monto total cuando cambian las asignaciones o el método de pago
     useEffect(() => {
-        if (totalAllocated > 0) {
+        if (paymentForm.payment_method === 'retencion') {
+            // Para retenciones, el monto es fijo: el valor de la retención
+            setPaymentForm((prev) => ({
+                ...prev,
+                amount: invoice?.retencion || "0",
+            }));
+        } else if (totalAllocated > 0) {
             setPaymentForm((prev) => ({
                 ...prev,
                 amount: totalAllocated.toFixed(2),
             }));
         }
-    }, [totalAllocated]);
+    }, [totalAllocated, paymentForm.payment_method, invoice?.retencion]);
 
-    // Llenar todos los items con su monto pendiente
+    // Llenar todos los items con su monto pendiente (menos retención si aplica)
     const handleFillAll = () => {
         const newAllocations = {};
+        const isRetentionMethod = paymentForm.payment_method === 'retencion';
+        const retentionPaid = hasRetentionPayment();
+
         paymentItems.forEach((item) => {
-            const pending = parseFloat(item.pending) || 0;
-            if (pending > 0) {
-                newAllocations[item.id] = pending.toFixed(2);
+            let fillAmount = parseFloat(item.pending) || 0;
+
+            // LÓGICA DE PROTECCIÓN DE RETENCIÓN:
+            // Si NO es un pago de retención (es efectivo/banco) y la retención aún se debe,
+            // restamos la retención del monto a pagar para evitar que se pague en efectivo.
+            if (!isRetentionMethod && !retentionPaid && item.iva_type === 'gravado' && invoice?.retencion > 0) {
+                // Calcular la parte de retención de este item (1% del subtotal)
+                const subtotal = parseFloat(item.subtotal) || 0;
+                const itemRetention = subtotal * 0.01;
+                
+                // El monto a pagar es el pendiente MENOS la retención que debe quedar viva
+                fillAmount = Math.max(0, fillAmount - itemRetention);
+            }
+
+            if (fillAmount > 0.005) { // Usar pequeña tolerancia para evitar ceros flotantes
+                newAllocations[item.id] = fillAmount.toFixed(2);
             } else {
                 newAllocations[item.id] = "";
             }
@@ -160,16 +255,27 @@ export function PaymentItemsModal({
         }
 
         const item = paymentItems.find((i) => i.id === itemId);
-        const maxValue = parseFloat(item?.pending || 0);
+        let maxValue = parseFloat(item?.pending || 0);
+        
+        // Lógica de protección de retención para input manual
+        const isRetentionMethod = paymentForm.payment_method === 'retencion';
+        if (!isRetentionMethod && !hasRetentionPayment() && item?.iva_type === 'gravado' && invoice?.retencion > 0) {
+             const subtotal = parseFloat(item.subtotal) || 0;
+             const itemRetention = subtotal * 0.01;
+             maxValue = Math.max(0, maxValue - itemRetention);
+        }
+
         const numValue = parseFloat(value);
 
         // Validar solo si es un número válido
         if (!isNaN(numValue)) {
-            // No permitir valores negativos ni mayores al pendiente
+            // No permitir valores negativos ni mayores al pendiente (menos retención)
             if (numValue < 0) return;
-            if (numValue > maxValue) {
+            
+            // Usar una pequeña tolerancia para la validación
+            if (numValue > (maxValue + 0.009)) {
                 toast.error(
-                    `El monto no puede exceder ${formatCurrency(maxValue)}`
+                    `El monto máximo es ${formatCurrency(maxValue)} (se reservó la retención)`
                 );
                 return;
             }
@@ -196,27 +302,41 @@ export function PaymentItemsModal({
             return;
         }
 
-        // Validar que haya al menos una asignación si hay items
-        const hasAllocations = Object.values(itemAllocations).some(
-            (val) => parseFloat(val) > 0
-        );
-
-        if (paymentItems.length > 0 && !hasAllocations) {
-            toast.error("Asigne el pago a al menos un item");
-            return;
-        }
-
-        // Validar que la suma coincida con el monto total
-        const paymentAmount = parseFloat(paymentForm.amount);
-        if (Math.abs(totalAllocated - paymentAmount) > 0.01) {
-            toast.error(
-                `La suma de asignaciones ($${totalAllocated.toFixed(
-                    2
-                )}) no coincide con el monto del pago ($${paymentAmount.toFixed(
-                    2
-                )})`
+        // Validaciones específicas para retención
+        if (paymentForm.payment_method === "retencion") {
+            if (!paymentForm.numero_comprobante_retencion) {
+                toast.error("Debe ingresar el número del comprobante F-910");
+                return;
+            }
+            if (!invoice.retencion || invoice.retencion <= 0) {
+                toast.error("Esta factura no tiene retención aplicable");
+                return;
+            }
+            // Para retenciones, no se requieren asignaciones por item manuales
+            // (se usarán las calculadas automáticamente si está en auto-mode, o ninguna si es backend legacy)
+        } else {
+            // Para otros métodos de pago, validar asignaciones
+            const hasAllocations = Object.values(itemAllocations).some(
+                (val) => parseFloat(val) > 0
             );
-            return;
+
+            if (paymentItems.length > 0 && !hasAllocations) {
+                toast.error("Asigne el pago a al menos un item");
+                return;
+            }
+
+            // Validar que la suma coincida con el monto total
+            const paymentAmount = parseFloat(paymentForm.amount);
+            if (Math.abs(totalAllocated - paymentAmount) > 0.01) {
+                toast.error(
+                    `La suma de asignaciones ($${totalAllocated.toFixed(
+                        2
+                    )}) no coincide con el monto del pago ($${paymentAmount.toFixed(
+                        2
+                    )})`
+                );
+                return;
+            }
         }
 
         setIsSubmitting(true);
@@ -248,6 +368,15 @@ export function PaymentItemsModal({
             if (paymentForm.reference) {
                 formData.append("reference", paymentForm.reference);
             }
+            if (paymentForm.numero_comprobante_retencion) {
+                formData.append("numero_comprobante_retencion", paymentForm.numero_comprobante_retencion);
+            }
+            if (paymentForm.retention_generation_code) {
+                formData.append("retention_generation_code", paymentForm.retention_generation_code);
+            }
+            if (paymentForm.retention_reception_stamp) {
+                formData.append("retention_reception_stamp", paymentForm.retention_reception_stamp);
+            }
             if (paymentForm.notes) {
                 formData.append("notes", paymentForm.notes);
             }
@@ -256,6 +385,7 @@ export function PaymentItemsModal({
             }
 
             // Agregar asignaciones como JSON
+            // EN MODO RETENCIÓN AUTOMÁTICO: SÍ enviamos las asignaciones calculadas
             if (allocationsArray.length > 0) {
                 formData.append(
                     "item_allocations",
@@ -287,7 +417,7 @@ export function PaymentItemsModal({
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title="Registrar Pago por Items"
+            title={isAutoRetentionMode ? "Liquidación de Retención" : "Registrar Pago por Items"}
             size="xl"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -318,7 +448,30 @@ export function PaymentItemsModal({
                     </div>
                 </div>
 
-                {/* Items de la factura */}
+                {/* Aviso de Modo Retención Automático */}
+                {isAutoRetentionMode && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 animate-fade-in">
+                        <div className="flex items-start gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h5 className="text-sm font-semibold text-blue-900 mb-1">
+                                    Liquidación Automática de Retención Detectada
+                                </h5>
+                                <p className="text-xs text-blue-700 leading-relaxed mb-2">
+                                    El sistema ha detectado que el saldo pendiente coincide con el monto de la retención.
+                                </p>
+                                <ul className="text-xs text-blue-700 list-disc pl-4 space-y-1">
+                                    <li>Se ha seleccionado automáticamente el método <strong>Comprobante de Retención</strong>.</li>
+                                    <li>El pago se ha distribuido proporcionalmente entre los <strong>ítems gravados</strong> para cerrarlos.</li>
+                                    <li>Solo necesita ingresar los datos del comprobante F-910.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Items de la factura - Ocultos en modo retención automático para simplificar */}
+                {!isAutoRetentionMode && paymentForm.payment_method !== "retencion" && (
                 <div>
                     <div className="flex items-center justify-between mb-4">
                         <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
@@ -512,6 +665,44 @@ export function PaymentItemsModal({
                         </div>
                     )}
                 </div>
+                )}
+
+                {/* Aviso si ya existe comprobante de retención */}
+                {invoice?.retencion > 0 && hasRetentionPayment() && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h5 className="text-sm font-semibold text-emerald-900 mb-1">
+                                    Comprobante de Retención Ya Registrado
+                                </h5>
+                                <p className="text-xs text-emerald-700 leading-relaxed">
+                                    Esta factura ya tiene un comprobante F-910 registrado. 
+                                    No se pueden registrar múltiples comprobantes de retención para la misma factura.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Aviso para pago por retención (Solo si NO es automático para evitar redundancia) */}
+                {!isAutoRetentionMode && paymentForm.payment_method === "retencion" && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h5 className="text-sm font-semibold text-blue-900 mb-1">
+                                    Pago por Retención (1%)
+                                </h5>
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    El monto de retención es fijo y corresponde al 1% sobre
+                                    la base gravada de servicios. Este pago se registra
+                                    mediante el comprobante F-910 emitido por el cliente.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Detalle del pago */}
                 <div>
@@ -546,7 +737,9 @@ export function PaymentItemsModal({
                                 />
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                                Calculado automáticamente de las asignaciones
+                                {paymentForm.payment_method === "retencion" 
+                                    ? "Monto fijo de retención (1%)" 
+                                    : "Calculado automáticamente de las asignaciones"}
                             </p>
                         </div>
 
@@ -596,32 +789,97 @@ export function PaymentItemsModal({
                                         id: "deposito",
                                         name: "Depósito Bancario",
                                     },
+                                    // Solo mostrar retención si la factura tiene retención > 0
+                                    // Y no existe ya un comprobante registrado
+                                    ...(invoice?.retencion > 0 && !hasRetentionPayment() ? [{
+                                        id: "retencion",
+                                        name: "Comprobante de Retención F-910",
+                                    }] : []),
                                 ]}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
                                 required
+                                isDisabled={isAutoRetentionMode} // Bloquear en modo auto
                             />
                         </div>
 
-                        {/* Referencia */}
-                        <div>
-                            <Label className="mb-1.5 block text-sm">
-                                Referencia / No. Documento
-                            </Label>
-                            <Input
-                                value={paymentForm.reference}
-                                onChange={(e) =>
-                                    setPaymentForm({
-                                        ...paymentForm,
-                                        reference: e.target.value,
-                                    })
-                                }
-                                placeholder="Ej: TRANS-12345"
-                                className="font-mono"
-                            />
-                        </div>
+                        {/* Número Comprobante (solo para retenciones) */}
+                        {paymentForm.payment_method === "retencion" && (
+                            <>
+                                <div>
+                                    <Label className="mb-1.5 block text-sm">
+                                        Número Comprobante de Retención{" "}
+                                        <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.numero_comprobante_retencion}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                numero_comprobante_retencion: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Ej: 2026-001234"
+                                        className="font-mono"
+                                        required={paymentForm.payment_method === "retencion"}
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block text-sm">
+                                        Código de Generación
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.retention_generation_code}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                retention_generation_code: e.target.value,
+                                            })
+                                        }
+                                        placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+                                        className="font-mono uppercase text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="mb-1.5 block text-sm">
+                                        Sello de Recepción
+                                    </Label>
+                                    <Input
+                                        value={paymentForm.retention_reception_stamp}
+                                        onChange={(e) =>
+                                            setPaymentForm({
+                                                ...paymentForm,
+                                                retention_reception_stamp: e.target.value,
+                                            })
+                                        }
+                                        placeholder="Sello de Hacienda..."
+                                        className="font-mono text-xs"
+                                    />
+                                </div>
+                            </>
+                        )}
 
-                        {/* Banco (si aplica) */}
+                        {/* Referencia (solo para otros métodos) */}
+                        {paymentForm.payment_method !== "retencion" && (
+                            <div>
+                                <Label className="mb-1.5 block text-sm">
+                                    Referencia / No. Documento
+                                </Label>
+                                <Input
+                                    value={paymentForm.reference}
+                                    onChange={(e) =>
+                                        setPaymentForm({
+                                            ...paymentForm,
+                                            reference: e.target.value,
+                                        })
+                                    }
+                                    placeholder="Ej: TRANS-12345"
+                                    className="font-mono"
+                                />
+                            </div>
+                        )}
+
+                        {/* Banco (si aplica - no para retenciones) */}
                         {["transferencia", "cheque", "deposito"].includes(
                             paymentForm.payment_method
                         ) && (
@@ -738,7 +996,7 @@ export function PaymentItemsModal({
                     <Button
                         type="submit"
                         variant="default"
-                        disabled={isSubmitting || totalAllocated <= 0}
+                        disabled={isSubmitting || (paymentForm.payment_method !== 'retencion' && totalAllocated <= 0)}
                         className="min-w-[160px]"
                     >
                         {isSubmitting ? "Procesando..." : "Confirmar Pago"}

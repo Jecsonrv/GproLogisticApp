@@ -726,8 +726,10 @@ class Invoice(models.Model):
         else:
             self.retencion = Decimal('0.00')
 
-        # El saldo a pagar se reduce por la retención, los pagos y las notas de crédito
-        self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
+        # El saldo a pagar se reduce por los pagos y las notas de crédito
+        # NOTA: La retención NO se resta aquí porque se paga mediante un comprobante F-910
+        # que se registra como un pago normal (payment_method='retencion')
+        self.balance = self.total_amount - self.paid_amount - self.credited_amount
 
         # Actualizar estado
         today = timezone.localdate()
@@ -841,8 +843,9 @@ class Invoice(models.Model):
             else:
                 self.retencion = Decimal('0.00')
 
-            # 5. Recalcular balance considerando retención actualizada
-            self.balance = (self.total_amount - self.retencion) - self.paid_amount - self.credited_amount
+            # 5. Recalcular balance
+            # NOTA: La retención NO se resta del balance porque se paga mediante comprobante F-910
+            self.balance = self.total_amount - self.paid_amount - self.credited_amount
 
             self.save()
 
@@ -988,6 +991,7 @@ class InvoicePayment(SoftDeleteModel):
         ('cheque', 'Cheque'),
         ('tarjeta', 'Tarjeta'),
         ('deposito', 'Depósito Bancario'),
+        ('retencion', 'Comprobante de Retención F-910'),
     )
 
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments', verbose_name="Factura")
@@ -995,6 +999,27 @@ class InvoicePayment(SoftDeleteModel):
     amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))], verbose_name="Monto")
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, verbose_name="Método de Pago")
     reference_number = models.CharField(max_length=100, blank=True, verbose_name="Número de Referencia/Cheque")
+    
+    # Campo específico para comprobantes de retención F-910
+    numero_comprobante_retencion = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Número Comprobante de Retención",
+        help_text="Número del comprobante de retención emitido por el Gran Contribuyente"
+    )
+    
+    # Nuevos campos para cumplimiento fiscal de retenciones
+    retention_generation_code = models.CharField(
+        max_length=150, 
+        blank=True, 
+        verbose_name="Código Generación Retención"
+    )
+    retention_reception_stamp = models.CharField(
+        max_length=150, 
+        blank=True, 
+        verbose_name="Sello Recepción Retención"
+    )
+    
     bank = models.ForeignKey(Bank, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Banco")
     notes = models.TextField(blank=True, verbose_name="Notas")
     receipt_file = models.FileField(

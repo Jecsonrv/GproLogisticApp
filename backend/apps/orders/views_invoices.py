@@ -1082,24 +1082,42 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def summary(self, request):
         """Get invoicing summary statistics with enhanced KPIs"""
         queryset = self.get_queryset()
+        # Exclude cancelled invoices from KPIs to ensure mathematical consistency
+        # Total Facturado should only reflect valid, active invoices.
+        active_queryset = queryset.exclude(status='cancelled')
+        
         from django.utils import timezone
         today = timezone.now().date()
 
         # Basic totals
-        total_invoiced = queryset.aggregate(
+        total_invoiced = active_queryset.aggregate(
             total=Sum('total_amount')
         )['total'] or Decimal('0')
 
-        total_pending = queryset.filter(balance__gt=0).aggregate(
+        total_pending = active_queryset.filter(balance__gt=0).aggregate(
             total=Sum('balance')
         )['total'] or Decimal('0')
 
-        total_collected = queryset.aggregate(
-            total=Sum('paid_amount')
-        )['total'] or Decimal('0')
+        # Para que Recuperado + Por Cobrar ≈ Total Facturado, debemos sumar
+        # Paid Amount + Credited Amount + Retencion.
+        # Si solo sumamos Paid Amount, faltan las NC y Retenciones.
+        totals = active_queryset.aggregate(
+            paid=Sum('paid_amount'),
+            credited=Sum('credited_amount'),
+            retained=Sum('retencion'),
+            services=Sum('total_services'),
+            expenses=Sum('total_third_party')
+        )
+        
+        # "Recuperado" = Pagado + Acreditado + Retenido (lo que ya no se debe)
+        total_paid_real = (totals['paid'] or Decimal('0'))
+        total_credited = totals['credited'] or Decimal('0')
+        total_retained = totals['retained'] or Decimal('0')
+        
+        total_collected = total_paid_real + total_credited + total_retained
 
         # Overdue invoices
-        overdue_queryset = queryset.filter(
+        overdue_queryset = active_queryset.filter(
             due_date__lt=today,
             balance__gt=0
         )
@@ -1109,49 +1127,33 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         overdue_count = overdue_queryset.count()
 
         # Status counts
-        # pending_count ahora refleja TODAS las facturas con saldo pendiente (incluyendo parciales y vencidas)
-        # para ser consistente con total_pending
-        pending_count = queryset.filter(balance__gt=0).count()
-        
-        paid_count = queryset.filter(status='paid').count()
-        partial_count = queryset.filter(status='partial').count()
-        cancelled_count = queryset.filter(status='cancelled').count()
+        pending_count = active_queryset.filter(balance__gt=0).count()
+        paid_count = active_queryset.filter(status='paid').count()
+        partial_count = active_queryset.filter(status='partial').count()
+        cancelled_count = queryset.filter(status='cancelled').count() # Keep using original queryset to count cancelled
 
         # Additional KPIs
-        # Invoices due this week
         from datetime import timedelta
         week_end = today + timedelta(days=7)
-        due_this_week = queryset.filter(
+        due_this_week = active_queryset.filter(
             due_date__gte=today,
             due_date__lte=week_end,
             balance__gt=0
         ).count()
 
-        # Average collection time (for paid invoices)
-        paid_invoices = queryset.filter(status='paid', due_date__isnull=False)
-
-        # Total Servicios y Gastos a Terceros desde los campos calculados de Invoice
-        # Estos campos se calculan automáticamente en el modelo Invoice.save()
-        aggregated_totals = queryset.aggregate(
-            total_services_sum=Sum('total_services'),
-            total_third_party_sum=Sum('total_third_party'),
-            total_credited_sum=Sum('credited_amount')
-        )
-
-        total_services = aggregated_totals['total_services_sum'] or Decimal('0')
-        total_third_party_expenses = aggregated_totals['total_third_party_sum'] or Decimal('0')
-        total_credited = aggregated_totals['total_credited_sum'] or Decimal('0')
+        total_services = totals['services'] or Decimal('0')
+        total_third_party_expenses = totals['expenses'] or Decimal('0')
 
         # Contar notas de crédito
         credit_notes_count = CreditNote.objects.filter(
-            invoice__in=queryset,
+            invoice__in=active_queryset,
             is_deleted=False
         ).count()
 
         return Response({
             'total_invoiced': str(total_invoiced),
             'total_pending': str(total_pending),
-            'total_collected': str(total_collected),
+            'total_collected': str(total_collected), # Now includes Credited + Retained
             'total_overdue': str(total_overdue),
             'total_services': str(total_services),
             'total_third_party_expenses': str(total_third_party_expenses),
@@ -1163,7 +1165,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'overdue_count': overdue_count,
             'cancelled_count': cancelled_count,
             'due_this_week': due_this_week,
-            'total_invoices': queryset.count(),
+            'total_invoices': active_queryset.count(),
         })
 
     @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
@@ -1516,13 +1518,52 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     else:
                         raise ValueError(f'Tipo de item inválido: {item_type}')
 
+            # VALIDACIÓN CRÍTICA: El pago no puede exceder el balance pendiente
+            if amount > inv.balance:
+                raise ValueError(
+                    f'El monto del pago (${amount}) excede el saldo pendiente de la factura (${inv.balance}). '
+                    f'No se puede registrar un pago mayor al saldo pendiente.'
+                )
+            
+            # Validaciones especiales para pago por retención
+            payment_method = request.data.get('payment_method', 'transferencia')
+            numero_comprobante_retencion = request.data.get('numero_comprobante_retencion', '')
+            
+            if payment_method == 'retencion':
+                # Validar que la factura tenga retención
+                if inv.retencion <= 0:
+                    raise ValueError('Esta factura no tiene retención aplicable. No puede registrar un comprobante F-910.')
+                
+                # Validar que el monto sea exactamente la retención
+                if amount != inv.retencion:
+                    raise ValueError(
+                        f'El monto del comprobante de retención debe ser exactamente ${inv.retencion}. '
+                        f'Monto ingresado: ${amount}'
+                    )
+                
+                # VALIDACIÓN CRÍTICA: No permitir duplicar comprobantes de retención
+                existing_retention = inv.payments.filter(
+                    payment_method='retencion',
+                    is_deleted=False
+                ).exists()
+                
+                if existing_retention:
+                    raise ValueError('Ya existe un comprobante de retención F-910 registrado para esta factura. No se pueden registrar múltiples comprobantes de retención.')
+                
+                # Validar que se proporcione el número de comprobante
+                if not numero_comprobante_retencion:
+                    raise ValueError('Debe proporcionar el número del comprobante F-910.')
+
             # Crear el pago
             payment = InvoicePayment.objects.create(
                 invoice=inv,
                 amount=amount,
                 payment_date=request.data.get('payment_date'),
-                payment_method=request.data.get('payment_method', 'transferencia'),
+                payment_method=payment_method,
                 reference_number=request.data.get('reference', ''),
+                numero_comprobante_retencion=numero_comprobante_retencion,
+                retention_generation_code=request.data.get('retention_generation_code', ''),
+                retention_reception_stamp=request.data.get('retention_reception_stamp', ''),
                 bank=bank,
                 notes=request.data.get('notes', ''),
                 receipt_file=request.FILES.get('receipt_file'),
@@ -1604,8 +1645,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         Retorna servicios y gastos con:
         - Monto total del item
-        - Monto ya pagado
-        - Monto pendiente
+        - Monto ya pagado (por asignaciones específicas)
+        - Monto pendiente (ajustado por pagos generales)
+        
+        IMPORTANTE: Los pagos sin asignación específica (como retenciones) se distribuyen
+        proporcionalmente entre items GRAVADOS, ya que la retención solo aplica sobre base gravada.
         """
         from .models import PaymentItemAllocation, OrderCharge
         from apps.transfers.models import Transfer
@@ -1616,7 +1660,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Obtener servicios (cargos)
         charges = invoice.charges.filter(is_deleted=False).select_related('service')
         for charge in charges:
-            paid = PaymentItemAllocation.objects.filter(
+            paid_allocated = PaymentItemAllocation.objects.filter(
                 charge=charge,
                 payment__is_deleted=False,
                 is_deleted=False
@@ -1629,8 +1673,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 'name': charge.service.name,
                 'description': charge.description or '',
                 'total': str(charge.total),
-                'paid': str(paid),
-                'pending': str(charge.total - paid),
+                'subtotal': str(charge.subtotal),  # Base sin IVA
+                'paid_allocated': str(paid_allocated),
                 'iva_type': charge.iva_type,
             })
         
@@ -1638,7 +1682,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         transfers = invoice.billed_transfers.filter(is_deleted=False).select_related('provider')
         for transfer in transfers:
             total = transfer.get_customer_total()
-            paid = PaymentItemAllocation.objects.filter(
+            base_price = transfer.get_customer_base_price()
+            paid_allocated = PaymentItemAllocation.objects.filter(
                 expense=transfer,
                 payment__is_deleted=False,
                 is_deleted=False
@@ -1651,10 +1696,51 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 'name': transfer.description[:50] if transfer.description else 'Gasto',
                 'description': transfer.provider.name if transfer.provider else 'Sin proveedor',
                 'total': str(total),
-                'paid': str(paid),
-                'pending': str(total - paid),
+                'subtotal': str(base_price),  # Base sin IVA
+                'paid_allocated': str(paid_allocated),
                 'iva_type': getattr(transfer, 'customer_iva_type', 'gravado' if transfer.customer_applies_iva else 'exento'),
             })
+        
+        # Calcular pagos asignados vs pagos totales
+        total_paid_allocated = sum(Decimal(item['paid_allocated']) for item in items)
+        total_paid_invoice = invoice.paid_amount  # Incluye pagos con y sin asignación
+        unallocated_payments = total_paid_invoice - total_paid_allocated
+        
+        # Si hay pagos sin asignar (ej: retenciones), distribuirlos proporcionalmente
+        # SOLO entre items gravados (ya que retención solo aplica sobre base gravada)
+        if unallocated_payments > 0:
+            # Calcular total de items gravados
+            gravado_items = [item for item in items if item['iva_type'] == 'gravado']
+            total_gravado = sum(Decimal(item['total']) for item in gravado_items)
+            
+            if total_gravado > 0:
+                # Distribuir pagos no asignados proporcionalmente entre items gravados
+                for item in items:
+                    paid_allocated = Decimal(item['paid_allocated'])
+                    
+                    if item['iva_type'] == 'gravado':
+                        # Calcular proporción de este item sobre el total gravado
+                        item_total = Decimal(item['total'])
+                        proportion = item_total / total_gravado if total_gravado > 0 else Decimal('0')
+                        distributed_payment = unallocated_payments * proportion
+                        
+                        total_paid = paid_allocated + distributed_payment
+                    else:
+                        # Items exentos/no sujetos: solo pagos asignados explícitamente
+                        total_paid = paid_allocated
+                    
+                    item['paid'] = str(total_paid)
+                    item['pending'] = str(Decimal(item['total']) - total_paid)
+            else:
+                # No hay items gravados, no distribuir
+                for item in items:
+                    item['paid'] = item['paid_allocated']
+                    item['pending'] = str(Decimal(item['total']) - Decimal(item['paid_allocated']))
+        else:
+            # No hay pagos sin asignar
+            for item in items:
+                item['paid'] = item['paid_allocated']
+                item['pending'] = str(Decimal(item['total']) - Decimal(item['paid_allocated']))
         
         # Calcular totales
         total_invoice = sum(Decimal(item['total']) for item in items)
@@ -1671,6 +1757,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 'total_invoice': str(total_invoice),
                 'total_paid_by_items': str(total_paid),
                 'total_pending_by_items': str(total_pending),
+                'unallocated_payments': str(unallocated_payments),
+                'paid_allocated': str(total_paid_allocated),
             }
         })
 
@@ -1914,3 +2002,147 @@ class CreditNoteViewSet(viewsets.ModelViewSet):
     
     def perform_destroy(self, instance):
         instance.delete() # Trigger soft delete and recalculation
+
+
+from rest_framework.views import APIView
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+
+class RetentionControlView(APIView):
+    """
+    Vista para el Control de Retenciones F-910.
+    Proporciona KPIs y lista de facturas con retención para grandes contribuyentes.
+    """
+    permission_classes = [IsOperativo2]  # Solo Operativo2 y Admins
+    
+    def get(self, request):
+        # Obtener parámetros de filtro
+        try:
+            year = int(request.query_params.get('year', datetime.now().year))
+            month = int(request.query_params.get('month', datetime.now().month))
+            client_id = request.query_params.get('client_id')
+            status_filter = request.query_params.get('status')  # 'pending', 'received', 'all'
+        except (ValueError, TypeError):
+            year = datetime.now().year
+            month = datetime.now().month
+            client_id = None
+            status_filter = 'all'
+        
+        # Filtrar facturas con retención
+        base_qs = Invoice.objects.filter(
+            retencion__gt=0
+        ).exclude(
+            status='cancelled'
+        ).select_related(
+            'service_order__client',
+            'created_by'
+        ).prefetch_related(
+            'payments'
+        )
+        
+        # Filtro por período
+        if month == 0:  # Vista anual
+            base_qs = base_qs.filter(issue_date__year=year)
+        else:
+            base_qs = base_qs.filter(
+                issue_date__year=year,
+                issue_date__month=month
+            )
+        
+        # Filtro por cliente
+        if client_id:
+            base_qs = base_qs.filter(service_order__client_id=client_id)
+        
+        # Calcular KPIs
+        total_retenciones = Decimal('0.00')
+        comprobantes_recibidos_count = 0
+        comprobantes_recibidos_monto = Decimal('0.00')
+        pendientes_count = 0
+        pendientes_monto = Decimal('0.00')
+        
+        invoices_data = []
+        
+        for invoice in base_qs:
+            # Verificar si tiene comprobante F-910 registrado
+            has_comprobante = invoice.payments.filter(
+                payment_method='retencion',
+                is_deleted=False
+            ).exists()
+            
+            comprobante_payment = invoice.payments.filter(
+                payment_method='retencion',
+                is_deleted=False
+            ).first()
+            
+            total_retenciones += invoice.retencion
+            
+            if has_comprobante:
+                comprobantes_recibidos_count += 1
+                comprobantes_recibidos_monto += invoice.retencion
+                item_status = 'received'
+            else:
+                pendientes_count += 1
+                pendientes_monto += invoice.retencion
+                item_status = 'pending'
+            
+            # Aplicar filtro de estado
+            if status_filter and status_filter != 'all' and item_status != status_filter:
+                continue
+            
+            invoice_item = {
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'issue_date': invoice.issue_date.isoformat(),
+                'client_id': invoice.service_order.client.id if invoice.service_order.client else None,
+                'client_name': invoice.service_order.client.name if invoice.service_order.client else 'N/A',
+                'client_nit': invoice.service_order.client.nit if invoice.service_order.client else '',
+                'retencion': float(invoice.retencion),
+                'total_amount': float(invoice.total_amount),
+                'status': item_status,
+                'has_comprobante': has_comprobante,
+                'comprobante_data': None
+            }
+            
+            if comprobante_payment:
+                invoice_item['comprobante_data'] = {
+                    'id': comprobante_payment.id,
+                    'numero_retencion': comprobante_payment.numero_comprobante_retencion,
+                    'generation_code': comprobante_payment.retention_generation_code,
+                    'reception_stamp': comprobante_payment.retention_reception_stamp,
+                    'payment_date': comprobante_payment.payment_date.isoformat(),
+                    'receipt_file': comprobante_payment.receipt_file.url if comprobante_payment.receipt_file else None,
+                    'notes': comprobante_payment.notes,
+                    'created_by': comprobante_payment.created_by.get_full_name() if comprobante_payment.created_by else None
+                }
+            
+            invoices_data.append(invoice_item)
+        
+        # Calcular tasa de recuperación
+        tasa_recuperacion = 0
+        if total_retenciones > 0:
+            tasa_recuperacion = (float(comprobantes_recibidos_monto) / float(total_retenciones)) * 100
+        
+        response_data = {
+            'kpis': {
+                'total_retenciones': float(total_retenciones),
+                'comprobantes_recibidos': {
+                    'count': comprobantes_recibidos_count,
+                    'monto': float(comprobantes_recibidos_monto)
+                },
+                'pendientes': {
+                    'count': pendientes_count,
+                    'monto': float(pendientes_monto)
+                },
+                'tasa_recuperacion': round(tasa_recuperacion, 2)
+            },
+            'invoices': invoices_data,
+            'filters': {
+                'year': year,
+                'month': month,
+                'client_id': client_id,
+                'status': status_filter
+            }
+        }
+        
+        return Response(response_data)

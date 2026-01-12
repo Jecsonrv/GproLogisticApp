@@ -41,6 +41,97 @@ class ProviderViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_active=True)
         return queryset.order_by('name')
 
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def general_summary(self, request):
+        """
+        Resumen global de Cuentas por Pagar (Proveedores).
+        Suma deuda de Transfers y ProviderInvoices.
+        """
+        from apps.transfers.models import Transfer, ProviderInvoice
+        from django.db.models import Sum, Q, F
+        from datetime import datetime
+
+        year = request.query_params.get('year')
+        
+        # Base QuerySets (excluyendo anulados/cancelados)
+        # Transfers: Gastos operativos, administrativos, fletes, etc.
+        transfers_qs = Transfer.objects.exclude(status='cancelado')
+        
+        # ProviderInvoices: Costos directos / Facturas de proveedores de servicios
+        invoices_qs = ProviderInvoice.objects.exclude(payment_status='cancelada')
+
+        # Filtro de año
+        if year:
+            try:
+                year_int = int(year)
+                # Filtro estricto por año de transacción/emisión
+                transfers_qs = transfers_qs.filter(transaction_date__year=year_int)
+                invoices_qs = invoices_qs.filter(issue_date__year=year_int)
+            except ValueError:
+                pass
+
+        # === 1. Métricas Financieras Globales ===
+        
+        # Calcular totales de Transfers
+        transfer_stats = transfers_qs.aggregate(
+            total_amount=Sum('amount'),
+            total_paid=Sum('paid_amount'),
+            total_balance=Sum('balance')
+        )
+        
+        # Calcular totales de ProviderInvoices (aquí el balance es calculado)
+        # Nota: ProviderInvoice no tiene campo 'balance' persistido como Transfer, se calcula
+        invoice_stats = invoices_qs.aggregate(
+            total_amount=Sum('total_amount'),
+            total_paid=Sum('paid_amount')
+        )
+        
+        inv_total = float(invoice_stats['total_amount'] or 0)
+        inv_paid = float(invoice_stats['total_paid'] or 0)
+        inv_balance = inv_total - inv_paid
+
+        # Unificar totales
+        total_amount = float(transfer_stats['total_amount'] or 0) + inv_total
+        total_paid = float(transfer_stats['total_paid'] or 0) + inv_paid
+        total_pending = float(transfer_stats['total_balance'] or 0) + inv_balance
+
+        # === 2. Métricas de Proveedores ===
+        total_providers = Provider.objects.count()
+        
+        # Proveedores con deuda (necesitamos identificar IDs únicos con saldo > 0)
+        # IDs desde Transfers con saldo
+        transfer_debtor_ids = set(Transfer.objects.filter(
+            balance__gt=0.01
+        ).exclude(status='cancelado').values_list('provider_id', flat=True))
+        
+        # IDs desde Invoices con saldo (calculado via DB es complejo sin annotate, lo hacemos simple:
+        # ProviderInvoices pendientes/parciales implican deuda)
+        invoice_debtor_ids = set(ProviderInvoice.objects.filter(
+            payment_status__in=['pendiente', 'parcial']
+        ).values_list('provider_id', flat=True))
+        
+        # Unir sets de deudores
+        all_debtors = transfer_debtor_ids.union(invoice_debtor_ids)
+        # Filtrar None (en caso de transfers sin proveedor asignado, ej. caja chica)
+        debtors_count = len([pid for pid in all_debtors if pid is not None])
+        
+        up_to_date_count = total_providers - debtors_count
+
+        data = {
+            'financial': {
+                'total_amount': total_amount,
+                'total_paid': total_paid,
+                'total_pending': total_pending,
+            },
+            'providers': {
+                'total': total_providers,
+                'with_debt': debtors_count,
+                'up_to_date': up_to_date_count
+            }
+        }
+        
+        return Response(data)
+
     @action(detail=True, methods=['get'], permission_classes=[IsOperativo])
     def account_statement(self, request, pk=None):
         from apps.transfers.models import Transfer, ProviderInvoice

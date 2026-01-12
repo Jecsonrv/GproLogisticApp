@@ -20,6 +20,37 @@ class ClientViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'nit', 'email']
     filterset_fields = ['payment_condition', 'is_active']
 
+    def get_queryset(self):
+        """
+        Sobreescribir queryset para anotar el saldo pendiente real (CXC)
+        basado en facturas con balance > 0.
+        """
+        queryset = super().get_queryset()
+        
+        if self.action in ['list', 'retrieve']:
+            from apps.orders.models import Invoice
+            from django.db.models import OuterRef, Subquery, Sum
+            
+            # Anotamos el saldo pendiente real sumando el balance de facturas pendientes
+            # Solo facturas activas (no pagadas, no anuladas)
+            # Usamos Subquery para evitar duplicación de filas por joins
+            pending_balance_sq = Invoice.objects.filter(
+                service_order__client=OuterRef('pk'),
+                balance__gt=0.01
+            ).exclude(
+                status__in=['paid', 'cancelled']
+            ).values(
+                'service_order__client'
+            ).annotate(
+                total=Sum('balance')
+            ).values('total')
+            
+            queryset = queryset.annotate(
+                annotated_total_pending=Subquery(pending_balance_sq)
+            )
+            
+        return queryset
+
     def get_serializer_class(self):
         if self.action == 'list':
             return ClientListSerializer
@@ -93,6 +124,74 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
+    def general_summary(self, request):
+        """
+        Resumen global financiero y de clientes para el dashboard de Estados de Cuenta.
+        Calcula totales directamente de la base de datos para máxima precisión.
+        """
+        from apps.orders.models import Invoice
+        
+        # Filtro de año opcional
+        year = request.query_params.get('year')
+        current_year = datetime.now().year
+        
+        # Base de facturas válidas (no anuladas)
+        invoices_qs = Invoice.objects.exclude(status='cancelled')
+        
+        if year:
+            try:
+                year_int = int(year)
+                # Filtro estricto por año de emisión para reportes históricos precisos
+                invoices_qs = invoices_qs.filter(issue_date__year=year_int)
+            except ValueError:
+                pass
+
+        # === 1. Métricas Financieras Globales ===
+        financial_stats = invoices_qs.aggregate(
+            total_invoiced=Sum('total_amount'),
+            total_services=Sum('total_services'),
+            total_third_party=Sum('total_third_party'),
+            total_paid=Sum('paid_amount'),
+            total_balance=Sum('balance')
+        )
+
+        # === 2. Métricas de Clientes ===
+        # Clientes totales
+        total_clients = Client.objects.count()
+        
+        # Clientes con crédito
+        credit_clients = Client.objects.filter(payment_condition='credito').count()
+        
+        # Para calcular clientes con saldo vs al día, necesitamos ver quiénes tienen facturas pendientes
+        # Esto es más eficiente hacerlo con una query de agregación de facturas agrupada por cliente
+        clients_with_balance_ids = Invoice.objects.filter(
+            balance__gt=0.01
+        ).exclude(
+            status__in=['paid', 'cancelled']
+        ).values_list('service_order__client_id', flat=True).distinct()
+        
+        pending_clients_count = clients_with_balance_ids.count()
+        up_to_date_clients_count = total_clients - pending_clients_count
+
+        data = {
+            'financial': {
+                'total_invoiced': float(financial_stats['total_invoiced'] or 0),
+                'total_services': float(financial_stats['total_services'] or 0),
+                'total_third_party': float(financial_stats['total_third_party'] or 0),
+                'total_paid': float(financial_stats['total_paid'] or 0),
+                'total_pending': float(financial_stats['total_balance'] or 0),
+            },
+            'clients': {
+                'total': total_clients,
+                'credit': credit_clients,
+                'up_to_date': up_to_date_clients_count,
+                'pending': pending_clients_count
+            }
+        }
+        
+        return Response(data)
 
     @action(detail=False, methods=['get'], permission_classes=[IsOperativo])
     def active(self, request):

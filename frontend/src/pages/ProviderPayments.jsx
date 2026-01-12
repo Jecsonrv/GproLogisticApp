@@ -1534,37 +1534,274 @@ function ProviderPayments() {
 
     return (
         <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 mt-1 sm:mt-2">
+            {/* Header cuando no hay datos */}
+            {payments.length === 0 && !loading && (
+                <div className="text-center mb-6">
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                        Cuentas por Pagar
+                    </h2>
+                    <p className="text-slate-600">
+                        Gestión de pagos a proveedores y control de gastos operativos
+                    </p>
+                </div>
+            )}
+
             {/* Bloque Superior (Estratégico): KPIs - Responsive */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
-                <KPICard
-                    label="Pendientes de pago"
-                    value={formatCurrency(kpis.pendiente)}
-                    icon={Clock}
-                />
-                <KPICard
-                    label="Listos para pagar"
-                    value={formatCurrency(kpis.aprobado)}
-                    icon={CheckCircle2}
-                />
-                <KPICard
-                    label="Pagado este mes"
-                    value={formatCurrency(kpis.pagado)}
-                    icon={Banknote}
-                />
-                <KPICard
-                    label="Gastos operativos"
-                    value={formatCurrency(kpis.costos)}
-                    icon={TrendingDown}
-                />
-                <KPICard
-                    label="Total obligaciones"
-                    value={formatCurrency(kpis.total)}
-                    icon={DollarSign}
-                />
-            </div>
+            {payments.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+                    <KPICard
+                        label="Total obligaciones"
+                        value={formatCurrency(kpis.total)}
+                        icon={DollarSign}
+                    />
+                    <KPICard
+                        label="Pendientes de pago"
+                        value={formatCurrency(kpis.pendiente)}
+                        icon={Clock}
+                    />
+                    <KPICard
+                        label="Listos para pagar"
+                        value={formatCurrency(kpis.aprobado)}
+                        icon={CheckCircle2}
+                    />
+                    <KPICard
+                        label="Pagado este mes"
+                        value={formatCurrency(kpis.pagado)}
+                        icon={Banknote}
+                    />
+                    <KPICard
+                        label="Gastos operativos"
+                        value={formatCurrency(kpis.costos)}
+                        icon={TrendingDown}
+                    />
+                </div>
+            )}
+
+            {/* Vista General - Cards informativos cuando no hay datos */}
+            {payments.length === 0 && !loading && (
+                <div className="space-y-6">
+                    {/* Quick Start Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <Card className="border-2 border-slate-200 hover:border-slate-300 transition-all">
+                            <CardContent className="p-6">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                                        <Receipt className="w-8 h-8 text-slate-600" />
+                                    </div>
+                                    <h3 className="font-semibold text-slate-900 mb-2">
+                                        Registrar Gastos
+                                    </h3>
+                                    <p className="text-sm text-slate-600 mb-4">
+                                        Registra facturas de proveedores, gastos operativos y costos directos
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => setIsCreateModalOpen(true)}
+                                        className="bg-slate-900 hover:bg-slate-800"
+                                    >
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Nuevo Gasto
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-2 border-slate-200 hover:border-slate-300 transition-all">
+                            <CardContent className="p-6">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                                        <FileMinus className="w-8 h-8 text-blue-600" />
+                                    </div>
+                                    <h3 className="font-semibold text-slate-900 mb-2">
+                                        Notas de Crédito
+                                    </h3>
+                                    <p className="text-sm text-slate-600 mb-4">
+                                        Gestiona devoluciones y ajustes de proveedores
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setActiveTab("nc");
+                                            setIsNCModalOpen(true);
+                                        }}
+                                    >
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Nueva NC
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-2 border-slate-200 hover:border-slate-300 transition-all">
+                            <CardContent className="p-6">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-4">
+                                        <Banknote className="w-8 h-8 text-emerald-600" />
+                                    </div>
+                                    <h3 className="font-semibold text-slate-900 mb-2">
+                                        Ejecutar Pagos
+                                    </h3>
+                                    <p className="text-sm text-slate-600 mb-4">
+                                        Registra pagos realizados y mantén el control financiero
+                                    </p>
+                                    <div className="text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                                        Disponible al aprobar gastos
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Info Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                    <Info className="w-4 h-4 text-blue-500" />
+                                    Tipos de Gastos
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                            <DollarSign className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-sm text-slate-900">
+                                                Costos Directos
+                                            </p>
+                                            <p className="text-xs text-slate-600 mt-1">
+                                                Gastos asociados directamente a órdenes de servicio
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                                            <User className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-sm text-blue-900">
+                                                Cargos a Cliente
+                                            </p>
+                                            <p className="text-xs text-blue-700 mt-1">
+                                                Gastos que serán facturados al cliente
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                                        <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center flex-shrink-0">
+                                            <Building2 className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-sm text-purple-900">
+                                                Gastos de Operación
+                                            </p>
+                                            <p className="text-xs text-purple-700 mt-1">
+                                                Gastos administrativos y operativos generales
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-amber-500" />
+                                    Flujo de Aprobación
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 text-amber-700 font-bold text-sm flex-shrink-0">
+                                            1
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Registro
+                                            </p>
+                                            <p className="text-xs text-slate-600">
+                                                Se crea el gasto con estado "Pendiente"
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold text-sm flex-shrink-0">
+                                            2
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Aprobación
+                                            </p>
+                                            <p className="text-xs text-slate-600">
+                                                Usuario autorizado aprueba el gasto
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex-shrink-0">
+                                            3
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Pago
+                                            </p>
+                                            <p className="text-xs text-slate-600">
+                                                Se ejecuta y registra el pago al proveedor
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Call to Action */}
+                    <Card className="border-2 border-dashed border-slate-300 bg-slate-50/50">
+                        <CardContent className="py-12">
+                            <div className="text-center">
+                                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                                    <Receipt className="w-8 h-8 text-slate-400" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                                    Comienza a Gestionar tus Pagos
+                                </h3>
+                                <p className="text-slate-600 max-w-md mx-auto mb-6">
+                                    Registra tus primeros gastos y mantén un control preciso de las obligaciones
+                                    con proveedores y gastos operativos.
+                                </p>
+                                <div className="flex items-center justify-center gap-3">
+                                    <Button
+                                        onClick={() => setIsCreateModalOpen(true)}
+                                        className="bg-slate-900 hover:bg-slate-800"
+                                    >
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Registrar Primer Gasto
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setActiveTab("nc");
+                                            setIsNCModalOpen(true);
+                                        }}
+                                    >
+                                        <FileMinus className="w-4 h-4 mr-2" />
+                                        Crear Nota de Crédito
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
-            <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
+            {payments.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
                 {/* Barra de Herramientas Unificada */}
                 <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/30">
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -1778,6 +2015,7 @@ function ProviderPayments() {
                     )}
                 </div>
             </div>
+            )}
 
             {/* Create/Edit Modal */}
             <Modal

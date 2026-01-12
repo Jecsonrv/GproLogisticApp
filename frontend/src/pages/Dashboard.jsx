@@ -55,8 +55,22 @@ function Dashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    
+    // Initialize from localStorage or default to "All Time" (Year 0)
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const saved = localStorage.getItem("dashboard_month");
+        return saved ? parseInt(saved) : 0; // Default to 0 (All Year)
+    });
+    const [selectedYear, setSelectedYear] = useState(() => {
+        const saved = localStorage.getItem("dashboard_year");
+        return saved ? parseInt(saved) : 0; // Default to 0 (All Time)
+    });
+
+    // Persist selection
+    useEffect(() => {
+        localStorage.setItem("dashboard_month", selectedMonth);
+        localStorage.setItem("dashboard_year", selectedYear);
+    }, [selectedMonth, selectedYear]);
 
     const [stats, setStats] = useState({
         totalClients: 0,
@@ -78,6 +92,10 @@ function Dashboard() {
         revenueVsExpenses: [],
         statusDistribution: [],
     });
+    const [clientBreakdown, setClientBreakdown] = useState([]);
+    const [cashFlowData, setCashFlowData] = useState([]);
+    const [revenueComposition, setRevenueComposition] = useState(null);
+    const [profitabilityData, setProfitabilityData] = useState({ margen: 0, rentabilidad_porcentaje: 0 });
 
     const fetchDashboardData = useCallback(async () => {
         try {
@@ -142,6 +160,14 @@ function Dashboard() {
             // Alertas reales del sistema
             setAlerts(alertsData || []);
 
+            // Client breakdown data for comparative table
+            setClientBreakdown(data.client_breakdown || []);
+
+            // New data for advanced charts
+            setCashFlowData(data.cash_flow_data || []);
+            setRevenueComposition(data.revenue_composition || null);
+            setProfitabilityData(data.profitability || { margen: 0, rentabilidad_porcentaje: 0 });
+
             // Construir chartData solo con datos reales disponibles
             const chartDataPoints = [];
 
@@ -159,11 +185,11 @@ function Dashboard() {
                 // Monthly View: Current vs Previous
                 // Generar datos de gráficos solo con el mes actual si hay datos
                 // No inventamos historial que no existe
-                const currentMonthName = new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString("es-SV", {
+                const currentMonthName = new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1, 1).toLocaleDateString("es-SV", {
                     month: "short",
                 });
                 // Fix prev month name calculation for UI
-                const prevDate = new Date(selectedYear, selectedMonth - 1, 1);
+                const prevDate = new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1, 1);
                 prevDate.setMonth(prevDate.getMonth() - 1);
                 const prevMonthName = prevDate.toLocaleDateString("es-SV", { month: "short" });
 
@@ -255,6 +281,10 @@ function Dashboard() {
             setRecentOrders([]);
             setTopClients([]);
             setAlerts([]);
+            setClientBreakdown([]);
+            setCashFlowData([]);
+            setRevenueComposition(null);
+            setProfitabilityData({ margen: 0, rentabilidad_porcentaje: 0 });
             setChartData({
                 monthlyOrders: [],
                 revenueVsExpenses: [],
@@ -279,13 +309,13 @@ function Dashboard() {
                 variant: "primary",
             },
             {
-                title: "Ingresos del Mes",
+                title: selectedYear === 0 ? "Facturación Total (Histórico)" : "Facturación del Mes",
                 value: formatCurrency(stats.monthlyRevenue),
                 icon: DollarSign,
                 variant: "success",
             },
             {
-                title: "OS del Mes",
+                title: selectedYear === 0 ? "OS Totales" : "OS del Mes",
                 value: stats.ordersThisMonth,
                 trend:
                     stats.ordersThisMonthTrend > 0
@@ -298,27 +328,29 @@ function Dashboard() {
                 variant: "info",
             },
             {
-                title: "Rentabilidad",
-                value: formatCurrency(stats.profitability),
-                trend:
-                    stats.profitabilityTrend > 0
-                        ? "up"
-                        : stats.profitabilityTrend < 0
-                        ? "down"
-                        : "neutral",
-                trendValue: `${Math.abs(stats.profitabilityTrend)}%`,
+                title: "Margen Bruto",
+                value: formatCurrency(profitabilityData.margen),
                 icon: TrendingUp,
-                variant: "success",
+                variant: profitabilityData.margen >= 0 ? "success" : "danger",
             },
             {
-                title: "Facturas Pendientes",
-                value: stats.pendingInvoices,
-                icon: AlertCircle,
-                variant: "warning",
+                title: "Rentabilidad",
+                value: `${profitabilityData.rentabilidad_porcentaje.toFixed(1)}%`,
+                icon: BarChart3,
+                variant: profitabilityData.rentabilidad_porcentaje >= 20 ? "success" : profitabilityData.rentabilidad_porcentaje >= 10 ? "warning" : "danger",
             },
         ],
-        [stats]
+        [stats, profitabilityData, selectedYear]
     );
+
+    // Prepare data for Revenue Composition Donut Chart
+    const revenuePieData = useMemo(() => {
+        if (!revenueComposition) return [];
+        return [
+            { name: 'Propios', value: revenueComposition.servicios_propios, color: '#10b981' }, // emerald-500
+            { name: 'Tercerizados', value: revenueComposition.servicios_tercerizados, color: '#3b82f6' } // blue-500
+        ].filter(item => item.value > 0);
+    }, [revenueComposition]);
 
     if (loading) {
         return (
@@ -373,7 +405,7 @@ function Dashboard() {
                             value={selectedMonth}
                             onChange={(val) => setSelectedMonth(val)}
                             options={[
-                                { id: 0, name: "Año" },
+                                { id: 0, name: "Todo el año" },
                                 { id: 1, name: "Ene" }, { id: 2, name: "Feb" },
                                 { id: 3, name: "Mar" }, { id: 4, name: "Abr" },
                                 { id: 5, name: "May" }, { id: 6, name: "Jun" },
@@ -386,17 +418,24 @@ function Dashboard() {
                             className="w-20 sm:w-28"
                             size="sm"
                             isClearable={false}
+                            disabled={selectedYear === 0}
                         />
                         <SelectERP
                             value={selectedYear}
-                            onChange={(val) => setSelectedYear(val)}
-                            options={Array.from({ length: 5 }, (_, i) => ({
-                                id: new Date().getFullYear() - 2 + i,
-                                name: String(new Date().getFullYear() - 2 + i)
-                            }))}
+                            onChange={(val) => {
+                                setSelectedYear(val);
+                                if (val === 0) setSelectedMonth(0);
+                            }}
+                            options={[
+                                { id: 0, name: "Todo el tiempo" },
+                                ...Array.from({ length: 4 }, (_, i) => ({
+                                    id: new Date().getFullYear() - i,
+                                    name: String(new Date().getFullYear() - i)
+                                }))
+                            ]}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
-                            className="w-20 sm:w-24"
+                            className="w-32 sm:w-36"
                             size="sm"
                             isClearable={false}
                         />
@@ -405,9 +444,9 @@ function Dashboard() {
                         variant="outline"
                         size="sm"
                         onClick={fetchDashboardData}
-                        className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 h-9 px-2.5 sm:px-3"
+                        className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50 h-9 px-2.5 sm:px-3 flex items-center justify-center"
                     >
-                        <RefreshCw className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                        <RefreshCw className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">Actualizar</span>
                     </Button>
                 </div>
@@ -415,8 +454,8 @@ function Dashboard() {
 
             {/* Error Alert */}
             {error && (
-                <div className="bg-warning-50 border border-warning-200 rounded-md p-4 flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-warning-600 mt-0.5 flex-shrink-0" />
+                <div className="bg-warning-50 border border-warning-200 rounded-md p-4 flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-warning-600 flex-shrink-0" />
                     <div className="flex-1">
                         <h3 className="text-sm font-medium text-warning-800">
                             Aviso del Sistema
@@ -450,306 +489,154 @@ function Dashboard() {
                 ))}
             </div>
 
-            {/* Charts Row - Stack en móvil */}
+            {/* Main Content Row - Tabla + Alertas */}
             <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 lg:gap-6">
-                {/* Main Chart - Revenue vs Expenses */}
+                {/* Main Table - Client Financial Breakdown */}
                 <Card className="lg:col-span-4">
                     <CardHeader>
-                        <CardTitle>Ingresos vs Gastos</CardTitle>
-                        <CardDescription>Comparativa mensual</CardDescription>
+                        <CardTitle>Análisis Financiero por Cliente</CardTitle>
+                        <CardDescription>Facturación, Costos y Cargos</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        {/* Altura responsive para gráficos */}
-                        <div className="h-[200px] sm:h-[260px] lg:h-[320px] w-full">
-                            {chartData.revenueVsExpenses.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                    <CardContent className="pt-0">
+                        <div className="overflow-x-auto">
+                            {clientBreakdown.length === 0 ? (
+                                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                                     <BarChart3 className="h-12 w-12 mb-3 text-slate-300" />
                                     <p className="text-sm font-medium">
                                         Sin datos de facturación
                                     </p>
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Los datos aparecerán cuando haya
-                                        operaciones
+                                        Los datos aparecerán cuando haya operaciones
                                     </p>
                                 </div>
                             ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart
-                                        data={chartData.revenueVsExpenses}
-                                    >
-                                        <CartesianGrid
-                                            strokeDasharray="3 3"
-                                            vertical={false}
-                                            stroke="#e2e8f0"
-                                        />
-                                        <XAxis
-                                            dataKey="name"
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                            tickFormatter={(value) =>
-                                                `$${(value / 1000).toFixed(0)}k`
-                                            }
-                                        />
-                                        <Tooltip
-                                            contentStyle={{
-                                                borderRadius: "6px",
-                                                border: "1px solid #e2e8f0",
-                                                boxShadow:
-                                                    "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                                                fontSize: "13px",
-                                            }}
-                                            formatter={(value) =>
-                                                formatCurrency(value)
-                                            }
-                                        />
-                                        <Legend
-                                            wrapperStyle={{
-                                                paddingTop: "16px",
-                                                fontSize: "13px",
-                                            }}
-                                            iconType="line"
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="ingresos"
-                                            stroke="#16a34a"
-                                            strokeWidth={2.5}
-                                            dot={{
-                                                fill: "#16a34a",
-                                                r: 3,
-                                                strokeWidth: 2,
-                                                stroke: "#fff",
-                                            }}
-                                            activeDot={{ r: 5 }}
-                                            name="Ingresos"
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="gastos"
-                                            stroke="#dc2626"
-                                            strokeWidth={2.5}
-                                            dot={{
-                                                fill: "#dc2626",
-                                                r: 3,
-                                                strokeWidth: 2,
-                                                stroke: "#fff",
-                                            }}
-                                            activeDot={{ r: 5 }}
-                                            name="Gastos"
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Secondary Chart - Orders Trend */}
-                <Card className="lg:col-span-3">
-                    <CardHeader>
-                        <CardTitle>Volumen de Órdenes</CardTitle>
-                        <CardDescription>Comparativa mensual</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {/* Altura responsive para gráficos */}
-                        <div className="h-[200px] sm:h-[260px] lg:h-[320px] w-full">
-                            {chartData.monthlyOrders.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                    <FileText className="h-12 w-12 mb-3 text-slate-300" />
-                                    <p className="text-sm font-medium">
-                                        Sin órdenes registradas
-                                    </p>
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        Cree su primera orden de servicio
-                                    </p>
-                                </div>
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData.monthlyOrders}>
-                                        <CartesianGrid
-                                            strokeDasharray="3 3"
-                                            vertical={false}
-                                            stroke="#e2e8f0"
-                                        />
-                                        <XAxis
-                                            dataKey="name"
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis
-                                            stroke="#94a3b8"
-                                            fontSize={12}
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <Tooltip
-                                            cursor={{ fill: "#f1f5f9" }}
-                                            contentStyle={{
-                                                borderRadius: "6px",
-                                                border: "1px solid #e2e8f0",
-                                                boxShadow:
-                                                    "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                                                fontSize: "13px",
-                                            }}
-                                        />
-                                        <Bar
-                                            dataKey="value"
-                                            fill="#334155"
-                                            radius={[4, 4, 0, 0]}
-                                            name="Órdenes"
-                                        />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Bottom Row - Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Clients Table */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Top 5 Clientes</CardTitle>
-                                <CardDescription>
-                                    Mayor facturación
-                                </CardDescription>
-                            </div>
-                            <BarChart3 className="h-4 w-4 text-slate-400" />
-                        </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                        <div className="space-y-2">
-                            {topClients.length === 0 ? (
-                                <div className="py-8 text-center text-slate-500">
-                                    No hay datos de clientes
-                                </div>
-                            ) : (
-                                topClients.map((client, index) => (
-                                    <div
-                                        key={client.id}
-                                        className="flex items-center justify-between p-3 bg-slate-50 rounded hover:bg-slate-100 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-900 text-white font-bold text-xs">
-                                                {index + 1}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-medium text-slate-900">
-                                                    {client.client_name}
-                                                </p>
-                                                <p className="text-xs text-slate-500">
-                                                    {client.orders_count}{" "}
-                                                    órdenes
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b-2 border-slate-300">
+                                            <th className="px-4 py-3.5 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                                Cliente
+                                            </th>
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                                Facturación
+                                            </th>
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                                Servicios
+                                            </th>
+                                            <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50/80">
+                                                Préstamos
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {clientBreakdown.map((client, index) => {
+                                            return (
+                                                <tr
+                                                    key={client.client_id || index}
+                                                    className="hover:bg-slate-50/50 transition-colors group"
+                                                >
+                                                    <td className="px-4 py-3.5 text-slate-900 font-medium">
+                                                        {client.client_name}
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">
+                                                        <span className="text-emerald-700">
+                                                            {formatCurrency(client.total_ingresos || 0)}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
+                                                        {formatCurrency(client.total_servicios || 0)}
+                                                    </td>
+                                                    <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
+                                                        {formatCurrency(client.total_prestamos || 0)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {/* Totals Row */}
+                                        <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold">
+                                            <td className="px-4 py-4 text-slate-900 uppercase text-xs tracking-wide">
+                                                Total General
+                                            </td>
+                                            <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
+                                                <span className="text-emerald-700">
+                                                    {formatCurrency(
+                                                        clientBreakdown.reduce((sum, c) => sum + (c.total_ingresos || 0), 0)
+                                                    )}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
                                                 {formatCurrency(
-                                                    client.total_revenue || 0
+                                                    clientBreakdown.reduce((sum, c) => sum + (c.total_servicios || 0), 0)
                                                 )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))
+                                            </td>
+                                            <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
+                                                {formatCurrency(
+                                                    clientBreakdown.reduce((sum, c) => sum + (c.total_prestamos || 0), 0)
+                                                )}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             )}
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Alerts Panel */}
-                <Card>
-                    <CardHeader>
+                {/* Alertas Sidebar - Diseño ERP Profesional */}
+                <Card className="lg:col-span-3">
+                    <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle>Alertas y Pendientes</CardTitle>
-                                <CardDescription>
-                                    Requieren atención
-                                </CardDescription>
+                                <CardTitle className="text-base">Alertas</CardTitle>
+                                <CardDescription className="text-xs">Requieren atención</CardDescription>
                             </div>
-                            <AlertTriangle className="h-4 w-4 text-slate-400" />
+                            <Badge variant={alerts.length > 0 ? "danger" : "success"} className="text-xs px-2 py-0.5">
+                                {alerts.length}
+                            </Badge>
                         </div>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                             {alerts.length === 0 ? (
-                                <div className="py-8 text-center text-slate-500">
-                                    <CheckCircle className="h-10 w-10 mx-auto mb-2 text-success-500" />
-                                    <p className="text-sm">
-                                        ¡Todo en orden! No hay alertas
-                                        pendientes.
-                                    </p>
+                                <div className="py-8 flex flex-col items-center justify-center text-slate-400">
+                                    <CheckCircle className="h-10 w-10 mb-2 text-emerald-400" />
+                                    <p className="text-sm font-medium text-slate-600">Todo en orden</p>
+                                    <p className="text-xs text-slate-400 mt-1">No hay alertas pendientes</p>
                                 </div>
                             ) : (
                                 alerts.map((alert) => {
-                                    const severityConfig = {
-                                        high: {
-                                            bg: "bg-danger-50",
-                                            border: "border-danger-200",
-                                            icon: XCircle,
-                                            iconColor: "text-danger-600",
-                                        },
-                                        warning: {
-                                            bg: "bg-warning-50",
-                                            border: "border-warning-200",
-                                            icon: AlertTriangle,
-                                            iconColor: "text-warning-600",
-                                        },
-                                        medium: {
-                                            bg: "bg-warning-50",
-                                            border: "border-warning-200",
-                                            icon: Clock,
-                                            iconColor: "text-warning-600",
-                                        },
-                                    };
-                                    const config =
-                                        severityConfig[alert.severity] ||
-                                        severityConfig.medium;
-                                    const AlertIcon = config.icon;
-
-                                    const shouldShowSubtext = 
-                                        (alert.client && !alert.message.includes(alert.client)) || 
-                                        (alert.order && !alert.message.includes(alert.order));
-
+                                    const isHigh = alert.severity === 'high';
+                                    const isMedium = alert.severity === 'medium';
+                                    
                                     return (
                                         <div
                                             key={alert.id}
                                             className={cn(
-                                                "p-3 rounded border",
-                                                config.bg,
-                                                config.border
+                                                "p-3 rounded-lg border-l-3 transition-all",
+                                                isHigh && "bg-red-50 border-l-red-500 hover:bg-red-100/70",
+                                                isMedium && "bg-amber-50 border-l-amber-500 hover:bg-amber-100/70",
+                                                !isHigh && !isMedium && "bg-blue-50 border-l-blue-500 hover:bg-blue-100/70"
                                             )}
                                         >
                                             <div className="flex items-start gap-2.5">
-                                                <AlertIcon
-                                                    className={cn(
-                                                        "h-4 w-4 mt-0.5 flex-shrink-0",
-                                                        config.iconColor
-                                                    )}
-                                                />
+                                                {isHigh ? (
+                                                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                                ) : isMedium ? (
+                                                    <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                                ) : (
+                                                    <Clock className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                                )}
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-slate-900">
+                                                    <p className="text-xs font-medium text-slate-900 leading-tight">
                                                         {alert.message}
                                                     </p>
-                                                    {shouldShowSubtext && (
-                                                        <p className="text-xs text-slate-600 mt-0.5">
-                                                            {alert.client
-                                                                ? `Cliente: ${alert.client}`
-                                                                : `Orden: ${alert.order}`}
+                                                    {alert.client && (
+                                                        <p className="text-xs text-slate-600 mt-1 truncate">
+                                                            <span className="font-medium">Cliente:</span> {alert.client}
+                                                        </p>
+                                                    )}
+                                                    {alert.amount && (
+                                                        <p className="text-xs font-semibold text-slate-900 mt-1.5">
+                                                            {formatCurrency(alert.amount)}
                                                         </p>
                                                     )}
                                                 </div>
@@ -763,97 +650,216 @@ function Dashboard() {
                 </Card>
             </div>
 
-            {/* Recent Orders Table */}
+            {/* Charts Row - Flujo de Caja + Composición de Ingresos */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+                {/* Cash Flow Chart */}
+                <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Flujo de Caja</CardTitle>
+                        <CardDescription>Facturación Emitida vs Cobros vs Saldos Pendientes</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-[280px] w-full">
+                            {cashFlowData.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <DollarSign className="h-12 w-12 mb-3 text-slate-300" />
+                                    <p className="text-sm font-medium">Sin datos de flujo de caja</p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={cashFlowData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                        <XAxis
+                                            dataKey="month"
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis
+                                            stroke="#94a3b8"
+                                            fontSize={12}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: "#f1f5f9" }}
+                                            contentStyle={{
+                                                borderRadius: "8px",
+                                                border: "1px solid #e2e8f0",
+                                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                                fontSize: "13px",
+                                            }}
+                                            formatter={(value) => formatCurrency(value)}
+                                        />
+                                        <Legend
+                                            wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
+                                            iconType="circle"
+                                        />
+                                        <Bar dataKey="facturado" fill="#10b981" radius={[4, 4, 0, 0]} name="Facturado (Emitido)" barSize={40} />
+                                        <Bar dataKey="cobrado" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Cobrado (Pagos)" barSize={40} />
+                                        <Bar dataKey="pendiente" fill="#ef4444" radius={[4, 4, 0, 0]} name="Pendiente (Saldo)" barSize={40} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Revenue Composition Chart */}
+                <Card className="lg:col-span-1">
+                    <CardHeader>
+                        <CardTitle className="text-base">Composición de Ingresos</CardTitle>
+                        <CardDescription className="text-xs">Propios vs Tercerizados</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {!revenueComposition || revenueComposition.total === 0 ? (
+                            <div className="h-[240px] flex flex-col items-center justify-center text-slate-400">
+                                <BarChart3 className="h-10 w-10 mb-2 text-slate-300" />
+                                <p className="text-sm font-medium">Sin datos</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="space-y-3">
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-xs font-medium text-slate-700">Servicios Propios</span>
+                                            <span className="text-xs font-bold text-emerald-700">
+                                                {revenueComposition.porcentaje_propios}%
+                                            </span>
+                                        </div>
+                                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-emerald-600"
+                                                style={{ width: `${revenueComposition.porcentaje_propios}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-600 mt-1 font-semibold">
+                                            {formatCurrency(revenueComposition.servicios_propios)}
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-xs font-medium text-slate-700">Servicios Tercerizados</span>
+                                            <span className="text-xs font-bold text-blue-700">
+                                                {revenueComposition.porcentaje_tercerizados}%
+                                            </span>
+                                        </div>
+                                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-blue-600"
+                                                style={{ width: `${revenueComposition.porcentaje_tercerizados}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-600 mt-1 font-semibold">
+                                            {formatCurrency(revenueComposition.servicios_tercerizados)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="pt-3 border-t border-slate-200">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm font-bold text-slate-900">Total</span>
+                                        <span className="text-sm font-bold text-slate-900">
+                                            {formatCurrency(revenueComposition.total)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Recent Orders - Full Width */}
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle>Órdenes Recientes</CardTitle>
-                            <CardDescription>
-                                Últimos movimientos registrados
+                            <CardDescription className="text-xs">
+                                Últimos 8 movimientos registrados
                             </CardDescription>
                         </div>
-                        <FileText className="h-4 w-4 text-slate-400" />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate('/service-orders')}
+                            className="text-xs h-7 px-2 hover:bg-slate-100"
+                        >
+                            Ver todas
+                        </Button>
                     </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-200">
-                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                        Orden
-                                    </th>
-                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                        Cliente
-                                    </th>
-                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                        Fecha
-                                    </th>
-                                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                        Monto
-                                    </th>
-                                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                                        Estado
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {recentOrders.length === 0 ? (
-                                    <tr>
-                                        <td
-                                            colSpan={5}
-                                            className="px-3 py-8 text-center text-slate-500"
-                                        >
-                                            No hay órdenes recientes
-                                        </td>
+                    {recentOrders.length === 0 ? (
+                        <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                            <FileText className="h-12 w-12 mb-3 text-slate-300" />
+                            <p className="text-sm font-medium text-slate-600">No hay órdenes recientes</p>
+                            <p className="text-xs text-slate-400 mt-1">Las nuevas órdenes aparecerán aquí</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200">
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                            Orden
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                            Cliente
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide hidden sm:table-cell">
+                                            Fecha
+                                        </th>
+                                        <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                            Monto
+                                        </th>
+                                        <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                            Estado
+                                        </th>
                                     </tr>
-                                ) : (
-                                    recentOrders.slice(0, 8).map((order) => (
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {recentOrders.slice(0, 8).map((order) => (
                                         <tr
                                             key={order.id}
-                                            onClick={() =>
-                                                navigate(
-                                                    `/service-orders/${order.id}`
-                                                )
-                                            }
-                                            className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                                            onClick={() => navigate(`/service-orders/${order.id}`)}
+                                            className="hover:bg-slate-50 transition-colors cursor-pointer"
                                         >
-                                            <td className="px-3 py-2.5 font-mono text-sm font-medium text-slate-900">
+                                            <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-900">
                                                 {order.order_number}
                                             </td>
-                                            <td className="px-3 py-2.5 text-slate-700">
+                                            <td className="px-3 py-2.5 text-sm text-slate-700 font-medium truncate max-w-[250px]">
                                                 {order.client_name}
                                             </td>
-                                            <td className="px-3 py-2.5 text-slate-600">
+                                            <td className="px-3 py-2.5 text-xs text-slate-500 hidden sm:table-cell">
                                                 {order.created_at
-                                                    ? new Date(
-                                                          order.created_at
-                                                      ).toLocaleDateString(
-                                                          "es-SV"
-                                                      )
+                                                    ? new Date(order.created_at).toLocaleDateString("es-SV", {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric'
+                                                    })
                                                     : "-"}
                                             </td>
-                                            <td className="px-3 py-2.5 text-right font-medium text-slate-900 tabular-nums">
-                                                {formatCurrency(
-                                                    order.total_amount || 0
-                                                )}
+                                            <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
+                                                {formatCurrency(order.total_amount || 0)}
                                             </td>
-                                            <td className="px-3 py-2.5">
-                                                <StatusBadge
-                                                    status={order.status}
-                                                />
+                                            <td className="px-3 py-2.5 text-center">
+                                                <StatusBadge status={order.status} />
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
-    );
-}
+        );
+    }
 
-export default Dashboard;
+    export default Dashboard;

@@ -110,6 +110,7 @@ MODULE_PERMISSIONS = {
     # Módulos restringidos a operativo2 y admin
     'petty_cash': ['admin', 'operativo2'],
     'invoicing': ['admin', 'operativo2'],
+    'retention_control': ['admin', 'operativo2'],
     'account_statements': ['admin', 'operativo2'],
     
     # Cuentas por pagar - solo admin por ahora (operativo2 puede acceder en el futuro)

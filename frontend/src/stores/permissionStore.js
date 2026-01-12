@@ -17,6 +17,7 @@ const ROLE_PERMISSIONS = {
             clients: true,
             services: true,
             invoicing: true,
+            retention_control: true,
             account_statements: true,
             provider_statements: true,
             users: true,
@@ -44,6 +45,7 @@ const ROLE_PERMISSIONS = {
             clients: false, // NO acceso a clientes
             services: false, // NO acceso a servicios
             invoicing: true,
+            retention_control: true,
             account_statements: true,
             provider_statements: false, // NO acceso a cuentas por pagar (por ahora)
             users: false, // NO acceso a usuarios
@@ -102,6 +104,7 @@ export const ROUTE_TO_MODULE = {
     "/services": "services",
     "/client-pricing": "services",
     "/invoicing": "invoicing",
+    "/retention-control": "retention_control",
     "/account-statements": "account_statements",
     "/provider-statements": "provider_statements",
     "/users": "users",

@@ -233,16 +233,17 @@ const ClientCard = ({ client, isSelected, onClick }) => {
 };
 
 // ============================================
-// YEAR OPTIONS
+// YEAR OPTIONS GENERATOR
 // ============================================
-const YEAR_OPTIONS = [
-    { id: "", name: "Todo el tiempo" },
-    { id: 2026, name: "2026" },
-    { id: 2025, name: "2025" },
-    { id: 2024, name: "2024" },
-    { id: 2023, name: "2023" },
-    { id: 2022, name: "2022" },
-];
+const getYearOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const options = [{ id: "", name: "Todo el tiempo" }];
+    // Current year + 3 past years
+    for (let i = 0; i <= 3; i++) {
+        options.push({ id: currentYear - i, name: String(currentYear - i) });
+    }
+    return options;
+};
 
 const STATUS_OPTIONS = [
     { id: "", name: "Todos los estados" },
@@ -262,6 +263,7 @@ function AccountStatements() {
 
     // Data state
     const [clients, setClients] = useState([]);
+    const [generalStats, setGeneralStats] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [statement, setStatement] = useState(null);
     const [invoices, setInvoices] = useState([]);
@@ -272,7 +274,17 @@ function AccountStatements() {
     const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [clientSearchQuery, setClientSearchQuery] = useState("");
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    
+    // Initialize selectedYear from sessionStorage or default to "" (All time)
+    const [selectedYear, setSelectedYear] = useState(() => {
+        const saved = sessionStorage.getItem("accountStatements_year");
+        // Check if saved value is a valid year number or empty string
+        if (saved === "" || (saved && !isNaN(saved))) {
+            return saved === "" ? "" : parseInt(saved);
+        }
+        return "";
+    });
+
     const [statusFilter, setStatusFilter] = useState("");
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [filters, setFilters] = useState({
@@ -296,6 +308,15 @@ function AccountStatements() {
     });
     const [deletePaymentConfirm, setDeletePaymentConfirm] = useState(null); // {id, amount}
 
+    // Persist selectedYear changes
+    useEffect(() => {
+        if (selectedYear === "") {
+            sessionStorage.setItem("accountStatements_year", "");
+        } else {
+            sessionStorage.setItem("accountStatements_year", String(selectedYear));
+        }
+    }, [selectedYear]);
+
     const clearFilters = () => {
         setStatusFilter("");
         setFilters({
@@ -310,6 +331,7 @@ function AccountStatements() {
 
     useEffect(() => {
         fetchClients();
+        fetchGeneralStats();
         fetchBanks();
     }, []);
 
@@ -334,38 +356,46 @@ function AccountStatements() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedClient, selectedYear]);
 
+    // Recargar stats globales cuando cambia el año
+    useEffect(() => {
+        if (!selectedClient) {
+            fetchGeneralStats();
+        }
+    }, [selectedYear]);
+
     const fetchClients = async () => {
         try {
             setLoading(true);
             const response = await axios.get("/clients/");
-            // Enriquecer clientes con información de saldos
-            const enrichedClients = await Promise.all(
-                response.data.map(async (client) => {
-                    try {
-                        const stmtRes = await axios.get(
-                            `/clients/${client.id}/account_statement/`
-                        );
-                        return {
-                            ...client,
-                            credit_used: stmtRes.data.credit_used || 0,
-                            total_pending: stmtRes.data.credit_used || 0,
-                            overdue_amount: 0,
-                        };
-                    } catch {
-                        return {
-                            ...client,
-                            credit_used: 0,
-                            total_pending: 0,
-                            overdue_amount: 0,
-                        };
-                    }
-                })
-            );
-            setClients(enrichedClients);
+            // Como el backend ya envía el total_pending calculado, lo usamos directamente.
+            // Si necesitamos info detallada (como overdue_amount), podríamos mantener el cálculo
+            // o pedirle al backend que lo envíe. Por ahora, confiamos en total_pending.
+            const clientsData = response.data.map(client => ({
+                ...client,
+                // Usar el valor que viene del backend (anotado) o 0
+                total_pending: client.total_pending || 0,
+                // Si quisieramos calcular overdue en backend, habría que anotarlo también.
+                // Por ahora lo dejamos en 0 para no hacer N+1 requests
+                overdue_amount: 0 
+            }));
+            
+            setClients(clientsData);
         } catch {
             toast.error("Error al cargar clientes");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchGeneralStats = async () => {
+        try {
+            const response = await axios.get("/clients/general_summary/", {
+                params: { year: selectedYear }
+            });
+            setGeneralStats(response.data);
+        } catch (error) {
+            console.error("Error loading general stats:", error);
+            // Fallback silencioso o toast opcional
         }
     };
 
@@ -623,26 +653,36 @@ function AccountStatements() {
     const clientKPIs = useMemo(() => {
         if (!statement) return null;
 
+        // Base de facturas válidas (no anuladas) para KPIs financieros
+        const validInvoices = filteredInvoices.filter(inv => inv.status !== 'cancelled');
+
         return {
             creditLimit: statement.credit_limit || 0,
             creditUsed: statement.credit_used || 0,
             creditAvailable: statement.available_credit || 0,
             pendingOrders: statement.total_pending_orders || 0,
-            totalInvoiced: invoices.reduce(
+            totalInvoiced: validInvoices.reduce(
                 (sum, inv) => sum + parseFloat(inv.total_amount || 0),
                 0
             ),
-            totalPaid: invoices.reduce(
-                (sum, inv) => sum + parseFloat(inv.paid_amount || 0),
+            // Recuperado = Pagos + Notas de Crédito + Retenciones
+            // (Todo lo que ya no debemos cobrar)
+            totalPaid: validInvoices.reduce(
+                (sum, inv) => 
+                    sum + 
+                    parseFloat(inv.paid_amount || 0) + 
+                    parseFloat(inv.credited_amount || 0) + 
+                    parseFloat(inv.retencion || 0),
                 0
             ),
-            totalPending: invoices
+            // Por Cobrar = Balance (lo que aún falta cobrar)
+            totalPending: validInvoices
                 .filter(
-                    (inv) => inv.status !== "paid" && inv.status !== "cancelled"
+                    (inv) => inv.status !== "paid"
                 )
                 .reduce((sum, inv) => sum + parseFloat(inv.balance || 0), 0),
         };
-    }, [statement, invoices]);
+    }, [statement, filteredInvoices]);
 
     // Invoice columns
     const invoiceColumns = [
@@ -1002,7 +1042,7 @@ function AccountStatements() {
                 <SelectERP
                     value={selectedYear}
                     onChange={(val) => setSelectedYear(val)}
-                    options={YEAR_OPTIONS}
+                    options={getYearOptions()}
                     getOptionLabel={(opt) => opt.name}
                     getOptionValue={(opt) => opt.id}
                     size="sm"
@@ -1012,6 +1052,7 @@ function AccountStatements() {
                     variant="outline"
                     onClick={() => {
                         fetchClients();
+                        fetchGeneralStats();
                         if (selectedClient) {
                             fetchStatement(selectedClient.id);
                             fetchInvoices(selectedClient.id);
@@ -1036,7 +1077,7 @@ function AccountStatements() {
                     isExporting={isExporting}
                     disabled={!selectedClient}
                     allLabel="Estado de Cuenta Completo"
-                    allDescription={`Exportar todas las facturas del año ${selectedYear}`}
+                    allDescription={`Exportar todas las facturas del año ${selectedYear || "actual"}`}
                     filteredLabel="Facturas Filtradas"
                     filteredDescription="Exportar solo las facturas visibles actualmente"
                 />
@@ -1091,21 +1132,134 @@ function AccountStatements() {
                 {/* Contenido Principal */}
                 <div className="lg:col-span-9 space-y-6">
                     {!selectedClient ? (
-                        <Card>
-                            <CardContent className="py-16">
-                                <div className="text-center">
-                                    <Building2 className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                        Selecciona un Cliente
-                                    </h3>
-                                    <p className="text-gray-500 max-w-md mx-auto">
-                                        Selecciona un cliente de la lista para
-                                        ver su estado de cuenta, historial de
-                                        facturas y registrar pagos.
-                                    </p>
+                        <>
+                            {/* General Stats - Tabular Display */}
+                            {generalStats && (
+                                <div className="space-y-6 mb-6">
+                                    {/* Financial Stats Table */}
+                                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                <DollarSign className="w-4 h-4" />
+                                                Resumen Financiero Global
+                                            </h3>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                                    <tr>
+                                                        <th className="px-4 py-3">Total Facturación</th>
+                                                        <th className="px-4 py-3">Total Servicios</th>
+                                                        <th className="px-4 py-3">Gastos a Terceros</th>
+                                                        <th className="px-4 py-3">Total Pagado</th>
+                                                        <th className="px-4 py-3 text-right">Total Pendiente</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    <tr className="hover:bg-slate-50/50">
+                                                        <td className="px-4 py-3 font-semibold text-slate-900">
+                                                            {formatCurrency(generalStats.financial.total_invoiced)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-700">
+                                                            {formatCurrency(generalStats.financial.total_services)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-700">
+                                                            {formatCurrency(generalStats.financial.total_third_party)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-emerald-600 font-medium">
+                                                            {formatCurrency(generalStats.financial.total_paid)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-bold text-red-600">
+                                                            {formatCurrency(generalStats.financial.total_pending)}
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* Client Metrics Table */}
+                                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                                            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                                <User className="w-4 h-4" />
+                                                Métricas de Clientes
+                                            </h3>
+                                        </div>
+                                        <div className="grid grid-cols-4 divide-x divide-slate-100">
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Clientes</p>
+                                                <p className="text-xl font-bold text-slate-900">{generalStats.clients.total}</p>
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes con Crédito</p>
+                                                <p className="text-xl font-bold text-slate-900">{generalStats.clients.credit}</p>
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes al Día</p>
+                                                <p className="text-xl font-bold text-emerald-600">{generalStats.clients.up_to_date}</p>
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes Pendientes</p>
+                                                <p className="text-xl font-bold text-red-600">{generalStats.clients.pending}</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            )}
+
+                            {/* Top Debtors - Single Column */}
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                        <TrendingDown className="w-4 h-4 text-red-500" />
+                                        Clientes con Mayor Saldo Pendiente
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="pt-0">
+                                    <div className="space-y-3">
+                                        {clients
+                                            .filter(c => (c.total_pending || 0) > 0)
+                                            .sort((a, b) => (b.total_pending || 0) - (a.total_pending || 0))
+                                            .slice(0, 5)
+                                            .map((client) => (
+                                                <div
+                                                    key={client.id}
+                                                    onClick={() => setSelectedClient(client)}
+                                                    className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors border border-slate-200"
+                                                >
+                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                        <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-semibold text-xs text-slate-700 flex-shrink-0">
+                                                            {client.name?.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="font-medium text-sm text-slate-900 truncate">
+                                                                {client.name}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500 truncate">
+                                                                {client.nit}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right ml-3 flex-shrink-0">
+                                                        <p className="font-bold text-sm text-red-600 tabular-nums">
+                                                            {formatCurrency(client.total_pending || 0)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        {clients.filter(c => (c.total_pending || 0) > 0).length === 0 && (
+                                            <div className="text-center py-8 text-slate-500">
+                                                <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500 mb-2" />
+                                                <p className="text-sm font-medium">
+                                                    ¡Excelente! Todos los clientes están al día
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </>
                     ) : (
                         <>
                             {/* Client Header Card */}
@@ -1192,15 +1346,16 @@ function AccountStatements() {
                                         variant="primary"
                                     />
                                     <KPICard
-                                        label="Total Cobrado"
+                                        label="Recuperado"
                                         value={formatCurrency(
                                             clientKPIs.totalPaid
                                         )}
                                         icon={CheckCircle2}
                                         variant="success"
+                                        tooltip="Incluye pagos, notas de crédito y retenciones"
                                     />
                                     <KPICard
-                                        label="Saldo Pendiente"
+                                        label="Por Cobrar"
                                         value={formatCurrency(
                                             clientKPIs.totalPending
                                         )}

@@ -370,6 +370,7 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'purchase_order',
             'client_id', 'client_name', 'client_is_gran_contribuyente', 'issue_date', 'due_date',
             'subtotal_neto', 'iva_total', 'retencion', 'total_amount',
+            'total_services', 'total_third_party',
             'paid_amount', 'credited_amount', 'balance', 'status',
             'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes',
             'is_dte_issued', 'is_editable',

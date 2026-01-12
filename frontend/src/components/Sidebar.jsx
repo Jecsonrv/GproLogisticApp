@@ -14,6 +14,7 @@ import {
     X,
     Boxes,
     Wallet,
+    Receipt,
 } from "lucide-react";
 
 /**
@@ -67,6 +68,12 @@ const menuSections = [
                 path: "/invoicing",
                 icon: Banknote,
                 module: "invoicing", // Solo admin y operativo2
+            },
+            {
+                name: "Control de Retenciones",
+                path: "/retention-control",
+                icon: Receipt,
+                module: "retention_control", // Solo admin y operativo2
             },
             {
                 name: "Estados de Cuenta",

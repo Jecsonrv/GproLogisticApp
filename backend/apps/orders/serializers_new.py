@@ -488,7 +488,9 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice', 'payment_date', 'amount',
             'payment_method', 'payment_method_display',
-            'reference_number', 'bank', 'bank_name', 'notes', 'receipt_file',
+            'reference_number', 'numero_comprobante_retencion',
+            'retention_generation_code', 'retention_reception_stamp',
+            'bank', 'bank_name', 'notes', 'receipt_file',
             'item_allocations',
             'created_by', 'created_by_username', 'created_by_name',
             'created_at', 'updated_at'
