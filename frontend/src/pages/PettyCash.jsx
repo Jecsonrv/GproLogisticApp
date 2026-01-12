@@ -110,6 +110,7 @@ const getInitialFormState = () => ({
     category_code: "",
     service_order_ref: "",
     nit_dui: "",
+    nrc: "",
 });
 
 // ============================================
@@ -390,6 +391,12 @@ const TransactionDetailsModal = ({ isOpen, onClose, transaction }) => {
                         </p>
                     </div>
                     <div>
+                        <Label className="text-xs text-slate-400">NRC</Label>
+                        <p className="font-mono text-slate-600">
+                            {transaction.nrc || "-"}
+                        </p>
+                    </div>
+                    <div>
                         <Label className="text-xs text-slate-400">DUI</Label>
                         <p className="font-mono text-slate-600">
                             {transaction.dui || "-"}
@@ -401,6 +408,12 @@ const TransactionDetailsModal = ({ isOpen, onClose, transaction }) => {
                         </Label>
                         <p className="font-mono text-slate-600">
                             {transaction.service_order_ref || "N/A"}
+                        </p>
+                    </div>
+                    <div className="col-span-2 pt-2 border-t border-slate-100 mt-2">
+                        <Label className="text-xs text-slate-400">Solicitado por</Label>
+                        <p className="font-medium text-slate-700">
+                            {transaction.created_by_name || "-"}
                         </p>
                     </div>
                 </div>
@@ -435,6 +448,7 @@ const EditTransactionModal = ({ isOpen, onClose, transaction, onSuccess }) => {
                 service_order_ref: transaction.service_order_ref || "",
                 nit: transaction.nit || "",
                 dui: transaction.dui || "",
+                nrc: transaction.nrc || "",
             });
         }
     }, [transaction]);
@@ -550,7 +564,7 @@ const EditTransactionModal = ({ isOpen, onClose, transaction, onSuccess }) => {
                         />
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                     <div>
                         <Label>Orden Servicio</Label>
                         <Input
@@ -571,6 +585,18 @@ const EditTransactionModal = ({ isOpen, onClose, transaction, onSuccess }) => {
                                 setFormData({
                                     ...formData,
                                     nit: e.target.value,
+                                })
+                            }
+                        />
+                    </div>
+                    <div>
+                        <Label>NRC</Label>
+                        <Input
+                            value={formData.nrc}
+                            onChange={(e) =>
+                                setFormData({
+                                    ...formData,
+                                    nrc: e.target.value,
                                 })
                             }
                         />
@@ -1054,8 +1080,9 @@ const PettyCash = () => {
             header: "Monto",
             accessor: "amount",
             className: "text-right",
+            headerClassName: "text-right",
             cell: (row) => (
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-2 tabular-nums">
                     {row.transaction_type === "INCOME" ? (
                         <ArrowUpRight className="w-4 h-4 text-slate-400" />
                     ) : (
@@ -1064,6 +1091,17 @@ const PettyCash = () => {
                     <span className="font-semibold text-slate-900">
                         {formatCurrency(row.amount)}
                     </span>
+                </div>
+            ),
+        },
+        {
+            header: "Solicitado por",
+            accessor: "created_by_name",
+            className: "text-center",
+            headerClassName: "text-center",
+            cell: (row) => (
+                <div className="text-slate-500 text-xs truncate max-w-[120px] mx-auto">
+                    {row.created_by_name || "—"}
                 </div>
             ),
         },
@@ -1502,7 +1540,7 @@ const PettyCash = () => {
                             />
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <div>
                             <Label>Orden Servicio</Label>
                             <Input
@@ -1525,6 +1563,19 @@ const PettyCash = () => {
                                     setFormData({
                                         ...formData,
                                         nit_dui: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                        <div>
+                            <Label>NRC</Label>
+                            <Input
+                                placeholder="Registro IVA"
+                                value={formData.nrc}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        nrc: e.target.value,
                                     })
                                 }
                             />

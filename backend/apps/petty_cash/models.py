@@ -30,6 +30,7 @@ class PettyCashTransaction(models.Model):
     
     # Tax info (optional)
     nit = models.CharField(max_length=20, blank=True, null=True, verbose_name="NIT")
+    nrc = models.CharField(max_length=20, blank=True, null=True, verbose_name="NRC / Registro IVA")
     dui = models.CharField(max_length=20, blank=True, null=True, verbose_name="DUI")
 
     class Meta:

@@ -14,6 +14,7 @@ import {
     ModalFooter,
 } from "./ui";
 import toast from "react-hot-toast";
+import useAuthStore from "../stores/authStore";
 
 const ServiceOrderForm = ({
     initialData,
@@ -27,6 +28,8 @@ const ServiceOrderForm = ({
     onCancel,
     isLoading = false
 }) => {
+    const { user } = useAuthStore();
+
     const [formData, setFormData] = useState({
         client: "",
         sub_client: null,
@@ -40,6 +43,7 @@ const ServiceOrderForm = ({
         notes: "",
         is_manual_os: false,
         order_number: "",
+        customs_agent: "",
     });
 
     // Initialize form data
@@ -58,9 +62,26 @@ const ServiceOrderForm = ({
                 notes: initialData.notes || "",
                 is_manual_os: false, // Usually false when editing
                 order_number: initialData.order_number || "",
+                customs_agent: initialData.customs_agent || "",
             });
+        } else if (user) {
+            setFormData(prev => ({
+                ...prev,
+                customs_agent: user.id
+            }));
         }
-    }, [initialData]);
+    }, [initialData, user]);
+
+    const requestedByName = useMemo(() => {
+        if (isEditing && initialData) {
+            return initialData.customs_agent_name || "Sin asignar";
+        }
+        if (user) {
+            const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+            return fullName || user.username;
+        }
+        return "";
+    }, [isEditing, initialData, user]);
 
     // Filter subclients based on selected client
     const availableSubClients = useMemo(() => {
@@ -115,6 +136,21 @@ const ServiceOrderForm = ({
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Requested By Field */}
+            <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                <Label className="mb-1.5 block">
+                    Solicitado por / Aforador
+                </Label>
+                <Input
+                    value={requestedByName}
+                    readOnly
+                    className="bg-slate-100 text-slate-700 font-medium"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                    Se registrará automáticamente como el aforador de la orden.
+                </p>
+            </div>
+
             {/* Client Info */}
             <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">

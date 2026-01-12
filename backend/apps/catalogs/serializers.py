@@ -79,16 +79,27 @@ class ProviderSerializer(serializers.ModelSerializer):
         return value
 
     def get_total_debt(self, obj):
-        """Calcula la deuda total pendiente del proveedor"""
-        from apps.transfers.models import Transfer
-        from django.db.models import Sum
+        """Calcula la deuda total pendiente del proveedor (Transfers + ProviderInvoices)"""
+        from apps.transfers.models import Transfer, ProviderInvoice
+        from django.db.models import Sum, F
 
-        debt = Transfer.objects.filter(
+        # 1. Deuda por Gastos / Transferencias
+        transfer_debt = Transfer.objects.filter(
             provider=obj,
             status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
         ).aggregate(Sum('balance'))['balance__sum'] or 0
 
-        return float(debt)
+        # 2. Deuda por Costos Directos (Facturas de Proveedor)
+        # ProviderInvoice no tiene campo 'balance' en DB, se calcula dinámicamente
+        invoices = ProviderInvoice.objects.filter(
+            provider=obj,
+            payment_status__in=['pendiente', 'parcial']
+        ).aggregate(
+            total_debt=Sum(F('total_amount') - F('paid_amount'))
+        )
+        invoice_debt = invoices['total_debt'] or 0
+
+        return float(transfer_debt) + float(invoice_debt)
 
 
 class CustomsAgentSerializer(serializers.ModelSerializer):
