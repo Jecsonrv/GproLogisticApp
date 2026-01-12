@@ -1103,13 +1103,24 @@ function ProviderPayments() {
                 payment.transfer_type !== filters.transfer_type
             )
                 return false;
-            if (filters.status && payment.status !== filters.status)
-                return false;
-            if (
-                filters.provider &&
-                payment.provider !== parseInt(filters.provider)
-            )
-                return false;
+            
+            if (filters.status) {
+                // Normalización de estados para asegurar coincidencia
+                const paymentStatus = String(payment.status).toLowerCase();
+                const filterStatus = String(filters.status).toLowerCase();
+                
+                // Manejar alias comunes (pagado/pagada)
+                if (filterStatus === 'pagado') {
+                    if (paymentStatus !== 'pagado' && paymentStatus !== 'pagada') return false;
+                } else if (paymentStatus !== filterStatus) {
+                    return false;
+                }
+            }
+
+            if (filters.provider) {
+                const paymentProviderId = payment.provider?.id || payment.provider;
+                if (String(paymentProviderId) !== String(filters.provider)) return false;
+            }
 
             if (filters.dateFrom) {
                 const paymentDate = new Date(payment.transaction_date);

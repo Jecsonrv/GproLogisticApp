@@ -513,28 +513,20 @@ const ServiceOrders = () => {
             ),
         },
         {
-            header: "Cliente / Concepto",
+            header: "Cliente / Embarque",
             accessor: "client_name",
-            className: "min-w-[250px]",
+            className: "min-w-[220px]",
             sortable: false,
             cell: (row) => (
-                <div className="flex flex-col gap-1 py-1">
+                <div className="flex flex-col gap-0.5 py-1">
                     <div
-                        className="font-semibold text-slate-900 text-sm truncate max-w-[240px]"
+                        className="font-semibold text-slate-900 text-sm truncate max-w-[220px]"
                         title={row.client_name}
                     >
                         {row.client_name}
                     </div>
-                    {row.notes && (
-                        <div 
-                            className="text-[11px] text-slate-500 italic leading-tight truncate max-w-[240px]"
-                            title={row.notes}
-                        >
-                            {row.notes}
-                        </div>
-                    )}
                     {row.shipment_type_name && (
-                        <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+                        <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
                             {row.shipment_type_name}
                         </div>
                     )}
@@ -544,19 +536,21 @@ const ServiceOrders = () => {
         {
             header: "DUCA / Referencia",
             accessor: "duca",
-            className: "w-[150px]",
+            className: "w-[200px]",
             sortable: false,
             cell: (row) => (
-                <div>
-                    <div className="font-mono text-xs font-medium text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 w-fit">
-                        {row.duca || "—"}
-                    </div>
+                <div className="flex flex-col gap-1.5 py-1">
+                    {row.duca && (
+                        <div className="font-mono text-[11px] font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100 break-words whitespace-pre-wrap leading-relaxed">
+                            {row.duca}
+                        </div>
+                    )}
                     {row.bl_reference && (
                         <div
-                            className="text-[10px] text-slate-400 mt-1 truncate max-w-[140px]"
+                            className="text-[10px] text-slate-400 font-bold uppercase tracking-tight truncate"
                             title={row.bl_reference}
                         >
-                            BL: {row.bl_reference}
+                            Ref: {row.bl_reference}
                         </div>
                     )}
                 </div>
