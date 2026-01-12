@@ -495,10 +495,10 @@ function Dashboard() {
                 <Card className="lg:col-span-4">
                     <CardHeader>
                         <CardTitle>Análisis Financiero por Cliente</CardTitle>
-                        <CardDescription>Facturación, Costos y Cargos</CardDescription>
+                        <CardDescription>Facturación, Servicios y Cargos</CardDescription>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <div className="overflow-x-auto">
+                        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
                             {clientBreakdown.length === 0 ? (
                                 <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                                     <BarChart3 className="h-12 w-12 mb-3 text-slate-300" />

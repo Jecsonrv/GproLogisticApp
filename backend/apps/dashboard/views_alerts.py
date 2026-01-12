@@ -47,6 +47,8 @@ class AlertsView(APIView):
         eta_missed = ServiceOrder.objects.filter(
             status__in=['en_transito', 'pendiente'],
             eta__lt=today
+        ).exclude(
+            status__in=['en_puerto', 'en_almacen', 'finalizada', 'cerrada']
         ).select_related('client')
 
         for os in eta_missed:
