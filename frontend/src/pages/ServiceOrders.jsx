@@ -536,12 +536,12 @@ const ServiceOrders = () => {
         {
             header: "DUCA / Referencia",
             accessor: "duca",
-            className: "w-[450px]",
+            className: "w-[600px]",
             sortable: false,
             cell: (row) => (
                 <div className="flex flex-col gap-1.5 py-1">
                     {row.duca && (
-                        <div className="font-mono text-[11px] font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100 break-words whitespace-pre-wrap leading-relaxed max-w-[430px]">
+                        <div className="font-mono text-[11px] font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100 break-words whitespace-pre-wrap leading-relaxed max-w-[580px]">
                             {row.duca}
                         </div>
                     )}
