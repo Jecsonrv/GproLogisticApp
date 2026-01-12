@@ -1088,12 +1088,12 @@ function ProviderPayments() {
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
                 const matchesSearch =
-                    payment.service_order_number?.toLowerCase().includes(query) ||
-                    payment.provider_name?.toLowerCase().includes(query) ||
-                    payment.beneficiary_name?.toLowerCase().includes(query) ||
-                    payment.description?.toLowerCase().includes(query) ||
-                    payment.invoice_number?.toLowerCase().includes(query) ||
-                    payment.ccf?.toLowerCase().includes(query);
+                    (payment.service_order_number || "").toString().toLowerCase().includes(query) ||
+                    (payment.provider_name || "").toString().toLowerCase().includes(query) ||
+                    (payment.beneficiary_name || "").toString().toLowerCase().includes(query) ||
+                    (payment.description || "").toString().toLowerCase().includes(query) ||
+                    (payment.invoice_number || "").toString().toLowerCase().includes(query) ||
+                    (payment.ccf || "").toString().toLowerCase().includes(query);
                 if (!matchesSearch) return false;
             }
 
