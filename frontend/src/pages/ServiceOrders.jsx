@@ -981,7 +981,7 @@ const ServiceOrders = () => {
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}
                 title={`Detalle de Orden: ${selectedOrder?.order_number || ""}`}
-                size="4xl"
+                size="5xl"
             >
                 {selectedOrder && (
                     <ServiceOrderDetail

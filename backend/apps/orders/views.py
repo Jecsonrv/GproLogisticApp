@@ -56,34 +56,62 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
 
         # Para el listado, usar anotaciones para calcular totales en una sola query
         if self.action == 'list':
+            from django.db.models import Subquery, OuterRef
+            from apps.transfers.models import Transfer
+
+            # Subqueries para evitar producto cartesiano (duplicidad) en sumas múltiples
+            charges_sum = OrderCharge.objects.filter(
+                service_order=OuterRef('pk'),
+                is_deleted=False
+            ).values('service_order').annotate(
+                sum_total=Sum('total')
+            ).values('sum_total')
+
+            transfers_sum = Transfer.objects.filter(
+                service_order=OuterRef('pk'),
+                is_deleted=False
+            ).values('service_order').annotate(
+                sum_amount=Sum('amount')
+            ).values('sum_amount')
+
+            transfers_terceros_sum = Transfer.objects.filter(
+                service_order=OuterRef('pk'),
+                is_deleted=False,
+                transfer_type__in=['terceros', 'cargos']
+            ).values('service_order').annotate(
+                sum_amount=Sum('amount')
+            ).values('sum_amount')
+
+            transfers_propios_sum = Transfer.objects.filter(
+                service_order=OuterRef('pk'),
+                is_deleted=False,
+                transfer_type__in=['propios', 'costos']
+            ).values('service_order').annotate(
+                sum_amount=Sum('amount')
+            ).values('sum_amount')
+
             queryset = queryset.annotate(
                 # Total de servicios (charges.total)
                 annotated_total_services=Coalesce(
-                    Sum('charges__total', filter=Q(charges__is_deleted=False)),
+                    Subquery(charges_sum),
                     Value(Decimal('0.00')),
                     output_field=DecimalField(max_digits=12, decimal_places=2)
                 ),
                 # Total de transfers
                 annotated_total_transfers=Coalesce(
-                    Sum('transfers__amount', filter=Q(transfers__is_deleted=False)),
+                    Subquery(transfers_sum),
                     Value(Decimal('0.00')),
                     output_field=DecimalField(max_digits=12, decimal_places=2)
                 ),
                 # Total terceros (transfers tipo terceros/cargos)
                 annotated_total_terceros=Coalesce(
-                    Sum('transfers__amount', filter=Q(
-                        transfers__is_deleted=False,
-                        transfers__transfer_type__in=['terceros', 'cargos']
-                    )),
+                    Subquery(transfers_terceros_sum),
                     Value(Decimal('0.00')),
                     output_field=DecimalField(max_digits=12, decimal_places=2)
                 ),
                 # Total propios (transfers tipo propios/costos)
                 annotated_total_propios=Coalesce(
-                    Sum('transfers__amount', filter=Q(
-                        transfers__is_deleted=False,
-                        transfers__transfer_type__in=['propios', 'costos']
-                    )),
+                    Subquery(transfers_propios_sum),
                     Value(Decimal('0.00')),
                     output_field=DecimalField(max_digits=12, decimal_places=2)
                 ),

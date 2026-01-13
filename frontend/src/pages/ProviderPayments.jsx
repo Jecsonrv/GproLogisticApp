@@ -421,15 +421,21 @@ function ProviderPayments() {
                 axios.get("/transfers/transfers/"),
                 axios.get("/transfers/provider-invoices/")
             ]);
+
+            const getResults = (response) => {
+                if (Array.isArray(response.data)) return response.data;
+                if (response.data && Array.isArray(response.data.results)) return response.data.results;
+                return [];
+            };
             
-            const transfers = (transfersRes.data || []).map(t => ({
+            const transfers = getResults(transfersRes).map(t => ({
                 ...t,
                 source: 'transfer',
                 // Ensure ID is unique if needed, but keeping original ID for API calls
                 original_id: t.id
             }));
 
-            const invoices = (invoicesRes.data || []).map(inv => ({
+            const invoices = getResults(invoicesRes).map(inv => ({
                 id: inv.id, // Keeping original ID
                 original_id: inv.id,
                 source: 'provider_invoice',
@@ -2419,7 +2425,7 @@ function ProviderPayments() {
                     setSelectedPayment(null);
                 }}
                 title="Detalle del Gasto"
-                size="2xl"
+                size="4xl"
             >
                 {selectedPayment && (
                     <div className="space-y-6">
