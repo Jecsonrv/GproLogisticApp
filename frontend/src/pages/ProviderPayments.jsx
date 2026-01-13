@@ -2056,6 +2056,7 @@ function ProviderPayments() {
                 <div className="relative min-h-[400px]">
                     {activeTab === "gastos" ? (
                         <DataTable
+                            key={`gastos-${searchQuery}-${JSON.stringify(filters)}`}
                             data={filteredPayments}
                             columns={columns}
                             loading={loading}
@@ -2065,6 +2066,7 @@ function ProviderPayments() {
                         />
                     ) : (
                         <DataTable
+                            key={`nc-${searchQuery}-${JSON.stringify(filters)}`}
                             data={creditNotes}
                             columns={ncColumns}
                             loading={loading}

@@ -43,6 +43,11 @@ const DataTable = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = usePersistentPageSize(initialPageSize);
 
+    // Resetear a la página 1 cuando los datos o la búsqueda cambian
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [data, searchTerm]);
+
     // Filtrar datos por búsqueda
     const filteredData = useMemo(() => {
         if (!searchTerm) return data;
