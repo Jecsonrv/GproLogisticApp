@@ -348,6 +348,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
         provider_data = [
             ('Proveedor:', provider.name),
             ('NIT:', provider.nit or 'No registrado'),
+            ('Registro IVA:', provider.iva_registration or 'No registrado'),
             ('Email:', provider.email or 'No registrado'),
             ('Teléfono:', provider.phone or 'No registrado'),
         ]

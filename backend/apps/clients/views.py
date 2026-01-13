@@ -463,6 +463,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         client_data = [
             ('Cliente:', client.name),
             ('NIT:', client.nit),
+            ('Registro IVA:', client.iva_registration or 'No registrado'),
             ('Dirección:', client.address or 'No especificada'),
             ('Teléfono:', client.phone or 'No especificado'),
             ('Email:', client.email or 'No especificado'),
