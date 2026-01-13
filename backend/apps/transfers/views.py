@@ -50,6 +50,7 @@ class TransferViewSet(viewsets.ModelViewSet):
     search_fields = ['description', 'invoice_number', 'service_order__order_number']
     ordering_fields = ['transaction_date', 'amount', 'created_at']
     ordering = ['-transaction_date']
+    pagination_class = None
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -1493,6 +1494,7 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
     search_fields = ['invoice_number', 'provider__name', 'service_order__order_number']
     ordering_fields = ['issue_date', 'total_amount', 'created_at']
     ordering = ['-created_at']
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'list':
