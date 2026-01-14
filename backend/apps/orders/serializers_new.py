@@ -48,8 +48,11 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
         return None
 
     def get_file_size(self, obj):
-        if obj.file:
-            return obj.file.size
+        try:
+            if obj.file:
+                return obj.file.size
+        except Exception:
+            pass
         return 0
 
 
