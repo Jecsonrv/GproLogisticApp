@@ -82,6 +82,7 @@ class ProviderInvoiceListSerializer(serializers.ModelSerializer):
             'total_amount', 'allocated_amount', 'unallocated_amount',
             'status', 'status_display', 'payment_status', 'payment_status_display',
             'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
+            'generation_code', 'reception_stamp',
             'notes', 'allocations_count', 'profit_summary',
             'created_by', 'created_by_name', 'created_at'
         ]
@@ -118,6 +119,7 @@ class ProviderInvoiceDetailSerializer(serializers.ModelSerializer):
             'total_amount', 'allocated_amount', 'unallocated_amount',
             'status', 'status_display', 'payment_status', 'payment_status_display',
             'paid_amount', 'payment_date', 'issue_date', 'invoice_file',
+            'generation_code', 'reception_stamp',
             'notes', 'allocations', 'profit_summary',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
@@ -139,7 +141,8 @@ class ProviderInvoiceCreateSerializer(serializers.ModelSerializer):
         model = ProviderInvoice
         fields = [
             'id', 'invoice_number', 'provider', 'service_order',
-            'total_amount', 'issue_date', 'invoice_file', 'notes'
+            'total_amount', 'issue_date', 'invoice_file', 'notes',
+            'generation_code', 'reception_stamp'
         ]
         read_only_fields = ['id']
 
@@ -232,6 +235,7 @@ class TransferSerializer(serializers.ModelSerializer):
             'bank', 'bank_name', 'transaction_date', 'payment_date',
             'payment_method', 'invoice_number', 'ccf',
             'invoice_file', 'balance', 'paid_amount',
+            'generation_code', 'reception_stamp',
             'customer_markup_percentage', 'customer_applies_iva', 'customer_iva_type',
             'is_pass_through',  # Nuevo campo para reembolsos
             'created_by', 'created_by_username', 'created_by_name',
@@ -276,6 +280,7 @@ class TransferListSerializer(serializers.ModelSerializer):
                   'amount', 'paid_amount', 'balance', 'description', 'service_order', 'service_order_number', 'purchase_order',
                   'provider', 'provider_name', 'bank', 'bank_name', 'beneficiary_name',
                   'payment_method', 'invoice_number', 'ccf', 'invoice_file',
+                  'generation_code', 'reception_stamp',
                   'customer_markup_percentage', 'customer_applies_iva', 'customer_iva_type',
                   'amount_locked', 'billing_status',
                   'invoice_id', 'invoice_number_client', 'is_billed', 'credit_notes_applied',
@@ -461,6 +466,7 @@ class ProviderCreditNoteListSerializer(serializers.ModelSerializer):
             'amount', 'applied_amount', 'available_amount',
             'issue_date', 'received_date', 'reason', 'reason_display',
             'status', 'status_display', 'pdf_file',
+            'generation_code', 'reception_stamp',
             'applications_count', 'created_by_name', 'created_at'
         ]
 
@@ -505,6 +511,7 @@ class ProviderCreditNoteDetailSerializer(serializers.ModelSerializer):
             'amount', 'applied_amount', 'available_amount',
             'issue_date', 'received_date', 'reason', 'reason_display',
             'reason_detail', 'status', 'status_display', 'pdf_file',
+            'generation_code', 'reception_stamp',
             'voided_at', 'voided_by', 'voided_by_name', 'void_reason',
             'applications', 'pending_transfers',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
@@ -587,7 +594,8 @@ class ProviderCreditNoteCreateSerializer(serializers.ModelSerializer):
         model = ProviderCreditNote
         fields = [
             'id', 'provider', 'original_transfer', 'note_number', 'amount', 'issue_date',
-            'received_date', 'reason', 'reason_detail', 'pdf_file'
+            'received_date', 'reason', 'reason_detail', 'pdf_file',
+            'generation_code', 'reception_stamp'
         ]
         read_only_fields = ['id']
 

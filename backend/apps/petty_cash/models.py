@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from decimal import Decimal
+from datetime import datetime
 
 class PettyCashTransaction(models.Model):
     TRANSACTION_TYPES = (
@@ -33,6 +34,9 @@ class PettyCashTransaction(models.Model):
     nrc = models.CharField(max_length=20, blank=True, null=True, verbose_name="NRC / Registro IVA")
     dui = models.CharField(max_length=20, blank=True, null=True, verbose_name="DUI")
 
+    # Link to CashCount (Arqueo)
+    cash_count = models.ForeignKey('CashCount', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions', verbose_name="Arqueo Asociado")
+
     class Meta:
         ordering = ['-transaction_date', '-created_at']
         verbose_name = "Movimiento de Caja Chica"
@@ -51,6 +55,9 @@ class CashCount(models.Model):
     
     date = models.DateField(auto_now_add=True)
     
+    # Sequence number for "Caja 1", "Caja 2" reset yearly
+    sequence_number = models.PositiveIntegerField(default=1, verbose_name="Número de Secuencia")
+
     # Totals
     calculated_balance = models.DecimalField(max_digits=10, decimal_places=2, help_text="Saldo que debería haber según sistema")
     actual_balance = models.DecimalField(max_digits=10, decimal_places=2, help_text="Saldo contado físicamente")
@@ -62,6 +69,21 @@ class CashCount(models.Model):
         ordering = ['-created_at']
         verbose_name = "Arqueo de Caja"
         verbose_name_plural = "Arqueos de Caja"
+    
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            # Auto-increment sequence number for the current year
+            current_year = datetime.now().year
+            last_count = CashCount.objects.filter(date__year=current_year).order_by('-sequence_number').first()
+            if last_count:
+                self.sequence_number = last_count.sequence_number + 1
+            else:
+                self.sequence_number = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Caja {self.sequence_number} - {self.date}"
+
 
 class CashCountDetail(models.Model):
     """

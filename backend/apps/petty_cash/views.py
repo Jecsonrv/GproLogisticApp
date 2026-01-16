@@ -15,6 +15,21 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
     queryset = PettyCashTransaction.objects.all()
     serializer_class = PettyCashTransactionSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter for "Active" (current box) transactions
+        active = self.request.query_params.get('active')
+        if active == 'true':
+            queryset = queryset.filter(cash_count__isnull=True)
+            
+        # Filter for specific Cash Count (History)
+        cash_count_id = self.request.query_params.get('cash_count_id')
+        if cash_count_id:
+            queryset = queryset.filter(cash_count_id=cash_count_id)
+            
+        return queryset
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -22,8 +37,12 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
     def balance(self, request):
         """
         Calculates the current balance: Total Income - Total Expenses
+        For the ACTIVE box only (unarchived transactions).
         """
-        aggregates = PettyCashTransaction.objects.aggregate(
+        # Only consider transactions not yet part of a Cash Count
+        queryset = PettyCashTransaction.objects.filter(cash_count__isnull=True)
+        
+        aggregates = queryset.aggregate(
             total_income=Sum(Case(
                 When(transaction_type='INCOME', then=F('amount')),
                 default=0,
@@ -56,6 +75,9 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
         category_code = request.query_params.get('category_code')
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
+        
+        # Also respect 'active' or 'cash_count_id' from get_queryset logic if passed, 
+        # but let's ensure we use the filtered queryset from get_queryset() which we did above.
         
         if transaction_type:
             queryset = queryset.filter(transaction_type=transaction_type)
@@ -235,8 +257,10 @@ class CashCountViewSet(viewsets.ModelViewSet):
     serializer_class = CashCountSerializer
 
     def perform_create(self, serializer):
-        # Calculate expected balance at this moment
-        aggregates = PettyCashTransaction.objects.aggregate(
+        # Calculate expected balance based ONLY on Open transactions (not yet archived)
+        open_transactions = PettyCashTransaction.objects.filter(cash_count__isnull=True)
+        
+        aggregates = open_transactions.aggregate(
             total_income=Sum(Case(
                 When(transaction_type='INCOME', then=F('amount')),
                 default=0,
@@ -256,11 +280,15 @@ class CashCountViewSet(viewsets.ModelViewSet):
         actual_balance = serializer.validated_data.get('actual_balance')
         difference = actual_balance - calculated_balance
         
-        serializer.save(
+        instance = serializer.save(
             performed_by=self.request.user,
             calculated_balance=calculated_balance,
             difference=difference
         )
+        
+        # ARCHIVE TRANSACTIONS: Link all currently open transactions to this CashCount
+        open_transactions.update(cash_count=instance)
+
 
     @action(detail=False, methods=['get'])
     def export_excel(self, request):

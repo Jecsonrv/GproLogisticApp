@@ -330,6 +330,8 @@ function ProviderPayments() {
         reason: "otro",
         reason_detail: "",
         pdf_file: null,
+        generation_code: "",
+        reception_stamp: "",
     });
     const [pendingTransfers, setPendingTransfers] = useState([]);
     const [providerTransfers, setProviderTransfers] = useState([]); // Facturas del proveedor seleccionado
@@ -366,6 +368,8 @@ function ProviderPayments() {
         transaction_date: getTodayDate(),
         notes: "",
         invoice_file: null,
+        generation_code: "",
+        reception_stamp: "",
     };
     const [formData, setFormData] = useState(initialFormData);
 
@@ -419,31 +423,33 @@ function ProviderPayments() {
             setLoading(true);
             const [transfersRes, invoicesRes] = await Promise.all([
                 axios.get("/transfers/transfers/"),
-                axios.get("/transfers/provider-invoices/")
+                axios.get("/transfers/provider-invoices/"),
             ]);
 
             const getResults = (response) => {
                 if (Array.isArray(response.data)) return response.data;
-                if (response.data && Array.isArray(response.data.results)) return response.data.results;
+                if (response.data && Array.isArray(response.data.results))
+                    return response.data.results;
                 return [];
             };
-            
-            const transfers = getResults(transfersRes).map(t => ({
+
+            const transfers = getResults(transfersRes).map((t) => ({
                 ...t,
-                source: 'transfer',
+                source: "transfer",
                 // Ensure ID is unique if needed, but keeping original ID for API calls
-                original_id: t.id
+                original_id: t.id,
             }));
 
-            const invoices = getResults(invoicesRes).map(inv => ({
+            const invoices = getResults(invoicesRes).map((inv) => ({
                 id: inv.id, // Keeping original ID
                 original_id: inv.id,
-                source: 'provider_invoice',
-                transfer_type: 'costos', // Direct Costs are always 'costos'
+                source: "provider_invoice",
+                transfer_type: "costos", // Direct Costs are always 'costos'
                 provider: inv.provider,
                 provider_name: inv.provider_name,
                 amount: inv.total_amount,
-                balance: parseFloat(inv.total_amount) - parseFloat(inv.paid_amount),
+                balance:
+                    parseFloat(inv.total_amount) - parseFloat(inv.paid_amount),
                 paid_amount: inv.paid_amount,
                 status: inv.payment_status,
                 transaction_date: inv.issue_date,
@@ -454,13 +460,17 @@ function ProviderPayments() {
                 invoice_number: inv.invoice_number,
                 invoice_file: inv.invoice_file,
                 created_at: inv.created_at,
+                generation_code: inv.generation_code,
+                reception_stamp: inv.reception_stamp,
                 // Provider Invoices don't need 'approval', they are 'approved' by creation/allocation essentially
                 // But for consistency we map status 'pendiente' -> 'pendiente'.
             }));
-            
+
             // Merge and sort
             const allPayments = [...transfers, ...invoices].sort((a, b) => {
-                return new Date(b.transaction_date) - new Date(a.transaction_date);
+                return (
+                    new Date(b.transaction_date) - new Date(a.transaction_date)
+                );
             });
 
             setPayments(allPayments);
@@ -504,19 +514,39 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
-            const isDirectCostWithOS = formData.transfer_type === 'costos' && formData.service_order;
-            const endpoint = isDirectCostWithOS ? "/transfers/provider-invoices/" : "/transfers/transfers/";
-            
+            const isDirectCostWithOS =
+                formData.transfer_type === "costos" && formData.service_order;
+            const endpoint = isDirectCostWithOS
+                ? "/transfers/provider-invoices/"
+                : "/transfers/transfers/";
+
             const formDataToSend = new FormData();
 
             if (isDirectCostWithOS) {
                 // Mapping for ProviderInvoice
-                formDataToSend.append("invoice_number", formData.invoice_number || "S/N");
+                formDataToSend.append(
+                    "invoice_number",
+                    formData.invoice_number || "S/N"
+                );
                 formDataToSend.append("provider", formData.provider);
                 formDataToSend.append("service_order", formData.service_order);
                 formDataToSend.append("total_amount", formData.amount);
                 formDataToSend.append("issue_date", formData.transaction_date);
-                formDataToSend.append("notes", formData.description + (formData.notes ? ` - ${formData.notes}` : ""));
+                formDataToSend.append(
+                    "notes",
+                    formData.description +
+                        (formData.notes ? ` - ${formData.notes}` : "")
+                );
+                if (formData.generation_code)
+                    formDataToSend.append(
+                        "generation_code",
+                        formData.generation_code
+                    );
+                if (formData.reception_stamp)
+                    formDataToSend.append(
+                        "reception_stamp",
+                        formData.reception_stamp
+                    );
             } else {
                 // Standard mapping for Transfer
                 Object.keys(formData).forEach((key) => {
@@ -530,21 +560,28 @@ function ProviderPayments() {
                 });
 
                 // Specific defaults for consistency with Service Order detail view
-                if (formData.transfer_type === 'cargos') {
+                if (formData.transfer_type === "cargos") {
                     formDataToSend.append("is_pass_through", "true");
                     formDataToSend.append("customer_markup_percentage", "0");
                 }
             }
 
             if (formData.invoice_file instanceof File) {
-                formDataToSend.append(isDirectCostWithOS ? "invoice_file" : "invoice_file", formData.invoice_file);
+                formDataToSend.append(
+                    isDirectCostWithOS ? "invoice_file" : "invoice_file",
+                    formData.invoice_file
+                );
             }
 
             await axios.post(endpoint, formDataToSend, {
                 headers: { "Content-Type": undefined },
             });
 
-            toast.success(isDirectCostWithOS ? "Costo directo registrado exitosamente" : "Gasto registrado exitosamente");
+            toast.success(
+                isDirectCostWithOS
+                    ? "Costo directo registrado exitosamente"
+                    : "Gasto registrado exitosamente"
+            );
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
@@ -561,8 +598,9 @@ function ProviderPayments() {
 
         try {
             setIsSubmitting(true);
-            const isProviderInvoice = selectedPayment.source === 'provider_invoice';
-            const endpoint = isProviderInvoice 
+            const isProviderInvoice =
+                selectedPayment.source === "provider_invoice";
+            const endpoint = isProviderInvoice
                 ? `/transfers/provider-invoices/${selectedPayment.id}/`
                 : `/transfers/transfers/${selectedPayment.id}/`;
 
@@ -570,11 +608,24 @@ function ProviderPayments() {
 
             if (isProviderInvoice) {
                 // Mapping for ProviderInvoice update
-                formDataToSend.append("invoice_number", formData.invoice_number || "S/N");
+                formDataToSend.append(
+                    "invoice_number",
+                    formData.invoice_number || "S/N"
+                );
                 formDataToSend.append("provider", formData.provider);
                 formDataToSend.append("total_amount", formData.amount);
                 formDataToSend.append("issue_date", formData.transaction_date);
                 formDataToSend.append("notes", formData.description);
+                if (formData.generation_code)
+                    formDataToSend.append(
+                        "generation_code",
+                        formData.generation_code
+                    );
+                if (formData.reception_stamp)
+                    formDataToSend.append(
+                        "reception_stamp",
+                        formData.reception_stamp
+                    );
             } else {
                 // Standard mapping for Transfer
                 Object.keys(formData).forEach((key) => {
@@ -589,16 +640,15 @@ function ProviderPayments() {
             }
 
             if (formData.invoice_file instanceof File) {
-                formDataToSend.append(isProviderInvoice ? "invoice_file" : "invoice_file", formData.invoice_file);
+                formDataToSend.append(
+                    isProviderInvoice ? "invoice_file" : "invoice_file",
+                    formData.invoice_file
+                );
             }
 
-            await axios.patch(
-                endpoint,
-                formDataToSend,
-                {
-                    headers: { "Content-Type": undefined },
-                }
-            );
+            await axios.patch(endpoint, formDataToSend, {
+                headers: { "Content-Type": undefined },
+            });
 
             toast.success("Registro actualizado exitosamente");
             setIsCreateModalOpen(false);
@@ -623,12 +673,18 @@ function ProviderPayments() {
                 fetchCreditNotes();
             } else {
                 // Check if it's a provider_invoice or a transfer
-                const payment = payments.find(p => p.id === deleteConfirm.id && (p.source === deleteConfirm.source || !deleteConfirm.source));
-                const source = payment?.source || 'transfer';
-                
-                const endpoint = source === 'provider_invoice'
-                    ? `/transfers/provider-invoices/${deleteConfirm.id}/`
-                    : `/transfers/transfers/${deleteConfirm.id}/`;
+                const payment = payments.find(
+                    (p) =>
+                        p.id === deleteConfirm.id &&
+                        (p.source === deleteConfirm.source ||
+                            !deleteConfirm.source)
+                );
+                const source = payment?.source || "transfer";
+
+                const endpoint =
+                    source === "provider_invoice"
+                        ? `/transfers/provider-invoices/${deleteConfirm.id}/`
+                        : `/transfers/transfers/${deleteConfirm.id}/`;
 
                 await axios.delete(endpoint);
                 toast.success("Registro eliminado correctamente");
@@ -637,7 +693,12 @@ function ProviderPayments() {
         } catch {
             // Error handled by interceptor
         } finally {
-            setDeleteConfirm({ open: false, id: null, type: null, source: null });
+            setDeleteConfirm({
+                open: false,
+                id: null,
+                type: null,
+                source: null,
+            });
         }
     };
 
@@ -655,6 +716,8 @@ function ProviderPayments() {
             reason: "otro",
             reason_detail: "",
             pdf_file: null,
+            generation_code: "",
+            reception_stamp: "",
         });
         setProviderTransfers([]);
         setSelectedNC(null);
@@ -700,6 +763,10 @@ function ProviderPayments() {
             if (ncForm.reason_detail)
                 formData.append("reason_detail", ncForm.reason_detail);
             if (ncForm.pdf_file) formData.append("pdf_file", ncForm.pdf_file);
+            if (ncForm.generation_code)
+                formData.append("generation_code", ncForm.generation_code);
+            if (ncForm.reception_stamp)
+                formData.append("reception_stamp", ncForm.reception_stamp);
 
             await axios.post("/transfers/provider-credit-notes/", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
@@ -888,18 +955,15 @@ function ProviderPayments() {
                 formDataToSend.append("proof_file", payFormData.invoice_file);
             }
 
-            const endpoint = selectedPayment.source === 'provider_invoice'
-                ? `/transfers/provider-invoices/${selectedPayment.id}/register_payment/`
-                : `/transfers/transfers/${selectedPayment.id}/register_payment/`;
+            const endpoint =
+                selectedPayment.source === "provider_invoice"
+                    ? `/transfers/provider-invoices/${selectedPayment.id}/register_payment/`
+                    : `/transfers/transfers/${selectedPayment.id}/register_payment/`;
 
-            await axios.post(
-                endpoint,
-                formDataToSend,
-                {
-                    headers: { "Content-Type": undefined },
-                    _skipErrorToast: true,
-                }
-            );
+            await axios.post(endpoint, formDataToSend, {
+                headers: { "Content-Type": undefined },
+                _skipErrorToast: true,
+            });
 
             toast.success("Pago registrado exitosamente");
             setIsPayModalOpen(false);
@@ -971,6 +1035,8 @@ function ProviderPayments() {
             transaction_date: payment.transaction_date || getTodayDate(),
             notes: payment.notes || "",
             invoice_file: null,
+            generation_code: payment.generation_code || "",
+            reception_stamp: payment.reception_stamp || "",
         };
 
         setFormData(formDataToSet);
@@ -979,13 +1045,17 @@ function ProviderPayments() {
 
     const openDetailModal = async (payment) => {
         try {
-            const endpoint = payment.source === 'provider_invoice'
-                ? `/transfers/provider-invoices/${payment.id}/detail_with_payments/`
-                : `/transfers/transfers/${payment.id}/detail_with_payments/`;
+            const endpoint =
+                payment.source === "provider_invoice"
+                    ? `/transfers/provider-invoices/${payment.id}/detail_with_payments/`
+                    : `/transfers/transfers/${payment.id}/detail_with_payments/`;
 
             const response = await axios.get(endpoint);
             // Ensure source is preserved in selectedPayment
-            setSelectedPayment({ ...response.data, source: payment.source || 'transfer' });
+            setSelectedPayment({
+                ...response.data,
+                source: payment.source || "transfer",
+            });
             setIsDetailModalOpen(true);
         } catch {
             toast.error("Error al cargar detalles");
@@ -1094,12 +1164,30 @@ function ProviderPayments() {
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
                 const matchesSearch =
-                    (payment.service_order_number || "").toString().toLowerCase().includes(query) ||
-                    (payment.provider_name || "").toString().toLowerCase().includes(query) ||
-                    (payment.beneficiary_name || "").toString().toLowerCase().includes(query) ||
-                    (payment.description || "").toString().toLowerCase().includes(query) ||
-                    (payment.invoice_number || "").toString().toLowerCase().includes(query) ||
-                    (payment.ccf || "").toString().toLowerCase().includes(query);
+                    (payment.service_order_number || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query) ||
+                    (payment.provider_name || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query) ||
+                    (payment.beneficiary_name || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query) ||
+                    (payment.description || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query) ||
+                    (payment.invoice_number || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query) ||
+                    (payment.ccf || "")
+                        .toString()
+                        .toLowerCase()
+                        .includes(query);
                 if (!matchesSearch) return false;
             }
 
@@ -1108,23 +1196,29 @@ function ProviderPayments() {
                 payment.transfer_type !== filters.transfer_type
             )
                 return false;
-            
+
             if (filters.status) {
                 // Normalización de estados para asegurar coincidencia
                 const paymentStatus = String(payment.status).toLowerCase();
                 const filterStatus = String(filters.status).toLowerCase();
-                
+
                 // Manejar alias comunes (pagado/pagada)
-                if (filterStatus === 'pagado') {
-                    if (paymentStatus !== 'pagado' && paymentStatus !== 'pagada') return false;
+                if (filterStatus === "pagado") {
+                    if (
+                        paymentStatus !== "pagado" &&
+                        paymentStatus !== "pagada"
+                    )
+                        return false;
                 } else if (paymentStatus !== filterStatus) {
                     return false;
                 }
             }
 
             if (filters.provider) {
-                const paymentProviderId = payment.provider?.id || payment.provider;
-                if (String(paymentProviderId) !== String(filters.provider)) return false;
+                const paymentProviderId =
+                    payment.provider?.id || payment.provider;
+                if (String(paymentProviderId) !== String(filters.provider))
+                    return false;
             }
 
             if (filters.dateFrom) {
@@ -1318,8 +1412,11 @@ function ProviderPayments() {
             sortable: false,
             cell: (row) => {
                 const osClosed = isPaymentOSClosed(row);
-                const isProviderInvoice = row.source === 'provider_invoice';
-                const canPay = row.status === "aprobado" || row.status === "parcial" || (isProviderInvoice && row.status !== "pagado");
+                const isProviderInvoice = row.source === "provider_invoice";
+                const canPay =
+                    row.status === "aprobado" ||
+                    row.status === "parcial" ||
+                    (isProviderInvoice && row.status !== "pagado");
 
                 return (
                     <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
@@ -1335,7 +1432,8 @@ function ProviderPayments() {
                                 >
                                     <Banknote className="w-4 h-4" />
                                 </button>
-                            ) : (!isProviderInvoice && row.status === "pendiente") ? (
+                            ) : !isProviderInvoice &&
+                              row.status === "pendiente" ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
                                     title="Requiere Aprobación"
@@ -1601,7 +1699,8 @@ function ProviderPayments() {
                         Cuentas por Pagar
                     </h2>
                     <p className="text-slate-600">
-                        Gestión de pagos a proveedores y control de gastos operativos
+                        Gestión de pagos a proveedores y control de gastos
+                        operativos
                     </p>
                 </div>
             )}
@@ -1652,11 +1751,14 @@ function ProviderPayments() {
                                         Registrar Gastos
                                     </h3>
                                     <p className="text-sm text-slate-600 mb-4">
-                                        Registra facturas de proveedores, gastos operativos y costos directos
+                                        Registra facturas de proveedores, gastos
+                                        operativos y costos directos
                                     </p>
                                     <Button
                                         size="sm"
-                                        onClick={() => setIsCreateModalOpen(true)}
+                                        onClick={() =>
+                                            setIsCreateModalOpen(true)
+                                        }
                                         className="bg-slate-900 hover:bg-slate-800"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
@@ -1676,7 +1778,8 @@ function ProviderPayments() {
                                         Notas de Crédito
                                     </h3>
                                     <p className="text-sm text-slate-600 mb-4">
-                                        Gestiona devoluciones y ajustes de proveedores
+                                        Gestiona devoluciones y ajustes de
+                                        proveedores
                                     </p>
                                     <Button
                                         size="sm"
@@ -1703,7 +1806,8 @@ function ProviderPayments() {
                                         Ejecutar Pagos
                                     </h3>
                                     <p className="text-sm text-slate-600 mb-4">
-                                        Registra pagos realizados y mantén el control financiero
+                                        Registra pagos realizados y mantén el
+                                        control financiero
                                     </p>
                                     <div className="text-xs text-slate-500 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
                                         Disponible al aprobar gastos
@@ -1733,7 +1837,8 @@ function ProviderPayments() {
                                                 Costos Directos
                                             </p>
                                             <p className="text-xs text-slate-600 mt-1">
-                                                Gastos asociados directamente a órdenes de servicio
+                                                Gastos asociados directamente a
+                                                órdenes de servicio
                                             </p>
                                         </div>
                                     </div>
@@ -1746,7 +1851,8 @@ function ProviderPayments() {
                                                 Cargos a Cliente
                                             </p>
                                             <p className="text-xs text-blue-700 mt-1">
-                                                Gastos que serán facturados al cliente
+                                                Gastos que serán facturados al
+                                                cliente
                                             </p>
                                         </div>
                                     </div>
@@ -1759,7 +1865,8 @@ function ProviderPayments() {
                                                 Gastos de Operación
                                             </p>
                                             <p className="text-xs text-purple-700 mt-1">
-                                                Gastos administrativos y operativos generales
+                                                Gastos administrativos y
+                                                operativos generales
                                             </p>
                                         </div>
                                     </div>
@@ -1785,7 +1892,8 @@ function ProviderPayments() {
                                                 Registro
                                             </p>
                                             <p className="text-xs text-slate-600">
-                                                Se crea el gasto con estado "Pendiente"
+                                                Se crea el gasto con estado
+                                                "Pendiente"
                                             </p>
                                         </div>
                                     </div>
@@ -1798,7 +1906,8 @@ function ProviderPayments() {
                                                 Aprobación
                                             </p>
                                             <p className="text-xs text-slate-600">
-                                                Usuario autorizado aprueba el gasto
+                                                Usuario autorizado aprueba el
+                                                gasto
                                             </p>
                                         </div>
                                     </div>
@@ -1811,7 +1920,8 @@ function ProviderPayments() {
                                                 Pago
                                             </p>
                                             <p className="text-xs text-slate-600">
-                                                Se ejecuta y registra el pago al proveedor
+                                                Se ejecuta y registra el pago al
+                                                proveedor
                                             </p>
                                         </div>
                                     </div>
@@ -1831,12 +1941,15 @@ function ProviderPayments() {
                                     Comienza a Gestionar tus Pagos
                                 </h3>
                                 <p className="text-slate-600 max-w-md mx-auto mb-6">
-                                    Registra tus primeros gastos y mantén un control preciso de las obligaciones
-                                    con proveedores y gastos operativos.
+                                    Registra tus primeros gastos y mantén un
+                                    control preciso de las obligaciones con
+                                    proveedores y gastos operativos.
                                 </p>
                                 <div className="flex items-center justify-center gap-3">
                                     <Button
-                                        onClick={() => setIsCreateModalOpen(true)}
+                                        onClick={() =>
+                                            setIsCreateModalOpen(true)
+                                        }
                                         className="bg-slate-900 hover:bg-slate-800"
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
@@ -1862,221 +1975,230 @@ function ProviderPayments() {
             {/* Bloque Inferior (Operativo): Tabla + Herramientas */}
             {payments.length > 0 && (
                 <div className="bg-white border border-slate-200 rounded-lg sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
-                {/* Barra de Herramientas Unificada */}
-                <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/30">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                        {/* Izquierda: Tabs + Búsqueda + Filtros */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
-                            {/* Tabs */}
-                            <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50 w-full sm:w-auto shrink-0">
-                                <button
-                                    onClick={() => setActiveTab("gastos")}
-                                    className={cn(
-                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
-                                        activeTab === "gastos"
-                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                    )}
-                                >
-                                    Gastos
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("nc")}
-                                    className={cn(
-                                        "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
-                                        activeTab === "nc"
-                                            ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                                    )}
-                                >
-                                    N. Crédito
-                                </button>
-                            </div>
-
-                            <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0" />
-
-                            {/* Búsqueda + Filtros */}
-                            <div className="flex items-center gap-2 flex-1">
-                                <div className="relative flex-1 group">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
-                                    <input
-                                        type="text"
-                                        placeholder={
-                                            activeTab === "gastos"
-                                                ? "Buscar gasto, proveedor, OS..."
-                                                : "Buscar nota crédito..."
-                                        }
-                                        value={searchQuery}
-                                        onChange={(e) =>
-                                            setSearchQuery(e.target.value)
-                                        }
-                                        className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
-                                    />
-                                </div>
-                                {activeTab === "gastos" && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            setIsFiltersOpen(!isFiltersOpen)
-                                        }
+                    {/* Barra de Herramientas Unificada */}
+                    <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/30">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                            {/* Izquierda: Tabs + Búsqueda + Filtros */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:max-w-3xl">
+                                {/* Tabs */}
+                                <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50 w-full sm:w-auto shrink-0">
+                                    <button
+                                        onClick={() => setActiveTab("gastos")}
                                         className={cn(
-                                            "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
-                                            isFiltersOpen &&
-                                                "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                            "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                            activeTab === "gastos"
+                                                ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                         )}
                                     >
-                                        <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
-                                        <span className="hidden sm:inline">
-                                            Filtros
-                                        </span>
-                                        {activeFiltersCount > 0 && (
-                                            <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
-                                                {activeFiltersCount}
-                                            </span>
+                                        Gastos
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab("nc")}
+                                        className={cn(
+                                            "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
+                                            activeTab === "nc"
+                                                ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
+                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                                         )}
-                                    </Button>
+                                    >
+                                        N. Crédito
+                                    </button>
+                                </div>
+
+                                <div className="h-6 w-px bg-slate-200 hidden sm:block shrink-0" />
+
+                                {/* Búsqueda + Filtros */}
+                                <div className="flex items-center gap-2 flex-1">
+                                    <div className="relative flex-1 group">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
+                                        <input
+                                            type="text"
+                                            placeholder={
+                                                activeTab === "gastos"
+                                                    ? "Buscar gasto, proveedor, OS..."
+                                                    : "Buscar nota crédito..."
+                                            }
+                                            value={searchQuery}
+                                            onChange={(e) =>
+                                                setSearchQuery(e.target.value)
+                                            }
+                                            className="w-full pl-9 pr-4 py-2.5 sm:py-2 text-sm border border-slate-200 rounded-lg focus:border-slate-400 focus:outline-none focus:ring-0 transition-all placeholder:text-slate-400 bg-white"
+                                        />
+                                    </div>
+                                    {activeTab === "gastos" && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setIsFiltersOpen(!isFiltersOpen)
+                                            }
+                                            className={cn(
+                                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
+                                                isFiltersOpen &&
+                                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                            )}
+                                        >
+                                            <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
+                                            <span className="hidden sm:inline">
+                                                Filtros
+                                            </span>
+                                            {activeFiltersCount > 0 && (
+                                                <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
+                                                    {activeFiltersCount}
+                                                </span>
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Derecha: Acciones */}
+                            <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
+                                {activeTab === "gastos" && (
+                                    <ExportButton
+                                        onExportAll={() =>
+                                            handleExportExcel("all")
+                                        }
+                                        onExportFiltered={() =>
+                                            handleExportExcel("filtered")
+                                        }
+                                        filteredCount={filteredPayments.length}
+                                        totalCount={payments.length}
+                                        isExporting={isExporting}
+                                        allLabel="Todos los Pagos"
+                                        allDescription="Exportar registro completo"
+                                        filteredLabel="Filtrados"
+                                        filteredDescription="Solo visibles"
+                                    />
                                 )}
+
+                                <Button
+                                    size="sm"
+                                    onClick={() =>
+                                        activeTab === "gastos"
+                                            ? setIsCreateModalOpen(true)
+                                            : setIsNCModalOpen(true)
+                                    }
+                                    className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
+                                >
+                                    <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                    {activeTab === "gastos"
+                                        ? "Nuevo Gasto"
+                                        : "Nueva NC"}
+                                </Button>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Derecha: Acciones */}
-                        <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
-                            {activeTab === "gastos" && (
-                                <ExportButton
-                                    onExportAll={() => handleExportExcel("all")}
-                                    onExportFiltered={() =>
-                                        handleExportExcel("filtered")
+                    {/* Advanced Filters Panel - Solo para Gastos */}
+                    {isFiltersOpen && activeTab === "gastos" && (
+                        <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+                                <SelectERP
+                                    label="Tipo de Gasto"
+                                    value={filters.transfer_type}
+                                    onChange={(val) =>
+                                        setFilters({
+                                            ...filters,
+                                            transfer_type: val,
+                                        })
                                     }
-                                    filteredCount={filteredPayments.length}
-                                    totalCount={payments.length}
-                                    isExporting={isExporting}
-                                    allLabel="Todos los Pagos"
-                                    allDescription="Exportar registro completo"
-                                    filteredLabel="Filtrados"
-                                    filteredDescription="Solo visibles"
+                                    options={TRANSFER_TYPE_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    clearable
                                 />
-                            )}
-
-                            <Button
-                                size="sm"
-                                onClick={() =>
-                                    activeTab === "gastos"
-                                        ? setIsCreateModalOpen(true)
-                                        : setIsNCModalOpen(true)
-                                }
-                                className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm h-10 sm:h-9 px-3 sm:px-4 transition-all active:scale-95 whitespace-nowrap"
-                            >
-                                <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
-                                {activeTab === "gastos"
-                                    ? "Nuevo Gasto"
-                                    : "Nueva NC"}
-                            </Button>
+                                <SelectERP
+                                    label="Estado"
+                                    value={filters.status}
+                                    onChange={(val) =>
+                                        setFilters({ ...filters, status: val })
+                                    }
+                                    options={STATUS_OPTIONS}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    clearable
+                                />
+                                <SelectERP
+                                    label="Proveedor"
+                                    value={filters.provider}
+                                    onChange={(val) =>
+                                        setFilters({
+                                            ...filters,
+                                            provider: val,
+                                        })
+                                    }
+                                    options={filterProviderOptions}
+                                    searchable
+                                    clearable
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                />
+                                <Input
+                                    label="Desde"
+                                    type="date"
+                                    value={filters.dateFrom}
+                                    onChange={(e) =>
+                                        setFilters({
+                                            ...filters,
+                                            dateFrom: e.target.value,
+                                        })
+                                    }
+                                />
+                                <Input
+                                    label="Hasta"
+                                    type="date"
+                                    value={filters.dateTo}
+                                    onChange={(e) =>
+                                        setFilters({
+                                            ...filters,
+                                            dateTo: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div className="flex justify-end pt-5">
+                                <button
+                                    onClick={clearFilters}
+                                    className="flex items-center gap-2 text-xs font-bold text-red-600 hover:text-red-700 transition-colors uppercase tracking-wider"
+                                >
+                                    <XCircle className="w-4 h-4" />
+                                    Restablecer Filtros
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                </div>
-
-                {/* Advanced Filters Panel - Solo para Gastos */}
-                {isFiltersOpen && activeTab === "gastos" && (
-                    <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-300">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-                            <SelectERP
-                                label="Tipo de Gasto"
-                                value={filters.transfer_type}
-                                onChange={(val) =>
-                                    setFilters({
-                                        ...filters,
-                                        transfer_type: val,
-                                    })
-                                }
-                                options={TRANSFER_TYPE_OPTIONS}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                clearable
-                            />
-                            <SelectERP
-                                label="Estado"
-                                value={filters.status}
-                                onChange={(val) =>
-                                    setFilters({ ...filters, status: val })
-                                }
-                                options={STATUS_OPTIONS}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                clearable
-                            />
-                            <SelectERP
-                                label="Proveedor"
-                                value={filters.provider}
-                                onChange={(val) =>
-                                    setFilters({ ...filters, provider: val })
-                                }
-                                options={filterProviderOptions}
-                                searchable
-                                clearable
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                            />
-                            <Input
-                                label="Desde"
-                                type="date"
-                                value={filters.dateFrom}
-                                onChange={(e) =>
-                                    setFilters({
-                                        ...filters,
-                                        dateFrom: e.target.value,
-                                    })
-                                }
-                            />
-                            <Input
-                                label="Hasta"
-                                type="date"
-                                value={filters.dateTo}
-                                onChange={(e) =>
-                                    setFilters({
-                                        ...filters,
-                                        dateTo: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-                        <div className="flex justify-end pt-5">
-                            <button
-                                onClick={clearFilters}
-                                className="flex items-center gap-2 text-xs font-bold text-red-600 hover:text-red-700 transition-colors uppercase tracking-wider"
-                            >
-                                <XCircle className="w-4 h-4" />
-                                Restablecer Filtros
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Contenido de las Tablas */}
-                <div className="relative min-h-[400px]">
-                    {activeTab === "gastos" ? (
-                        <DataTable
-                            key={`gastos-${searchQuery}-${JSON.stringify(filters)}`}
-                            data={filteredPayments}
-                            columns={columns}
-                            loading={loading}
-                            searchable={false}
-                            onRowClick={openDetailModal}
-                            emptyMessage="No se encontraron movimientos financieros con los criterios actuales."
-                        />
-                    ) : (
-                        <DataTable
-                            key={`nc-${searchQuery}-${JSON.stringify(filters)}`}
-                            data={creditNotes}
-                            columns={ncColumns}
-                            loading={loading}
-                            searchable={false}
-                            onRowClick={handleViewNCDetail}
-                            emptyMessage="No hay notas de crédito registradas"
-                        />
                     )}
+
+                    {/* Contenido de las Tablas */}
+                    <div className="relative min-h-[400px]">
+                        {activeTab === "gastos" ? (
+                            <DataTable
+                                key={`gastos-${searchQuery}-${JSON.stringify(
+                                    filters
+                                )}`}
+                                data={filteredPayments}
+                                columns={columns}
+                                loading={loading}
+                                searchable={false}
+                                onRowClick={openDetailModal}
+                                emptyMessage="No se encontraron movimientos financieros con los criterios actuales."
+                            />
+                        ) : (
+                            <DataTable
+                                key={`nc-${searchQuery}-${JSON.stringify(
+                                    filters
+                                )}`}
+                                data={creditNotes}
+                                columns={ncColumns}
+                                loading={loading}
+                                searchable={false}
+                                onRowClick={handleViewNCDetail}
+                                emptyMessage="No hay notas de crédito registradas"
+                            />
+                        )}
+                    </div>
                 </div>
-            </div>
             )}
 
             {/* Create/Edit Modal */}
@@ -2374,6 +2496,40 @@ function ProviderPayments() {
                                     </div>
                                     <div>
                                         <Label className="mb-1.5 block">
+                                            Código de Generación (DTE)
+                                        </Label>
+                                        <Input
+                                            value={formData.generation_code}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    generation_code:
+                                                        e.target.value,
+                                                })
+                                            }
+                                            placeholder="Código de generación"
+                                            className="font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">
+                                            Sello de Recepción (DTE)
+                                        </Label>
+                                        <Input
+                                            value={formData.reception_stamp}
+                                            onChange={(e) =>
+                                                setFormData({
+                                                    ...formData,
+                                                    reception_stamp:
+                                                        e.target.value,
+                                                })
+                                            }
+                                            placeholder="Sello de recepción"
+                                            className="font-mono text-sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="mb-1.5 block">
                                             Adjuntar Archivo
                                         </Label>
                                         <FileUpload
@@ -2471,14 +2627,22 @@ function ProviderPayments() {
                                     </div>
                                     <div className="font-mono text-sm">
                                         {selectedPayment.service_order_number ||
-                                         selectedPayment.service_order?.order_number ||
+                                            selectedPayment.service_order
+                                                ?.order_number ||
                                             "Gasto Administrativo"}
                                     </div>
-                                    {(selectedPayment.purchase_order || selectedPayment.service_order?.purchase_order) && (
+                                    {(selectedPayment.purchase_order ||
+                                        selectedPayment.service_order
+                                            ?.purchase_order) && (
                                         <div className="mt-1 flex items-center gap-1">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                PO:
+                                            </span>
                                             <span className="font-mono text-xs text-slate-600">
-                                                {selectedPayment.purchase_order || selectedPayment.service_order?.purchase_order}
+                                                {selectedPayment.purchase_order ||
+                                                    selectedPayment
+                                                        .service_order
+                                                        ?.purchase_order}
                                             </span>
                                         </div>
                                     )}
@@ -2502,6 +2666,38 @@ function ProviderPayments() {
                                         {selectedPayment.description || "—"}
                                     </div>
                                 </div>
+                                {(selectedPayment.generation_code ||
+                                    selectedPayment.reception_stamp) && (
+                                    <div className="pt-2 border-t border-slate-100 mt-2">
+                                        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                                            Información Adicional
+                                        </div>
+                                        {selectedPayment.generation_code && (
+                                            <div className="mb-1">
+                                                <span className="text-xs text-slate-400 block">
+                                                    Código Generación
+                                                </span>
+                                                <span className="font-mono text-xs text-slate-700 break-all">
+                                                    {
+                                                        selectedPayment.generation_code
+                                                    }
+                                                </span>
+                                            </div>
+                                        )}
+                                        {selectedPayment.reception_stamp && (
+                                            <div>
+                                                <span className="text-xs text-slate-400 block">
+                                                    Sello Recepción
+                                                </span>
+                                                <span className="font-mono text-xs text-slate-700 break-all">
+                                                    {
+                                                        selectedPayment.reception_stamp
+                                                    }
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="space-y-4">
                                 <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
@@ -3221,6 +3417,38 @@ function ProviderPayments() {
                             </div>
                             <div>
                                 <Label className="mb-1.5 block">
+                                    Código Generación
+                                </Label>
+                                <Input
+                                    value={ncForm.generation_code}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            generation_code: e.target.value,
+                                        })
+                                    }
+                                    placeholder="DTE"
+                                    className="font-mono"
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">
+                                    Sello Recepción
+                                </Label>
+                                <Input
+                                    value={ncForm.reception_stamp}
+                                    onChange={(e) =>
+                                        setNCForm({
+                                            ...ncForm,
+                                            reception_stamp: e.target.value,
+                                        })
+                                    }
+                                    placeholder="DTE"
+                                    className="font-mono"
+                                />
+                            </div>
+                            <div>
+                                <Label className="mb-1.5 block">
                                     Monto de la NC *
                                 </Label>
                                 <div className="relative">
@@ -3413,6 +3641,31 @@ function ProviderPayments() {
                                     <p className="text-xs text-slate-500 mt-1">
                                         {selectedNC.reason_detail}
                                     </p>
+                                )}
+                                {(selectedNC.generation_code ||
+                                    selectedNC.reception_stamp) && (
+                                    <div className="pt-2 border-t border-slate-200 mt-2">
+                                        {selectedNC.generation_code && (
+                                            <div className="mb-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                    Código Generación
+                                                </span>
+                                                <p className="font-mono text-xs text-slate-600 break-all">
+                                                    {selectedNC.generation_code}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {selectedNC.reception_stamp && (
+                                            <div>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                    Sello Recepción
+                                                </span>
+                                                <p className="font-mono text-xs text-slate-600 break-all">
+                                                    {selectedNC.reception_stamp}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>

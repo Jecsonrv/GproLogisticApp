@@ -129,6 +129,22 @@ class ProviderInvoice(SoftDeleteModel):
         verbose_name="Fecha de Emisión"
     )
 
+    # DTE Fields (El Salvador)
+    generation_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Código de Generación",
+        help_text="Código de generación DTE"
+    )
+    reception_stamp = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Sello de Recepción",
+        help_text="Sello de recepción DTE"
+    )
+
     # Notas
     notes = models.TextField(blank=True, verbose_name="Notas")
 
@@ -483,6 +499,22 @@ class Transfer(SoftDeleteModel):
         verbose_name="Factura",
         validators=[validate_document_file],
         help_text="Solo PDF, JPG, PNG. Máximo 5MB"
+    )
+
+    # DTE Fields (El Salvador)
+    generation_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Código de Generación",
+        help_text="Código de generación DTE"
+    )
+    reception_stamp = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Sello de Recepción",
+        help_text="Sello de recepción DTE"
     )
 
     # Fechas
@@ -1112,6 +1144,22 @@ class ProviderCreditNote(SoftDeleteModel):
         blank=True,
         verbose_name="Documento PDF",
         validators=[validate_document_file]
+    )
+
+    # DTE Fields (El Salvador)
+    generation_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Código de Generación",
+        help_text="Código de generación DTE"
+    )
+    reception_stamp = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Sello de Recepción",
+        help_text="Sello de recepción DTE"
     )
 
     # Auditoría

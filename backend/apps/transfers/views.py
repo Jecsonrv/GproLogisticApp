@@ -297,13 +297,78 @@ class TransferViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[IsAnyOperativo])
     def export_excel(self, request):
-        """Exportar transfers a Excel con formato profesional"""
-        queryset = self.filter_queryset(self.get_queryset())
+        """Exportar transfers y provider_invoices a Excel con formato profesional"""
+        from .models import ProviderInvoice
+
+        transfer_queryset = self.filter_queryset(self.get_queryset())
+        
+        # Obtener filtros de la query
+        query_params = request.query_params
+        
+        # Mapear filtros para ProviderInvoice
+        invoice_filters = Q()
+        if query_params.get('date_from'):
+            invoice_filters &= Q(issue_date__gte=query_params.get('date_from'))
+        if query_params.get('date_to'):
+            invoice_filters &= Q(issue_date__lte=query_params.get('date_to'))
+        if query_params.get('provider'):
+            invoice_filters &= Q(provider_id=query_params.get('provider'))
+        if query_params.get('service_order'):
+            invoice_filters &= Q(service_order_id=query_params.get('service_order'))
+        if query_params.get('status'):
+            invoice_filters &= Q(payment_status=query_params.get('status'))
+            
+        provider_invoice_queryset = ProviderInvoice.objects.filter(invoice_filters).select_related(
+            'provider', 'service_order'
+        )
+
+        # Unificar datos
+        all_data = []
+
+        # Transfers
+        for transfer in transfer_queryset:
+            all_data.append({
+                'fecha': transfer.transaction_date,
+                'tipo': transfer.get_transfer_type_display(),
+                'estado': transfer.get_status_display(),
+                'monto': float(transfer.amount),
+                'descripcion': transfer.description or '',
+                'os': transfer.service_order.order_number if transfer.service_order else '',
+                'po': transfer.service_order.purchase_order if transfer.service_order else '',
+                'proveedor': transfer.provider.name if transfer.provider else transfer.beneficiary_name or '',
+                'metodo_pago': transfer.get_payment_method_display() if transfer.payment_method else '',
+                'factura': transfer.invoice_number or '',
+                'fecha_pago': transfer.payment_date,
+                'generation_code': transfer.generation_code or '',
+                'reception_stamp': transfer.reception_stamp or '',
+            })
+
+        # Provider Invoices
+        for invoice in provider_invoice_queryset:
+            all_data.append({
+                'fecha': invoice.issue_date,
+                'tipo': "Costo Directo",
+                'estado': dict(ProviderInvoice.PAYMENT_STATUS_CHOICES).get(invoice.payment_status),
+                'monto': float(invoice.total_amount),
+                'descripcion': invoice.notes or f"Factura de {invoice.provider.name}",
+                'os': invoice.service_order.order_number if invoice.service_order else '',
+                'po': invoice.service_order.purchase_order if invoice.service_order else '',
+                'proveedor': invoice.provider.name,
+                'metodo_pago': '', # ProviderInvoice no tiene un método de pago directo
+                'factura': invoice.invoice_number,
+                'fecha_pago': invoice.payment_date,
+                'generation_code': invoice.generation_code or '',
+                'reception_stamp': invoice.reception_stamp or '',
+            })
+            
+        # Ordenar por fecha
+        all_data.sort(key=lambda x: x['fecha'], reverse=True)
+
 
         # Crear workbook
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Transferencias"
+        ws.title = "Cuentas por Pagar"
 
         # Estilos profesionales - Diseño GPRO
         header_fill = PatternFill(start_color="0F2E4D", end_color="0F2E4D", fill_type="solid")
@@ -319,13 +384,13 @@ class TransferViewSet(viewsets.ModelViewSet):
         currency_format = '"$"#,##0.00'
 
         # === ENCABEZADO ===
-        ws['A1'] = "CUENTAS POR PAGAR (TRANSFERENCIAS)"
+        ws['A1'] = "CUENTAS POR PAGAR (UNIFICADO)"
         ws['A1'].font = title_font
-        ws.merge_cells('A1:J1')
+        ws.merge_cells('A1:M1')
 
         ws['A2'] = "GPRO LOGISTIC - Agencia Aduanal"
         ws['A2'].font = Font(size=11, color="666666")
-        ws.merge_cells('A2:J2')
+        ws.merge_cells('A2:M2')
 
         ws['A3'] = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
         ws['A3'].font = Font(size=9, italic=True, color="999999")
@@ -333,11 +398,11 @@ class TransferViewSet(viewsets.ModelViewSet):
         # === TABLA DE DATOS ===
         start_row = 5
         ws.cell(row=start_row, column=1, value="DETALLE DE PAGOS").font = subtitle_font
-        ws.merge_cells(f'A{start_row}:J{start_row}')
+        ws.merge_cells(f'A{start_row}:M{start_row}')
 
         # Headers de tabla
         headers = ['Fecha', 'Tipo', 'Estado', 'Monto', 'Descripción', 'OS', 'PO',
-                   'Proveedor', 'Método Pago', 'Factura', 'Fecha Pago']
+                   'Proveedor', 'Método Pago', 'Factura', 'Fecha Pago', 'Cód. Generación', 'Sello Recepción']
         header_row = start_row + 1
 
         for col_num, header in enumerate(headers, 1):
@@ -351,26 +416,28 @@ class TransferViewSet(viewsets.ModelViewSet):
         data_row = header_row + 1
         total_amount = 0
 
-        for transfer in queryset:
-            ws.cell(row=data_row, column=1, value=transfer.transaction_date.strftime('%d/%m/%Y')).border = thin_border
-            ws.cell(row=data_row, column=2, value=transfer.get_transfer_type_display()).border = thin_border
-            ws.cell(row=data_row, column=3, value=transfer.get_status_display()).border = thin_border
+        for item in all_data:
+            ws.cell(row=data_row, column=1, value=item['fecha'].strftime('%d/%m/%Y')).border = thin_border
+            ws.cell(row=data_row, column=2, value=item['tipo']).border = thin_border
+            ws.cell(row=data_row, column=3, value=item['estado']).border = thin_border
 
             # Columna de monto con formato
-            amount_cell = ws.cell(row=data_row, column=4, value=float(transfer.amount))
+            amount_cell = ws.cell(row=data_row, column=4, value=item['monto'])
             amount_cell.number_format = currency_format
             amount_cell.border = thin_border
             amount_cell.alignment = Alignment(horizontal='right')
 
-            ws.cell(row=data_row, column=5, value=transfer.description or '').border = thin_border
-            ws.cell(row=data_row, column=6, value=transfer.service_order.order_number if transfer.service_order else '').border = thin_border
-            ws.cell(row=data_row, column=7, value=transfer.service_order.purchase_order if transfer.service_order else '').border = thin_border
-            ws.cell(row=data_row, column=8, value=transfer.provider.name if transfer.provider else transfer.beneficiary_name or '').border = thin_border
-            ws.cell(row=data_row, column=9, value=transfer.get_payment_method_display() if transfer.payment_method else '').border = thin_border
-            ws.cell(row=data_row, column=10, value=transfer.invoice_number or '').border = thin_border
-            ws.cell(row=data_row, column=11, value=transfer.payment_date.strftime('%d/%m/%Y') if transfer.payment_date else '').border = thin_border
+            ws.cell(row=data_row, column=5, value=item['descripcion']).border = thin_border
+            ws.cell(row=data_row, column=6, value=item['os']).border = thin_border
+            ws.cell(row=data_row, column=7, value=item['po']).border = thin_border
+            ws.cell(row=data_row, column=8, value=item['proveedor']).border = thin_border
+            ws.cell(row=data_row, column=9, value=item['metodo_pago']).border = thin_border
+            ws.cell(row=data_row, column=10, value=item['factura']).border = thin_border
+            ws.cell(row=data_row, column=11, value=item['fecha_pago'].strftime('%d/%m/%Y') if item['fecha_pago'] else '').border = thin_border
+            ws.cell(row=data_row, column=12, value=item['generation_code']).border = thin_border
+            ws.cell(row=data_row, column=13, value=item['reception_stamp']).border = thin_border
 
-            total_amount += float(transfer.amount)
+            total_amount += item['monto']
             data_row += 1
 
         # Fila de totales
@@ -385,11 +452,11 @@ class TransferViewSet(viewsets.ModelViewSet):
         total_cell.border = thin_border
         total_cell.alignment = Alignment(horizontal='right')
 
-        for col in range(5, 12):
+        for col in range(5, 14):
             ws.cell(row=data_row, column=col).border = thin_border
 
         # Ajustar anchos de columna
-        column_widths = [12, 14, 12, 14, 30, 15, 15, 25, 16, 15, 12]
+        column_widths = [12, 18, 12, 14, 40, 15, 15, 25, 16, 15, 12, 35, 35]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -397,7 +464,7 @@ class TransferViewSet(viewsets.ModelViewSet):
         response = HttpResponse(
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = f'attachment; filename=GPRO_Pagos_Proveedores_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        response['Content-Disposition'] = f'attachment; filename=GPRO_Cuentas_Por_Pagar_{datetime.now().strftime("%Y%m%d")}.xlsx'
 
         wb.save(response)
         return response
@@ -1777,6 +1844,8 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
             'description': provider_invoice.notes or f'Factura {provider_invoice.invoice_number}',
             'transaction_date': provider_invoice.issue_date,
             'invoice_file': provider_invoice.invoice_file.url if provider_invoice.invoice_file else None,
+            'generation_code': provider_invoice.generation_code,
+            'reception_stamp': provider_invoice.reception_stamp,
             'payments': []  # ProviderInvoice no tiene historial de pagos separado
         })
 

@@ -619,6 +619,150 @@ const EditTransactionModal = ({ isOpen, onClose, transaction, onSuccess }) => {
     );
 };
 
+const CashCountHistoryDetailModal = ({ isOpen, onClose, cashCount }) => {
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && cashCount) {
+            fetchTransactions();
+        }
+    }, [isOpen, cashCount]);
+
+    const fetchTransactions = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(
+                `/petty-cash/transactions/?cash_count_id=${cashCount.id}`
+            );
+            setTransactions(res.data);
+        } catch (error) {
+            toast.error("Error al cargar detalles del arqueo");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!cashCount) return null;
+
+    // Calcular totales
+    const totalIncome = transactions
+        .filter((t) => t.transaction_type === "INCOME")
+        .reduce((acc, t) => acc + Number(t.amount), 0);
+    const totalExpense = transactions
+        .filter((t) => t.transaction_type === "EXPENSE")
+        .reduce((acc, t) => acc + Number(t.amount), 0);
+    const balance = totalIncome - totalExpense;
+
+    const columns = [
+        {
+            header: "Fecha",
+            accessor: "transaction_date",
+            cell: (row) => (
+                <div className="text-slate-600 tabular-nums text-xs">
+                    {formatDate(row.transaction_date)}
+                </div>
+            ),
+        },
+        {
+            header: "Tipo",
+            accessor: "transaction_type",
+            cell: (row) => (
+                <Badge
+                    className={cn(
+                        "text-[10px] border px-1.5 py-0.5",
+                        row.transaction_type === "INCOME"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-slate-50 text-slate-700 border-slate-200"
+                    )}
+                >
+                    {row.transaction_type === "INCOME" ? "Ing" : "Gas"}
+                </Badge>
+            ),
+        },
+        {
+            header: "Concepto",
+            accessor: "concept",
+            cell: (row) => (
+                <div>
+                    <div className="font-medium text-slate-900 text-sm">
+                        {row.concept}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                        {row.beneficiary} {row.reference_number ? `• ${row.reference_number}` : ''}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            header: "Monto",
+            accessor: "amount",
+            className: "text-right",
+            cell: (row) => (
+                <div className={cn(
+                    "tabular-nums text-sm font-semibold",
+                    row.transaction_type === "INCOME" ? "text-emerald-700" : "text-slate-700"
+                )}>
+                    {formatCurrency(row.amount)}
+                </div>
+            ),
+        },
+    ];
+
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={`Historial: Caja ${cashCount.sequence_number || cashCount.id} - ${formatDate(cashCount.date)}`}
+            size="4xl"
+        >
+            <div className="space-y-6">
+                {/* Resumen del Arqueo */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div>
+                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Total Ingresos</p>
+                        <p className="text-lg font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Total Gastos</p>
+                        <p className="text-lg font-bold text-red-600">{formatCurrency(totalExpense)}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Balance</p>
+                        <p className="text-lg font-bold text-slate-800">{formatCurrency(balance)}</p>
+                    </div>
+                     <div>
+                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Arqueo Físico</p>
+                        <p className="text-lg font-bold text-slate-900">{formatCurrency(cashCount.actual_balance)}</p>
+                        {Number(cashCount.difference) !== 0 && (
+                            <span className="text-xs font-bold text-red-500">
+                                Dif: {formatCurrency(cashCount.difference)}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="max-h-[500px] overflow-y-auto">
+                    <DataTable
+                        data={transactions}
+                        columns={columns}
+                        loading={loading}
+                        emptyMessage="No hay movimientos en este arqueo."
+                        searchable={false}
+                        density="compact"
+                    />
+                </div>
+                
+                <ModalFooter>
+                     <Button onClick={onClose} className="bg-slate-900 text-white hover:bg-slate-800">
+                        Cerrar
+                    </Button>
+                </ModalFooter>
+            </div>
+        </Modal>
+    );
+};
+
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
@@ -641,6 +785,7 @@ const PettyCash = () => {
         useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [transactionToDelete, setTransactionToDelete] = useState(null);
+    const [selectedCashCount, setSelectedCashCount] = useState(null);
     const [cashCountToDelete, setCashCountToDelete] = useState(null);
     const [formData, setFormData] = useState(() => getInitialFormState());
     const [searchTerm, setSearchTerm] = useState("");
@@ -663,7 +808,7 @@ const PettyCash = () => {
         setLoading(true);
         try {
             const [txRes, balanceRes] = await Promise.all([
-                axios.get("/petty-cash/transactions/"),
+                axios.get("/petty-cash/transactions/?active=true"),
                 axios.get("/petty-cash/transactions/balance/"),
             ]);
             setTransactions(txRes.data);
@@ -914,6 +1059,16 @@ const PettyCash = () => {
 
     const cashCountColumns = [
         {
+            header: "Caja #",
+            accessor: "sequence_number",
+            className: "w-[80px] text-center",
+            cell: (row) => (
+                <span className="font-bold text-slate-900 bg-slate-100 px-2 py-1 rounded">
+                    #{row.sequence_number}
+                </span>
+            )
+        },
+        {
             header: "Fecha",
             accessor: "date",
             cell: (row) => (
@@ -986,7 +1141,7 @@ const PettyCash = () => {
         {
             header: "Acciones",
             accessor: "id",
-            className: "w-[180px] text-center",
+            className: "w-[240px] text-center",
             cell: (row) => (
                 <div className="flex items-center justify-center gap-1">
                     <Button
@@ -994,13 +1149,24 @@ const PettyCash = () => {
                         size="sm"
                         onClick={(e) => {
                             e.stopPropagation();
+                            setSelectedCashCount(row);
+                        }}
+                        className="h-8 px-3 text-slate-700 hover:text-slate-900 hover:bg-slate-50 border-slate-300 font-medium"
+                    >
+                        <Eye className="w-3.5 h-3.5 mr-1.5" />
+                        <span className="text-xs">Ver Detalle</span>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
                             handleExportDenominations(row.id);
                         }}
-                        className="h-8 px-3 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-300"
+                        className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                         title="Exportar detalle de denominaciones"
                     >
-                        <FileDown className="w-3.5 h-3.5 mr-1.5" />
-                        <span className="text-xs">Detalle</span>
+                        <FileDown className="w-4 h-4" />
                     </Button>
                     <Button
                         variant="ghost"
@@ -1620,6 +1786,12 @@ const PettyCash = () => {
                 isOpen={!!selectedTransaction && !isEditModalOpen}
                 onClose={() => setSelectedTransaction(null)}
                 transaction={selectedTransaction}
+            />
+
+            <CashCountHistoryDetailModal
+                isOpen={!!selectedCashCount}
+                onClose={() => setSelectedCashCount(null)}
+                cashCount={selectedCashCount}
             />
 
             <ConfirmDialog
