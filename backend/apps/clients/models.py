@@ -111,18 +111,24 @@ class Client(models.Model):
     def calculate_retention(self, subtotal_services):
         """
         Calcula el monto de retención sobre servicios.
+        
+        CORRECCIÓN PRECISIÓN: Se fuerza el redondeo a 2 decimales para evitar
+        problemas de comparación exacta en pagos y validaciones.
 
         Args:
             subtotal_services: Subtotal de servicios (sin IVA)
 
         Returns:
-            Decimal: Monto de retención (0 si no aplica)
+            Decimal: Monto de retención (0 si no aplica) redondeado a 2 decimales.
         """
-        from decimal import Decimal
+        from decimal import Decimal, ROUND_HALF_UP
         if not self.applies_retention(subtotal_services):
             return Decimal('0.00')
 
-        return subtotal_services * self.get_retention_rate()
+        raw_retention = subtotal_services * self.get_retention_rate()
+        
+        # Redondear a 2 decimales usando ROUND_HALF_UP (estándar contable)
+        return raw_retention.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     def get_credit_available(self):
         """

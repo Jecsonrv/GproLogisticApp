@@ -4,14 +4,17 @@ from rest_framework.response import Response
 from django.db.models import Sum, Q, Count
 from django.http import HttpResponse
 from django.db import transaction
+from django.core.files.base import ContentFile
 from decimal import Decimal
 import openpyxl
+import os
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from .models import Invoice, InvoicePayment, ServiceOrder, CreditNote
 from apps.catalogs.models import Bank
 from .serializers import InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
 from .serializers_new import InvoiceDetailSerializer, InvoiceCreateSerializer
+from apps.orders.pdf_generator import generate_invoice_pdf
 from apps.users.permissions import IsOperativo, IsOperativo2
 
 # Import distributed lock utilities (only active when Redis is configured)
@@ -40,11 +43,95 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             return InvoiceCreateSerializer
         return InvoiceDetailSerializer
 
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Retrieve details of an invoice with automatic PDF self-healing.
+        If the PDF record exists but the file is missing from S3, it regenerates it.
+        """
+        instance = self.get_object()
+        
+        # --- SELF-HEALING LOGIC ---
+        # Verificar integridad del archivo PDF si se supone que existe
+        if instance.pdf_file:
+            try:
+                # Verificar si existe físicamente en el storage (S3/Local)
+                if not instance.pdf_file.storage.exists(instance.pdf_file.name):
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"PDF missing for Invoice {instance.invoice_number}. Regenerating...")
+                    
+                    # Regenerar PDF
+                    pdf_buffer = generate_invoice_pdf(instance)
+                    filename = os.path.basename(instance.pdf_file.name) or f"Invoice_{instance.invoice_number}.pdf"
+                    
+                    # Guardar (esto sube al storage)
+                    instance.pdf_file.save(filename, ContentFile(pdf_buffer.getvalue()), save=True)
+                    logger.info(f"PDF successfully regenerated for Invoice {instance.invoice_number}")
+            except Exception as e:
+                # No bloquear la vista si falla la reparación, solo loggear
+                print(f"Error in PDF self-healing: {e}")
+        # --------------------------
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        """
+        Endpoint seguro para descargar/ver el PDF.
+        Garantiza que el archivo exista antes de redirigir.
+        """
+        invoice = self.get_object()
+        
+        if not invoice.pdf_file:
+            # Si no tiene PDF asignado, intentar generarlo
+            try:
+                buffer = generate_invoice_pdf(invoice)
+                filename = f"Invoice_{invoice.invoice_number}.pdf"
+                invoice.pdf_file.save(filename, ContentFile(buffer.getvalue()), save=True)
+            except Exception as e:
+                return Response(
+                    {'error': f'La factura no tiene PDF y falló la generación: {str(e)}'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # Verificar existencia física y reparar si es necesario
+        try:
+            if not invoice.pdf_file.storage.exists(invoice.pdf_file.name):
+                buffer = generate_invoice_pdf(invoice)
+                filename = os.path.basename(invoice.pdf_file.name)
+                invoice.pdf_file.save(filename, ContentFile(buffer.getvalue()), save=True)
+        except Exception as e:
+             return Response(
+                {'error': f'El archivo no se encuentra y no se pudo regenerar: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+        # Redirigir a la URL del archivo
+        return HttpResponse(status=302, headers={'Location': invoice.pdf_file.url})
+
     def create(self, request, *args, **kwargs):
         """Override create to ensure response includes invoice_number and linked items"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        
+        try:
+            self.perform_create(serializer)
+        except ValueError as e:
+            # Capturar errores de validación de negocio (incluyendo falla de subida)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            # Capturar errores inesperados
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error creating invoice: {str(e)}", exc_info=True)
+            return Response(
+                {'error': 'Ocurrió un error inesperado al crear la factura. Por favor intente nuevamente.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         # Get the created invoice with the auto-generated invoice_number
         # Refresh from DB to get auto-generated fields
@@ -55,6 +142,23 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         response_serializer = InvoiceDetailSerializer(invoice)
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def check_storage_integrity(self, invoice):
+        """
+        Verifica que el archivo PDF realmente exista en el storage (S3).
+        Si no existe, lanza una excepción para revertir la transacción.
+        """
+        if invoice.pdf_file:
+            try:
+                # Forzar verificación con el storage backend
+                if not invoice.pdf_file.storage.exists(invoice.pdf_file.name):
+                    raise ValueError(
+                        f"Error crítico: El archivo PDF '{invoice.pdf_file.name}' no se guardó correctamente en el almacenamiento. "
+                        "La operación ha sido cancelada para evitar inconsistencias."
+                    )
+            except Exception as e:
+                # Si falla la conexión con S3 o cualquier otro error de storage
+                raise ValueError(f"Error de verificación de almacenamiento: {str(e)}")
 
     def perform_create(self, serializer):
         """Create invoice from service order with distributed lock"""
@@ -127,6 +231,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 invoice_data['dte_file'] = dte_file
 
             invoice = serializer.save(**invoice_data)
+            
+            # --- VALIDACIÓN DE INTEGRIDAD DE ARCHIVO (SOLUCIÓN PERMANENTE) ---
+            # Si se proporcionó un PDF, verificar inmediatamente que se haya subido a S3/Storage.
+            # Si falla, la excepción hará rollback de toda la transacción atómica.
+            if pdf_file:
+                self.check_storage_integrity(invoice)
+            # ---------------------------------------------------------------
 
             # 1. Link selected MANUAL charges to this invoice
             # Use getlist() for FormData arrays, fallback to get() for JSON
@@ -1534,11 +1645,18 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 if inv.retencion <= 0:
                     raise ValueError('Esta factura no tiene retención aplicable. No puede registrar un comprobante F-910.')
                 
+                # FIX DE PRECISIÓN: Comparar valores redondeados a 2 decimales
+                # Esto soluciona problemas donde la DB tiene 10.450000001 y el usuario envía 10.45
+                from decimal import ROUND_HALF_UP
+                
+                stored_retention = inv.retencion.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                input_amount = amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                
                 # Validar que el monto sea exactamente la retención
-                if amount != inv.retencion:
+                if input_amount != stored_retention:
                     raise ValueError(
-                        f'El monto del comprobante de retención debe ser exactamente ${inv.retencion}. '
-                        f'Monto ingresado: ${amount}'
+                        f'El monto del comprobante de retención debe ser exactamente ${stored_retention}. '
+                        f'Monto ingresado: ${input_amount}'
                     )
                 
                 # VALIDACIÓN CRÍTICA: No permitir duplicar comprobantes de retención

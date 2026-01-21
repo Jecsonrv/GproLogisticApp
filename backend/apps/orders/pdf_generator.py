@@ -71,7 +71,7 @@ def generate_invoice_pdf(invoice):
     # Información de la factura
     invoice_header = f"""
     <b>FACTURA No. {invoice.invoice_number}</b><br/>
-    Fecha: {invoice.invoice_date.strftime('%d/%m/%Y')}<br/>
+    Fecha: {invoice.issue_date.strftime('%d/%m/%Y')}<br/>
     {f'Vencimiento: {invoice.due_date.strftime("%d/%m/%Y")}' if invoice.due_date else ''}<br/>
     {f'CCF: {invoice.ccf}' if invoice.ccf else ''}
     """
@@ -79,13 +79,16 @@ def generate_invoice_pdf(invoice):
     elements.append(Spacer(1, 0.3*inch))
     
     # ============ INFORMACIÓN DEL CLIENTE ============
+    # Obtener cliente de la orden de servicio
+    client = invoice.service_order.client
+    
     elements.append(Paragraph("<b>FACTURADO A:</b>", heading_style))
     
     client_info = [
-        ['Cliente:', invoice.client.name],
-        ['NIT:', invoice.client.nit],
-        ['Dirección:', invoice.client.address],
-        ['Teléfono:', invoice.client.phone or '-'],
+        ['Cliente:', client.name],
+        ['NIT:', getattr(client, 'nit', 'N/A')],  # Manejar si no tiene NIT
+        ['Dirección:', getattr(client, 'address', 'N/A')],
+        ['Teléfono:', getattr(client, 'phone', '-') or '-'],
     ]
     
     client_table = Table(client_info, colWidths=[1.5*inch, 4.5*inch])
@@ -111,20 +114,21 @@ def generate_invoice_pdf(invoice):
         ['No. Orden', 'DUCA', 'PO', 'Descripción', 'Monto']
     ]
     
-    # Agregar órdenes de servicio
-    service_orders = invoice.service_orders.all()
-    for order in service_orders:
-        description = f"Servicios de tramitación aduanal"
-        if order.shipment_type:
-            description += f" - {order.shipment_type.name}"
-        
-        data.append([
-            order.order_number,
-            order.duca or '-',
-            order.purchase_order or '-',
-            description,
-            f"${float(order.total_charges or 0):,.2f}"
-        ])
+    # Agregar orden de servicio (ahora es relación 1:N, una factura tiene una OS)
+    order = invoice.service_order
+    
+    description = f"Servicios de tramitación aduanal"
+    if order.shipment_type:
+        description += f" - {order.shipment_type.name}"
+    
+    # Usar los totales de la factura, no de la orden (ya que la orden puede tener cosas no facturadas aún o facturadas parcialmente)
+    data.append([
+        order.order_number,
+        order.duca or '-',
+        order.purchase_order or '-',
+        description,
+        f"${float(invoice.total_amount):,.2f}" # Usar total de la factura
+    ])
     
     # Crear tabla
     col_widths = [1.2*inch, 1*inch, 1*inch, 2.3*inch, 1*inch]
