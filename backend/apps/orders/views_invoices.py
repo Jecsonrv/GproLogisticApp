@@ -1543,6 +1543,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 raise ValueError('Esta factura ya está completamente pagada')
             
             amount = Decimal(str(request.data.get('amount', 0)))
+            payment_method = request.data.get('payment_method', 'transferencia')
+
             if amount <= 0:
                 raise ValueError('El monto debe ser mayor a cero')
 
@@ -1575,6 +1577,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 except json.JSONDecodeError:
                     item_allocations_data = []
             
+            # FIX UX: Si es retención, IGNORAR asignaciones manuales del frontend
+            # La retención siempre debe tratarse como un pago general que el sistema
+            # distribuye automáticamente a los items gravados.
+            # Esto evita el error "La suma de asignaciones no coincide" cuando el usuario
+            # cambia de "Pago Completo" a "Retención" y el frontend envía basura.
+            if payment_method == 'retencion':
+                item_allocations_data = []
+
             # Validar que la suma de asignaciones sea igual al monto total (si hay asignaciones)
             if item_allocations_data:
                 total_allocated = sum(
@@ -1644,7 +1654,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 )
             
             # Validaciones especiales para pago por retención
-            payment_method = request.data.get('payment_method', 'transferencia')
+            # payment_method ya obtenido arriba
             numero_comprobante_retencion = request.data.get('numero_comprobante_retencion', '')
             
             if payment_method == 'retencion':
