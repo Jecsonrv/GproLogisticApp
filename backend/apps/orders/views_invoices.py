@@ -2354,6 +2354,7 @@ class RetentionControlView(APIView):
             invoice_item = {
                 'id': invoice.id,
                 'invoice_number': invoice.invoice_number,
+                'os_number': invoice.service_order.order_number if invoice.service_order else 'N/A',
                 'issue_date': invoice.issue_date.isoformat(),
                 'client_id': invoice.service_order.client.id if invoice.service_order.client else None,
                 'client_name': invoice.service_order.client.name if invoice.service_order.client else 'N/A',
