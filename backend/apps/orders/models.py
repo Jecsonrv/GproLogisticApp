@@ -752,6 +752,15 @@ class Invoice(models.Model):
         # que se registra como un pago normal (payment_method='retencion')
         self.balance = self.total_amount - self.paid_amount - self.credited_amount
 
+        # FIX DE PRECISIÓN: Forzar redondeo antes de guardar
+        from decimal import ROUND_HALF_UP
+        if self.retencion:
+            self.retencion = self.retencion.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        if self.total_amount:
+            self.total_amount = self.total_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        if self.balance:
+            self.balance = self.balance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
         # Actualizar estado
         today = timezone.localdate()
         
