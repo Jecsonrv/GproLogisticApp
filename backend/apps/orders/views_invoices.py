@@ -1985,8 +1985,10 @@ class InvoicePaymentViewSet(viewsets.ModelViewSet):
                 new_paid_amount = remaining_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
                 invoice.paid_amount = new_paid_amount
-                # El balance se calcula considerando retencion y NC
-                invoice.balance = (invoice.total_amount - invoice.retencion) - invoice.paid_amount - invoice.credited_amount
+                
+                # CORRECCIÓN: Usar la misma lógica que el modelo (total - pagado - notas_credito)
+                # La retención se maneja como un pago aparte, no se resta del balance base.
+                invoice.balance = invoice.total_amount - invoice.paid_amount - invoice.credited_amount
 
                 # Actualizar estado
                 if invoice.balance <= 0:
