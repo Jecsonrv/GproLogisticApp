@@ -1546,8 +1546,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if amount <= 0:
                 raise ValueError('El monto debe ser mayor a cero')
 
-            if amount > inv.balance:
-                raise ValueError(f'El monto excede el saldo pendiente (${inv.balance})')
+            # FIX DECIMALES: Redondear balance para comparación
+            # Si el balance es 8.3754... y el usuario paga 8.38, debe permitirse.
+            from decimal import ROUND_HALF_UP
+            rounded_balance = inv.balance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+            # Usar tolerancia pequeña para evitar bloqueos por milésimas
+            if amount > rounded_balance:
+                raise ValueError(f'El monto excede el saldo pendiente (${rounded_balance})')
 
             # Get bank if provided
             bank_id = request.data.get('bank')
@@ -1630,9 +1636,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                         raise ValueError(f'Tipo de item inválido: {item_type}')
 
             # VALIDACIÓN CRÍTICA: El pago no puede exceder el balance pendiente
-            if amount > inv.balance:
+            # Se usa el balance redondeado calculado arriba
+            if amount > rounded_balance:
                 raise ValueError(
-                    f'El monto del pago (${amount}) excede el saldo pendiente de la factura (${inv.balance}). '
+                    f'El monto del pago (${amount}) excede el saldo pendiente de la factura (${rounded_balance}). '
                     f'No se puede registrar un pago mayor al saldo pendiente.'
                 )
             
