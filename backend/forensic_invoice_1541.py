@@ -8,53 +8,37 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
-from apps.orders.models import ServiceOrder, Invoice
+from apps.orders.models import ServiceOrder, Invoice, InvoicePayment
 
-def analyze_1541():
-    print("=== FORENSIC ANALYSIS OF OS 1541-2025 ===")
+def analyze_1541_payments():
+    print("=== PAYMENT ANALYSIS FOR OS 1541 ===")
     
-    # Try multiple patterns to find it
     orders = ServiceOrder.objects.filter(order_number__icontains="1541")
-    
-    if not orders.exists():
-        print("!! No Service Order found with '1541' !!")
-        # List recent orders to see format
-        print("Recent orders:", list(ServiceOrder.objects.all().order_by('-id')[:5]))
-        return
-
     for order in orders:
-        print(f"\nORDER: {order.order_number} (ID: {order.id})")
-        
         invoices = order.invoices.all()
         for inv in invoices:
-            print(f"  INVOICE: {inv.invoice_number} (ID: {inv.id})")
+            print(f"\nINVOICE: {inv.invoice_number}")
+            print(f"  Total: {inv.total_amount}")
+            print(f"  Paid (Header): {inv.paid_amount}")
             
-            # Helper to print field details
-            def dump_field(name, val):
-                print(f"    {name:15}: {val} (Type: {type(val)})")
-                if isinstance(val, Decimal):
-                    print(f"       -> Exact: {val:.20f}")
+            print("  --- PAYMENTS DETAILS ---")
+            payments = InvoicePayment.objects.filter(invoice=inv) # Include deleted? .all_objects?
+            # Let's check active payments first
+            sum_payments = Decimal(0)
+            for p in payments:
+                print(f"    ID: {p.id} | Method: {p.payment_method} | Amount: {p.amount:.20f}")
+                sum_payments += p.amount
             
-            dump_field("Total Amount", inv.total_amount)
-            dump_field("Paid Amount", inv.paid_amount)
-            dump_field("Retencion", inv.retencion)
-            dump_field("Balance", inv.balance)
+            print(f"  Sum of Active Payments: {sum_payments:.20f}")
             
-            # Calculate manual balance
-            manual_balance = inv.total_amount - inv.paid_amount - inv.credited_amount
-            print(f"    Calculated Bal : {manual_balance:.20f}")
-            
-            if manual_balance != inv.balance:
-                print("    [MISMATCH] Database Balance != Calculated Balance")
-            else:
-                print("    [MATCH] Database Balance is mathematically consistent")
-
-            # Check charges sum
-            charges_sum = sum(c.total for c in inv.charges.all())
-            print(f"    Sum Charges    : {charges_sum:.20f}")
-            
-            if charges_sum != inv.total_amount:
-                 print("    [MISMATCH] Invoice Total != Sum of Charges")
+            diff = inv.paid_amount - sum_payments
+            if diff != 0:
+                print(f"  [CRITICAL] Header Paid ({inv.paid_amount}) != Sum Payments ({sum_payments})")
+                print(f"  Difference: {diff}")
+                print("  -> Running fix...")
+                inv.paid_amount = sum_payments
+                inv.save()
+                print("  -> Fixed.")
 
 if __name__ == '__main__':
-    analyze_1541()
+    analyze_1541_payments()
