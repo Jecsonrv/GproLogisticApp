@@ -2,15 +2,24 @@
 Generador de PDFs para facturas
 Usa ReportLab para crear facturas en formato PDF profesional
 """
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.pdfgen import canvas
+import logging
 from io import BytesIO
 from datetime import datetime
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
+
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.pdfgen import canvas
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+    logger.error("ReportLab library not found. PDF generation will be unavailable.")
 
 
 def generate_invoice_pdf(invoice):
@@ -23,6 +32,9 @@ def generate_invoice_pdf(invoice):
     Returns:
         BytesIO buffer con el PDF generado
     """
+    if not REPORTLAB_AVAILABLE:
+        raise ImportError("La librería 'reportlab' no está instalada en el servidor. No se puede generar el PDF.")
+
     buffer = BytesIO()
     
     # Crear el documento PDF
