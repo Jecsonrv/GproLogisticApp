@@ -1840,22 +1840,60 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             
             if total_gravado > 0:
                 # Distribuir pagos no asignados proporcionalmente entre items gravados
-                for item in items:
-                    paid_allocated = Decimal(item['paid_allocated'])
-                    
+                # FIX DECIMALES: Controlar redondeo y residuo para que sume exacto
+                from decimal import ROUND_HALF_UP
+                
+                distributed_sum = Decimal('0.00')
+                last_index = len(gravado_items) - 1
+                
+                for idx, item in enumerate(items):
+                    # Solo procesar items gravados para distribución
                     if item['iva_type'] == 'gravado':
-                        # Calcular proporción de este item sobre el total gravado
+                        paid_allocated = Decimal(item['paid_allocated'])
+                        
+                        # Si es el último item gravado, asignarle el resto para cuadrar exacto
+                        # Esto evita perder 1 centavo por redondeo
+                        is_last_gravado = False
+                        # Encontrar si es el último item gravado de la lista original
+                        # (Simplificación: recalcular índice relativo)
+                        # Mejor estrategia: acumular distribuido y ajustar al final?
+                        # Estrategia directa: calcular todos, y al último sumarle la diferencia.
+                        
                         item_total = Decimal(item['total'])
                         proportion = item_total / total_gravado if total_gravado > 0 else Decimal('0')
-                        distributed_payment = unallocated_payments * proportion
+                        
+                        # Calcular parte proporcional cruda
+                        raw_share = unallocated_payments * proportion
+                        
+                        # Redondear a 2 decimales SIEMPRE
+                        distributed_payment = raw_share.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                        
+                        distributed_sum += distributed_payment
                         
                         total_paid = paid_allocated + distributed_payment
                     else:
                         # Items exentos/no sujetos: solo pagos asignados explícitamente
-                        total_paid = paid_allocated
+                        total_paid = Decimal(item['paid_allocated'])
+                        distributed_payment = Decimal('0.00') # Para uso interno loop
                     
                     item['paid'] = str(total_paid)
                     item['pending'] = str(Decimal(item['total']) - total_paid)
+
+                # AJUSTE DE CENTAVOS: Verificar si sobró o faltó algún centavo por redondeo
+                diff = unallocated_payments - distributed_sum
+                if diff != 0 and gravado_items:
+                    # Asignar la diferencia al primer item gravado encontrado (el más simple)
+                    # O buscar el de mayor monto para que se note menos.
+                    # Vamos a asignarlo al primer item gravado de la lista `items`
+                    for item in items:
+                        if item['iva_type'] == 'gravado':
+                            current_paid = Decimal(item['paid'])
+                            # Ajustar pago
+                            new_paid = current_paid + diff
+                            item['paid'] = str(new_paid)
+                            # Re-calcular pendiente
+                            item['pending'] = str(Decimal(item['total']) - new_paid)
+                            break # Solo ajustar uno
             else:
                 # No hay items gravados, no distribuir
                 for item in items:
