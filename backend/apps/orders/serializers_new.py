@@ -524,6 +524,11 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     can_delete = serializers.SerializerMethodField()
     hours_until_locked = serializers.SerializerMethodField()
 
+    # Force 2 decimal places in API output
+    total_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    paid_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    balance = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+
     class Meta:
         model = Invoice
         fields = [
@@ -563,6 +568,13 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     
     # Fiscal fields
     client_is_gran_contribuyente = serializers.BooleanField(source='service_order.client.is_gran_contribuyente', read_only=True)
+    
+    # Force 2 decimal places in API output
+    total_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    paid_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    balance = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    retencion = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    credited_amount = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     
     # Items facturados
     billed_charges = serializers.SerializerMethodField()
