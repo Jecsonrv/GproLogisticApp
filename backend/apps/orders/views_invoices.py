@@ -33,8 +33,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = InvoiceDetailSerializer
     filterset_fields = ['status']
     search_fields = ['invoice_number', 'service_order__client__name', 'ccf']
-    ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance', 'dte_number', 'issue_year']
-    ordering = ['issue_year', 'dte_number']
+    ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance', 'dte_number', 'issue_year', 'invoice_number']
+    ordering = ['issue_year', 'invoice_number']
 
     def get_serializer_class(self):
         if self.action == 'list':
