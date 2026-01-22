@@ -33,8 +33,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = InvoiceDetailSerializer
     filterset_fields = ['status']
     search_fields = ['invoice_number', 'service_order__client__name', 'ccf']
-    ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance']
-    ordering = ['-issue_date']
+    ordering_fields = ['issue_date', 'due_date', 'total_amount', 'balance', 'dte_number', 'issue_year']
+    ordering = ['issue_year', 'dte_number']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -362,7 +362,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django.db.models import Prefetch
-        queryset = Invoice.objects.all().select_related(
+        from django.db.models.functions import ExtractYear
+        queryset = Invoice.objects.all().annotate(
+            issue_year=ExtractYear('issue_date')
+        ).select_related(
             'service_order', 'service_order__client', 'service_order__sub_client', 'created_by'
         ).prefetch_related(
             Prefetch('payments', queryset=InvoicePayment.objects.filter(is_deleted=False).select_related('bank', 'created_by')),
@@ -2405,6 +2408,7 @@ class RetentionControlView(APIView):
                 'id': invoice.id,
                 'invoice_number': invoice.invoice_number,
                 'os_number': invoice.service_order.order_number if invoice.service_order else 'N/A',
+                'service_order_id': invoice.service_order.id if invoice.service_order else None,
                 'issue_date': invoice.issue_date.isoformat(),
                 'client_id': invoice.service_order.client.id if invoice.service_order.client else None,
                 'client_name': invoice.service_order.client.name if invoice.service_order.client else 'N/A',

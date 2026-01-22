@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Search,
     CheckCircle2,
@@ -127,6 +128,7 @@ const RetentionStatusBadge = ({ status }) => {
 };
 
 function RetentionControl() {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -346,6 +348,20 @@ function RetentionControl() {
                             {row.invoice_number}
                         </span>
                     </div>
+                    {row.os_number && row.os_number !== "N/A" && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (row.service_order_id) {
+                                    navigate(`/service-orders/${row.service_order_id}`);
+                                }
+                            }}
+                            className="text-[10px] text-slate-700 hover:text-slate-900 font-semibold flex items-center gap-1 mt-0.5"
+                        >
+                            {row.os_number}
+                            <ArrowUpRight className="w-2.5 h-2.5 opacity-50" />
+                        </button>
+                    )}
                 </div>
             ),
         },
