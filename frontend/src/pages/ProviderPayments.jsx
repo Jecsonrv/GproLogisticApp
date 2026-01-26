@@ -3114,7 +3114,11 @@ function ProviderPayments() {
                                     Monto a Pagar
                                 </p>
                                 <p className="text-xl font-bold text-slate-800 tabular-nums tracking-tight">
-                                    {formatCurrency(selectedPayment.amount)}
+                                    {formatCurrency(
+                                        selectedPayment.balance !== undefined
+                                            ? selectedPayment.balance
+                                            : selectedPayment.amount
+                                    )}
                                 </p>
                             </div>
                         </div>
