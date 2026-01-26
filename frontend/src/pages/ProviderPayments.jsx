@@ -300,7 +300,6 @@ function ProviderPayments() {
     // Edición no implementada
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState(null);
-    const [, setPaymentToDelete] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
@@ -671,6 +670,42 @@ function ProviderPayments() {
                 );
                 toast.success("Nota de crédito eliminada correctamente");
                 fetchCreditNotes();
+            } else if (deleteConfirm.type === "transfer-payment") {
+                await axios.delete(
+                    `/transfers/transfer-payments/${deleteConfirm.id}/`
+                );
+                toast.success("Pago eliminado correctamente");
+                fetchPayments();
+
+                // Update selectedPayment state to reflect deletion
+                if (selectedPayment && selectedPayment.payments) {
+                    const deletedPayment = selectedPayment.payments.find(
+                        (p) => p.id === deleteConfirm.id
+                    );
+                    if (deletedPayment) {
+                        const amount = parseFloat(deletedPayment.amount);
+                        setSelectedPayment((prev) => {
+                            const newPaidAmount =
+                                parseFloat(prev.paid_amount || 0) - amount;
+                            const newBalance =
+                                parseFloat(prev.balance || 0) + amount;
+                            return {
+                                ...prev,
+                                payments: prev.payments.filter(
+                                    (p) => p.id !== deleteConfirm.id
+                                ),
+                                paid_amount: newPaidAmount,
+                                balance: newBalance,
+                                status:
+                                    newPaidAmount <= 0
+                                        ? "pendiente"
+                                        : newPaidAmount < prev.amount
+                                        ? "parcial"
+                                        : "pagado",
+                            };
+                        });
+                    }
+                }
             } else {
                 // Check if it's a provider_invoice or a transfer
                 const payment = payments.find(
@@ -1414,9 +1449,12 @@ function ProviderPayments() {
                 const osClosed = isPaymentOSClosed(row);
                 const isProviderInvoice = row.source === "provider_invoice";
                 const canPay =
-                    row.status === "aprobado" ||
-                    row.status === "parcial" ||
-                    (isProviderInvoice && row.status !== "pagado");
+                    (row.source === "transfer" &&
+                        (row.status === "aprobado" ||
+                            row.status === "parcial")) ||
+                    (isProviderInvoice &&
+                        row.status !== "pagado" &&
+                        row.status !== "pagada");
 
                 return (
                     <div className="grid grid-cols-3 gap-1 w-full max-w-[120px] mx-auto">
@@ -1433,7 +1471,7 @@ function ProviderPayments() {
                                     <Banknote className="w-4 h-4" />
                                 </button>
                             ) : !isProviderInvoice &&
-                              row.status === "pendiente" ? (
+                                      row.status === "pendiente" ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
                                     title="Requiere Aprobación"
@@ -2880,9 +2918,11 @@ function ProviderPayments() {
                                                                     e
                                                                 ) => {
                                                                     e.stopPropagation();
-                                                                    setPaymentToDelete(
-                                                                        payment
-                                                                    );
+                                                                    setDeleteConfirm({
+                                                                        open: true,
+                                                                        id: payment.id,
+                                                                        type: "transfer-payment",
+                                                                    });
                                                                 }}
                                                                 className="text-red-500 hover:text-red-700 hover:bg-red-50"
                                                                 title="Eliminar pago"
@@ -3005,6 +3045,8 @@ function ProviderPayments() {
                             </Button>
                             <div className="flex items-center gap-2">
                                 {selectedPayment.status === "pendiente" &&
+                                    selectedPayment.source !==
+                                        "provider_invoice" &&
                                     canApprovePayments() && (
                                         <Button
                                             onClick={() =>
@@ -3017,7 +3059,9 @@ function ProviderPayments() {
                                             Aprobar Gasto
                                         </Button>
                                     )}
-                                {selectedPayment.status !== "pendiente" &&
+                                {(selectedPayment.status !== "pendiente" ||
+                                    selectedPayment.source ===
+                                        "provider_invoice") &&
                                     selectedPayment.status !== "pagado" &&
                                     selectedPayment.status !== "pagada" &&
                                     canRegisterPayments() && (
