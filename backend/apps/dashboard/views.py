@@ -25,14 +25,14 @@ class DashboardView(APIView):
         """
         Generate client-level financial breakdown for comparative table.
         Returns list of clients with:
-        - total_ingresos: Total revenue from invoices (facturación)
-        - total_servicios: Total invoiced services (Calculated as Total - Third Party)
-        - total_prestamos: Total invoiced expenses/loans (Gastos a Terceros)
+        - total_ingresos: Total PENDING amount (Balance)
+        - total_servicios: Pending portion of services
+        - total_prestamos: Pending portion of expenses/loans (Gastos a Terceros)
         
         NOTE: 'total_servicios' is calculated as a residual to ensure strict mathematical consistency:
-        Facturación = Servicios + Préstamos
+        Saldo Pendiente = Servicios Pendientes + Préstamos Pendientes
         """
-        from django.db.models import DecimalField
+        from django.db.models import DecimalField, Case, When, F
         from django.db.models.functions import Coalesce as CoalesceFunc
         
         # Base queryset for Invoices (Financial View)
@@ -54,15 +54,25 @@ class DashboardView(APIView):
             'service_order__client__id',
             'service_order__client__name'
         ).annotate(
-            # Total Ingresos: Sum of all invoices (facturación total)
+            # Total Ingresos: Sum of BALANCES (Pending Payment)
             total_ingresos=CoalesceFunc(
-                Sum('total_amount'),
+                Sum('balance'),
                 Value(0),
                 output_field=DecimalField()
             ),
-            # Total Préstamos: Portion of invoices attributed to Third Party Expenses/Loans
+            # Total Préstamos: Pending portion of invoices attributed to Third Party Expenses
+            # Logic: (Total Third Party * Balance) / Total Amount
             total_prestamos=CoalesceFunc(
-                Sum('total_third_party'),
+                Sum(
+                    Case(
+                        When(
+                            total_amount__gt=0,
+                            then=F('total_third_party') * F('balance') / F('total_amount')
+                        ),
+                        default=Value(0),
+                        output_field=DecimalField()
+                    )
+                ),
                 Value(0),
                 output_field=DecimalField()
             )

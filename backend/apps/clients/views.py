@@ -31,15 +31,23 @@ class ClientViewSet(viewsets.ModelViewSet):
             from apps.orders.models import Invoice
             from django.db.models import OuterRef, Subquery, Sum
             
-            # Anotamos el saldo pendiente real sumando el balance de facturas pendientes
-            # Solo facturas activas (no pagadas, no anuladas)
-            # Usamos Subquery para evitar duplicación de filas por joins
-            pending_balance_sq = Invoice.objects.filter(
+            # Obtener año opcional
+            year = self.request.query_params.get('year')
+
+            # Base de facturas pendientes
+            pending_invoices = Invoice.objects.filter(
                 service_order__client=OuterRef('pk'),
                 balance__gt=0.01
             ).exclude(
                 status__in=['paid', 'cancelled']
-            ).values(
+            )
+
+            # Aplicar filtro de año si existe (lógica estricta)
+            if year and year != '0':
+                pending_invoices = pending_invoices.filter(issue_date__year=year)
+
+            # Anotamos el saldo pendiente real sumando el balance
+            pending_balance_sq = pending_invoices.values(
                 'service_order__client'
             ).annotate(
                 total=Sum('balance')
@@ -154,7 +162,9 @@ class ClientViewSet(viewsets.ModelViewSet):
             total_services=Sum('total_services'),
             total_third_party=Sum('total_third_party'),
             total_paid=Sum('paid_amount'),
-            total_balance=Sum('balance')
+            total_balance=Sum('balance'),
+            total_credited=Sum('credited_amount'),
+            total_retention=Sum('retencion')
         )
 
         # === 2. Métricas de Clientes ===
@@ -182,6 +192,8 @@ class ClientViewSet(viewsets.ModelViewSet):
                 'total_third_party': float(financial_stats['total_third_party'] or 0),
                 'total_paid': float(financial_stats['total_paid'] or 0),
                 'total_pending': float(financial_stats['total_balance'] or 0),
+                'total_credited': float(financial_stats['total_credited'] or 0),
+                'total_retention': float(financial_stats['total_retention'] or 0),
             },
             'clients': {
                 'total': total_clients,

@@ -333,7 +333,7 @@ function AccountStatements() {
         fetchClients();
         fetchGeneralStats();
         fetchBanks();
-    }, []);
+    }, [selectedYear]);
 
     // Auto-select client from URL params
     useEffect(() => {
@@ -366,7 +366,9 @@ function AccountStatements() {
     const fetchClients = async () => {
         try {
             setLoading(true);
-            const response = await axios.get("/clients/");
+            const response = await axios.get("/clients/", {
+                params: { year: selectedYear }
+            });
             // Como el backend ya envía el total_pending calculado, lo usamos directamente.
             // Si necesitamos info detallada (como overdue_amount), podríamos mantener el cálculo
             // o pedirle al backend que lo envíe. Por ahora, confiamos en total_pending.
@@ -578,13 +580,11 @@ function AccountStatements() {
     // Filtered invoices
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
-            // Filtro por año (Permitir facturas de otros años si tienen saldo pendiente)
+            // Filtro por año (ESTRICTO: Solo facturas emitidas en ese año)
             if (selectedYear) {
-                const invDate = new Date(inv.issue_date);
-                const isSameYear = invDate.getFullYear() === selectedYear;
-                const hasBalance = parseFloat(inv.balance || 0) > 0.01;
-                
-                if (!isSameYear && !hasBalance) return false;
+                // Parseo seguro de año (evita errores de timezone con new Date)
+                const invYear = parseInt(String(inv.issue_date).substring(0, 4));
+                if (invYear !== selectedYear) return false;
             }
 
             // Búsqueda por texto
@@ -1151,6 +1151,8 @@ function AccountStatements() {
                                                         <th className="px-4 py-3">Total Facturación</th>
                                                         <th className="px-4 py-3">Total Servicios</th>
                                                         <th className="px-4 py-3">Gastos a Terceros</th>
+                                                        <th className="px-4 py-3">Notas de Crédito</th>
+                                                        <th className="px-4 py-3">Retenciones</th>
                                                         <th className="px-4 py-3">Total Pagado</th>
                                                         <th className="px-4 py-3 text-right">Total Pendiente</th>
                                                     </tr>
@@ -1165,6 +1167,12 @@ function AccountStatements() {
                                                         </td>
                                                         <td className="px-4 py-3 text-slate-700">
                                                             {formatCurrency(generalStats.financial.total_third_party)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-amber-600 font-medium">
+                                                            {formatCurrency(generalStats.financial.total_credited)}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-600">
+                                                            {formatCurrency(generalStats.financial.total_retention)}
                                                         </td>
                                                         <td className="px-4 py-3 text-emerald-600 font-medium">
                                                             {formatCurrency(generalStats.financial.total_paid)}

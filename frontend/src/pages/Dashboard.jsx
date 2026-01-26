@@ -301,46 +301,60 @@ function Dashboard() {
 
     // KPI Cards data
     const kpiCards = useMemo(
-        () => [
-            {
-                title: "Órdenes Activas",
-                value: stats.activeOrders,
-                icon: Truck,
-                variant: "primary",
-            },
-            {
-                title: selectedYear === 0 ? "Facturación Total (Histórico)" : "Facturación del Mes",
-                value: formatCurrency(stats.monthlyRevenue),
-                icon: DollarSign,
-                variant: "success",
-            },
-            {
-                title: selectedYear === 0 ? "OS Totales" : "OS del Mes",
-                value: stats.ordersThisMonth,
-                trend:
-                    stats.ordersThisMonthTrend > 0
-                        ? "up"
-                        : stats.ordersThisMonthTrend < 0
-                        ? "down"
-                        : "neutral",
-                trendValue: `${Math.abs(stats.ordersThisMonthTrend)}%`,
-                icon: FileText,
-                variant: "info",
-            },
-            {
-                title: "Margen Bruto",
-                value: formatCurrency(profitabilityData.margen),
-                icon: TrendingUp,
-                variant: profitabilityData.margen >= 0 ? "success" : "danger",
-            },
-            {
-                title: "Rentabilidad",
-                value: `${profitabilityData.rentabilidad_porcentaje.toFixed(1)}%`,
-                icon: BarChart3,
-                variant: profitabilityData.rentabilidad_porcentaje >= 20 ? "success" : profitabilityData.rentabilidad_porcentaje >= 10 ? "warning" : "danger",
-            },
-        ],
-        [stats, profitabilityData, selectedYear]
+        () => {
+            const monthName = selectedMonth > 0 
+                ? new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1).toLocaleString('es-SV', { month: 'long' }) 
+                : '';
+            
+            const billingTitle = selectedYear === 0 
+                ? "Facturación Histórica Total" 
+                : (selectedMonth === 0 ? `Facturación Anual ${selectedYear}` : `Facturación de ${monthName}`);
+            
+            const ordersTitle = selectedYear === 0 
+                ? "OS Totales Históricas" 
+                : (selectedMonth === 0 ? `OS Totales ${selectedYear}` : `OS de ${monthName}`);
+
+            return [
+                {
+                    title: "Órdenes Activas",
+                    value: stats.activeOrders,
+                    icon: Truck,
+                    variant: "primary",
+                },
+                {
+                    title: billingTitle,
+                    value: formatCurrency(stats.monthlyRevenue),
+                    icon: DollarSign,
+                    variant: "success",
+                },
+                {
+                    title: ordersTitle,
+                    value: stats.ordersThisMonth,
+                    trend:
+                        stats.ordersThisMonthTrend > 0
+                            ? "up"
+                            : stats.ordersThisMonthTrend < 0
+                            ? "down"
+                            : "neutral",
+                    trendValue: `${Math.abs(stats.ordersThisMonthTrend)}%`,
+                    icon: FileText,
+                    variant: "info",
+                },
+                {
+                    title: "Margen Bruto",
+                    value: formatCurrency(profitabilityData.margen),
+                    icon: TrendingUp,
+                    variant: profitabilityData.margen >= 0 ? "success" : "danger",
+                },
+                {
+                    title: "Rentabilidad",
+                    value: `${profitabilityData.rentabilidad_porcentaje.toFixed(1)}%`,
+                    icon: BarChart3,
+                    variant: profitabilityData.rentabilidad_porcentaje >= 20 ? "success" : profitabilityData.rentabilidad_porcentaje >= 10 ? "warning" : "danger",
+                },
+            ];
+        },
+        [stats, profitabilityData, selectedYear, selectedMonth]
     );
 
     // Prepare data for Revenue Composition Donut Chart
@@ -494,8 +508,8 @@ function Dashboard() {
                 {/* Main Table - Client Financial Breakdown */}
                 <Card className="lg:col-span-4">
                     <CardHeader>
-                        <CardTitle>Análisis Financiero por Cliente</CardTitle>
-                        <CardDescription>Facturación, Servicios y Cargos</CardDescription>
+                        <CardTitle>Análisis de Saldos Pendientes por Cliente</CardTitle>
+                        <CardDescription>Desglose de cuentas por cobrar</CardDescription>
                     </CardHeader>
                     <CardContent className="pt-0">
                         <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
@@ -503,10 +517,10 @@ function Dashboard() {
                                 <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                                     <BarChart3 className="h-12 w-12 mb-3 text-slate-300" />
                                     <p className="text-sm font-medium">
-                                        Sin datos de facturación
+                                        Sin saldos pendientes
                                     </p>
                                     <p className="text-xs text-slate-400 mt-1">
-                                        Los datos aparecerán cuando haya operaciones
+                                        Todo está al día
                                     </p>
                                 </div>
                             ) : (
@@ -517,13 +531,13 @@ function Dashboard() {
                                                 Cliente
                                             </th>
                                             <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                                Facturación
+                                                Saldo Pendiente
                                             </th>
                                             <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                                Servicios
+                                                Servicios (Pend)
                                             </th>
                                             <th className="px-4 py-3.5 text-right text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                                Préstamos
+                                                Préstamos (Pend)
                                             </th>
                                         </tr>
                                     </thead>

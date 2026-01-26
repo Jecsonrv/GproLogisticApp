@@ -366,7 +366,7 @@ const ProviderStatements = () => {
         fetchBanks();
         // fetchProviders/fetchBanks stable enough; deps intentionally empty
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [selectedYear]);
 
     // Persist selectedYear changes
     useEffect(() => {
@@ -398,7 +398,9 @@ const ProviderStatements = () => {
             // debería anotarlo en el listado (igual que hicimos con Clients).
             // Por ahora, cargaremos la lista base y si se requiere el total exacto en sidebar,
             // se implementará la optimización en backend después.
-            const response = await axios.get("/catalogs/providers/");
+            const response = await axios.get("/catalogs/providers/", {
+                params: { year: selectedYear }
+            });
             setProviders(response.data);
 
             if (providerIdFromUrl) {
@@ -913,7 +915,6 @@ const ProviderStatements = () => {
         {
             header: "Tipo",
             accessor: "type",
-            cell: (row) => <Badge variant="outline">{row.type}</Badge>,
             cell: (row) => (
                 <Badge variant="outline">{formatTransferType(row.type)}</Badge>
             ),

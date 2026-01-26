@@ -145,18 +145,27 @@ class ProviderViewSet(viewsets.ModelViewSet):
         year = int(year_param) if year_param and year_param.isdigit() else (datetime.now().year if year_param is None else None)
         
         # ========== TRANSFERS (Gastos terceros, propios, admin) ==========
-        unpaid_transfers = Transfer.objects.filter(
+        unpaid_transfers_qs = Transfer.objects.filter(
             provider=provider,
             status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
-        ).order_by('transaction_date')
+        )
         
+        if year:
+            unpaid_transfers_qs = unpaid_transfers_qs.filter(transaction_date__year=year)
+            
+        unpaid_transfers = unpaid_transfers_qs.order_by('transaction_date')
         transfer_debt = unpaid_transfers.aggregate(Sum('balance'))['balance__sum'] or 0
         
         # ========== PROVIDER INVOICES (Costos Directos / Tercerizados) ==========
-        unpaid_invoices = ProviderInvoice.objects.filter(
+        unpaid_invoices_qs = ProviderInvoice.objects.filter(
             provider=provider,
             payment_status__in=['pendiente', 'parcial']
-        ).order_by('issue_date')
+        )
+        
+        if year:
+            unpaid_invoices_qs = unpaid_invoices_qs.filter(issue_date__year=year)
+            
+        unpaid_invoices = unpaid_invoices_qs.order_by('issue_date')
         
         # Calcular balance de facturas de proveedor (total - pagado)
         invoice_debt = sum(

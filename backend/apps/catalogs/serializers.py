@@ -83,18 +83,33 @@ class ProviderSerializer(serializers.ModelSerializer):
         from apps.transfers.models import Transfer, ProviderInvoice
         from django.db.models import Sum, F
 
+        # Obtener año del contexto del request
+        year = None
+        request = self.context.get('request')
+        if request:
+            year_param = request.query_params.get('year')
+            if year_param and year_param.isdigit() and int(year_param) > 0:
+                year = int(year_param)
+
         # 1. Deuda por Gastos / Transferencias
-        transfer_debt = Transfer.objects.filter(
+        transfer_qs = Transfer.objects.filter(
             provider=obj,
             status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
-        ).aggregate(Sum('balance'))['balance__sum'] or 0
+        )
+        if year:
+            transfer_qs = transfer_qs.filter(transaction_date__year=year)
+            
+        transfer_debt = transfer_qs.aggregate(Sum('balance'))['balance__sum'] or 0
 
         # 2. Deuda por Costos Directos (Facturas de Proveedor)
-        # ProviderInvoice no tiene campo 'balance' en DB, se calcula dinámicamente
-        invoices = ProviderInvoice.objects.filter(
+        invoices_qs = ProviderInvoice.objects.filter(
             provider=obj,
             payment_status__in=['pendiente', 'parcial']
-        ).aggregate(
+        )
+        if year:
+            invoices_qs = invoices_qs.filter(issue_date__year=year)
+            
+        invoices = invoices_qs.aggregate(
             total_debt=Sum(F('total_amount') - F('paid_amount'))
         )
         invoice_debt = invoices['total_debt'] or 0
