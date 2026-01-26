@@ -362,7 +362,8 @@ function Dashboard() {
         if (!revenueComposition) return [];
         return [
             { name: 'Propios', value: revenueComposition.servicios_propios, color: '#10b981' }, // emerald-500
-            { name: 'Tercerizados', value: revenueComposition.servicios_tercerizados, color: '#3b82f6' } // blue-500
+            { name: 'Tercerizados', value: revenueComposition.servicios_tercerizados, color: '#3b82f6' }, // blue-500
+            { name: 'Gastos', value: revenueComposition.gastos_terceros, color: '#f59e0b' } // amber-500
         ].filter(item => item.value > 0);
     }, [revenueComposition]);
 
@@ -670,7 +671,11 @@ function Dashboard() {
                 {/* Cash Flow Chart */}
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>Flujo de Caja</CardTitle>
+                        <CardTitle>
+                            {selectedYear === 0 
+                                ? "Flujo de Caja Histórico" 
+                                : (selectedMonth === 0 ? "Flujo de Caja Anual" : "Flujo de Caja Mensual")}
+                        </CardTitle>
                         <CardDescription>Facturación Emitida vs Cobros vs Saldos Pendientes</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -725,8 +730,12 @@ function Dashboard() {
                 {/* Revenue Composition Chart */}
                 <Card className="lg:col-span-1">
                     <CardHeader>
-                        <CardTitle className="text-base">Composición de Ingresos</CardTitle>
-                        <CardDescription className="text-xs">Propios vs Tercerizados</CardDescription>
+                        <CardTitle className="text-base">
+                            {selectedYear === 0 
+                                ? "Composición Histórica" 
+                                : (selectedMonth === 0 ? "Composición Anual" : "Composición Mensual")}
+                        </CardTitle>
+                        <CardDescription className="text-xs">Desglose de Facturación</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {!revenueComposition || revenueComposition.total === 0 ? (
@@ -737,6 +746,7 @@ function Dashboard() {
                         ) : (
                             <div className="space-y-4">
                                 <div className="space-y-3">
+                                    {/* Servicios Propios */}
                                     <div>
                                         <div className="flex justify-between items-center mb-1.5">
                                             <span className="text-xs font-medium text-slate-700">Servicios Propios</span>
@@ -744,7 +754,7 @@ function Dashboard() {
                                                 {revenueComposition.porcentaje_propios}%
                                             </span>
                                         </div>
-                                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-emerald-600"
                                                 style={{ width: `${revenueComposition.porcentaje_propios}%` }}
@@ -755,6 +765,7 @@ function Dashboard() {
                                         </p>
                                     </div>
                                     
+                                    {/* Servicios Tercerizados */}
                                     <div>
                                         <div className="flex justify-between items-center mb-1.5">
                                             <span className="text-xs font-medium text-slate-700">Servicios Tercerizados</span>
@@ -762,7 +773,7 @@ function Dashboard() {
                                                 {revenueComposition.porcentaje_tercerizados}%
                                             </span>
                                         </div>
-                                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-blue-600"
                                                 style={{ width: `${revenueComposition.porcentaje_tercerizados}%` }}
@@ -772,11 +783,30 @@ function Dashboard() {
                                             {formatCurrency(revenueComposition.servicios_tercerizados)}
                                         </p>
                                     </div>
+
+                                    {/* Gastos a Terceros (Nuevo) */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-xs font-medium text-slate-700">Gastos a Terceros</span>
+                                            <span className="text-xs font-bold text-amber-700">
+                                                {revenueComposition.porcentaje_gastos}%
+                                            </span>
+                                        </div>
+                                        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-amber-500"
+                                                style={{ width: `${revenueComposition.porcentaje_gastos}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-600 mt-1 font-semibold">
+                                            {formatCurrency(revenueComposition.gastos_terceros)}
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <div className="pt-3 border-t border-slate-200">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm font-bold text-slate-900">Total</span>
+                                        <span className="text-sm font-bold text-slate-900">Total Facturado</span>
                                         <span className="text-sm font-bold text-slate-900">
                                             {formatCurrency(revenueComposition.total)}
                                         </span>

@@ -1221,15 +1221,14 @@ function AccountStatements() {
                                 <CardHeader className="pb-3">
                                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                                         <TrendingDown className="w-4 h-4 text-red-500" />
-                                        Clientes con Mayor Saldo Pendiente
+                                        Desglose de Saldos Pendientes
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="pt-0">
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                                         {clients
                                             .filter(c => (c.total_pending || 0) > 0)
                                             .sort((a, b) => (b.total_pending || 0) - (a.total_pending || 0))
-                                            .slice(0, 5)
                                             .map((client) => (
                                                 <div
                                                     key={client.id}

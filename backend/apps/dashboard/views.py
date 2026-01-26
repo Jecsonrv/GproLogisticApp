@@ -213,14 +213,12 @@ class DashboardView(APIView):
 
     def _generate_revenue_composition(self, year, month, is_annual_view=False):
         """
-        Generate revenue composition: Servicios Propios vs Tercerizados
-        Based on Invoices issued in the period.
+        Generate revenue composition: 
+        1. Servicios Propios (Margen 100%)
+        2. Servicios Tercerizados (Revendidos con margen)
+        3. Gastos a Terceros (Cargos a Clientes/Reembolsos)
         
-        Logic:
-        - Chart Base (Total Services) = Sum(Invoice.total_amount) - Sum(Invoice.total_third_party)
-          (Calculated as residual from Totals to ensure exact match with Financial Table)
-        - Tercerizados = Charges (is_third_party=True) on Invoices
-        - Propios = Total Services - Tercerizados (Residual)
+        Based on Total Invoiced Amount (Revenue).
         """
         # Handle "All Time" view (year=0)
         if year == 0:
@@ -236,42 +234,43 @@ class DashboardView(APIView):
             ).exclude(status='cancelled')
 
         # 0. Calculate Totals from Invoices (Source of Truth)
-        # We use (Total Revenue - Total Third Party) to determine the Service Revenue portion
-        # This matches the logic used in the Financial Analysis Table to handle any DB inconsistencies
         totals = invoice_qs.aggregate(
             total_revenue=Sum('total_amount'),
             total_third_party=Sum('total_third_party')
         )
         
         total_revenue = float(totals['total_revenue'] or 0)
-        total_third_party = float(totals['total_third_party'] or 0)
+        gastos_terceros = float(totals['total_third_party'] or 0)
         
-        # Chart Base: Total Service Revenue
-        total_services = total_revenue - total_third_party
-
         # 1. Calculate Revenue from Charges (Services) that are Third Party
+        # These are services outsourced (e.g. Fletes) but billed as Services
         charges_tercerizados = OrderCharge.objects.filter(
             invoice__in=invoice_qs,
             is_deleted=False,
             is_third_party_service=True
         ).aggregate(total=Sum('total'))['total'] or 0
 
-        # 2. Aggregate
         servicios_tercerizados = float(charges_tercerizados)
         
-        # 3. Calculate Propios as Residual of Services
-        servicios_propios = total_services - servicios_tercerizados
+        # 2. Calculate Propios as Residual of Total Revenue
+        # Formula: Total - Gastos (Transfers) - Outsourced Services
+        servicios_propios = total_revenue - gastos_terceros - servicios_tercerizados
         
         # Safety clamp
         if servicios_propios < 0:
             servicios_propios = 0
+            
+        # Base for percentages is Total Revenue
+        base = total_revenue if total_revenue > 0 else 1
         
         return {
             'servicios_propios': servicios_propios,
             'servicios_tercerizados': servicios_tercerizados,
-            'total': total_services,
-            'porcentaje_propios': round((servicios_propios / total_services * 100) if total_services > 0 else 0, 2),
-            'porcentaje_tercerizados': round((servicios_tercerizados / total_services * 100) if total_services > 0 else 0, 2)
+            'gastos_terceros': gastos_terceros,
+            'total': total_revenue,
+            'porcentaje_propios': round((servicios_propios / base * 100), 1),
+            'porcentaje_tercerizados': round((servicios_tercerizados / base * 100), 1),
+            'porcentaje_gastos': round((gastos_terceros / base * 100), 1)
         }
 
     def get(self, request):

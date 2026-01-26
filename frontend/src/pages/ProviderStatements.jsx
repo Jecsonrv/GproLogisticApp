@@ -1259,15 +1259,14 @@ const ProviderStatements = () => {
                                 <CardHeader className="pb-3">
                                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                                         <TrendingUp className="w-4 h-4 text-red-500" />
-                                        Proveedores con Mayor Deuda Pendiente
+                                        Desglose de Deudas Pendientes
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="pt-0">
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                                         {providers
                                             .filter(p => (p.total_debt || 0) > 0)
                                             .sort((a, b) => (b.total_debt || 0) - (a.total_debt || 0))
-                                            .slice(0, 5)
                                             .map((provider) => (
                                                 <div
                                                     key={provider.id}
