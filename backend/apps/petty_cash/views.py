@@ -288,6 +288,16 @@ class CashCountViewSet(viewsets.ModelViewSet):
         
         # ARCHIVE TRANSACTIONS: Link all currently open transactions to this CashCount
         open_transactions.update(cash_count=instance)
+        
+        # CARRY OVER BALANCE: Create opening balance for next box if there's money left
+        if instance.actual_balance > 0:
+            PettyCashTransaction.objects.create(
+                transaction_date=datetime.now().date(),
+                transaction_type='INCOME',
+                amount=instance.actual_balance,
+                concept=f"Saldo Inicial (Remanente Caja {instance.sequence_number})",
+                created_by=self.request.user
+            )
 
 
     @action(detail=False, methods=['get'])
