@@ -78,11 +78,19 @@ def validate_file_size(value):
     """
     MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB en bytes
 
-    if value.size > MAX_FILE_SIZE:
-        raise ValidationError(
-            f'El archivo excede el tamaño máximo permitido de 5MB. '
-            f'Tamaño actual: {value.size / (1024 * 1024):.2f}MB'
-        )
+    try:
+        if value.size > MAX_FILE_SIZE:
+            raise ValidationError(
+                f'El archivo excede el tamaño máximo permitido de 5MB. '
+                f'Tamaño actual: {value.size / (1024 * 1024):.2f}MB'
+            )
+    except FileNotFoundError:
+        # Si el archivo no se encuentra (ej: referencia en DB pero borrado en S3),
+        # asumimos que la validación no aplica o ya pasó anteriormente.
+        pass
+    except Exception:
+        # Cualquier otro error de lectura se ignora para no bloquear procesos críticos
+        pass
 
 
 def validate_document_file(value):

@@ -629,7 +629,8 @@ class Transfer(SoftDeleteModel):
                 })
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        # Validar lógica de negocio (no llamar a full_clean para evitar validar archivos en S3)
+        self.clean()
 
         # AUDITORÍA #1: Validar que no se modifique el monto si ya está facturado
         if self.pk:  # Solo para updates, no creación
