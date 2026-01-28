@@ -284,6 +284,21 @@ const NC_REASON_OPTIONS = [
     { id: "otro", name: "Otro" },
 ];
 
+const FILTER_TYPE_OPTIONS = [
+    { id: "", name: "Todos" },
+    { id: "Costo Directo", name: "Costo Directo" },
+    { id: "Gastos de Operación", name: "Gastos de Operación" },
+    { id: "Cargos a Clientes (Reembolso)", name: "Cargos a Clientes" },
+];
+
+const FILTER_STATUS_OPTIONS = [
+    { id: "", name: "Todos" },
+    { id: "pendiente", name: "Pendiente" },
+    { id: "aprobado", name: "Aprobado" },
+    { id: "parcial", name: "Pago Parcial" },
+    { id: "pagado", name: "Pagado" },
+];
+
 const ProviderStatements = () => {
     const navigate = useNavigate();
     const canApprovePayments = usePermissionStore(
@@ -360,34 +375,33 @@ const ProviderStatements = () => {
         pdf_file: null,
     });
 
+    // Unified Initial Data Fetch
     useEffect(() => {
-        fetchProviders();
-        fetchGeneralStats();
-        fetchBanks();
-        // fetchProviders/fetchBanks stable enough; deps intentionally empty
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedYear]);
-
-    // Persist selectedYear changes
-    useEffect(() => {
-        if (selectedYear === "") {
-            sessionStorage.setItem("providerStatements_year", "");
-        } else {
-            sessionStorage.setItem("providerStatements_year", String(selectedYear));
-        }
+        const loadInitialData = async () => {
+            setLoading(true);
+            try {
+                await Promise.all([
+                    fetchProviders(),
+                    fetchGeneralStats(),
+                    fetchBanks()
+                ]);
+            } finally {
+                setLoading(false);
+            }
+        };
         
-        if (!selectedProvider) {
-            fetchGeneralStats();
-        }
+        loadInitialData();
+        
+        // Persist year choice
+        sessionStorage.setItem("providerStatements_year", selectedYear === "" ? "" : String(selectedYear));
     }, [selectedYear]);
 
+    // Provider specific effect
     useEffect(() => {
         if (selectedProvider) {
             fetchStatement(selectedProvider.id);
             setSelectedTransferIds([]); // Clear selection on provider change
         }
-        // fetchStatement intentionally omitted to avoid re-fetch loop
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedProvider, selectedYear]);
 
     const fetchProviders = async () => {
@@ -535,6 +549,8 @@ const ProviderStatements = () => {
         }
     };
 
+    const [batchAllocations, setBatchAllocations] = useState([]);
+
     const handleOpenBatchPayment = () => {
         if (selectedTransferIds.length === 0) {
             toast.error("Selecciona al menos una factura para pagar");
@@ -562,17 +578,24 @@ const ProviderStatements = () => {
             return;
         }
 
+        // Initialize allocations with full balance
+        const initialAllocations = selectedTransfers.map(t => ({
+            id: t.id,
+            invoice_number: t.invoice_number,
+            description: t.description,
+            balance: parseFloat(t.balance),
+            amount: t.balance // Default to paying full balance
+        }));
+
+        setBatchAllocations(initialAllocations);
+
         // Calculate total amount
-        const totalAmount = selectedTransfers.reduce(
-            (sum, t) => sum + parseFloat(t.balance || 0),
+        const totalAmount = initialAllocations.reduce(
+            (sum, item) => sum + parseFloat(item.amount || 0),
             0
         );
 
-        if (totalAmount <= 0) {
-            toast.error("El monto total a pagar debe ser mayor a cero");
-            return;
-        }
-
+        // Use toFixed(2) to avoid floating point issues
         setBatchPaymentForm({
             total_amount: totalAmount.toFixed(2),
             payment_date: getTodayDate(),
@@ -584,6 +607,30 @@ const ProviderStatements = () => {
         });
 
         setIsBatchPaymentModalOpen(true);
+    };
+
+    const handleBatchAllocationChange = (id, newAmount) => {
+        setBatchAllocations(prev => {
+            const updated = prev.map(item => {
+                if (item.id === id) {
+                    return { ...item, amount: newAmount };
+                }
+                return item;
+            });
+            
+            // Recalculate total
+            const newTotal = updated.reduce(
+                (sum, item) => sum + parseFloat(item.amount || 0),
+                0
+            );
+            
+            setBatchPaymentForm(form => ({
+                ...form,
+                total_amount: newTotal.toFixed(2)
+            }));
+
+            return updated;
+        });
     };
 
     const handleRegisterBatchPayment = async (e) => {
@@ -600,13 +647,24 @@ const ProviderStatements = () => {
             setIsSubmitting(true);
             const formData = new FormData();
 
-            // Add basic fields
-            formData.append(
-                "transfer_ids",
-                JSON.stringify(selectedTransferIds)
-            );
+            // Prepare allocations payload
+            const allocationsPayload = batchAllocations
+                .filter(a => parseFloat(a.amount) > 0)
+                .map(a => ({
+                    transfer_id: a.id,
+                    amount: a.amount
+                }));
+
+            if (allocationsPayload.length === 0) {
+                toast.error("Debe especificar al menos un monto mayor a cero");
+                setIsSubmitting(false);
+                return;
+            }
+
+            formData.append("allocations", JSON.stringify(allocationsPayload));
+            
             Object.keys(batchPaymentForm).forEach((key) => {
-                if (batchPaymentForm[key] !== null) {
+                if (batchPaymentForm[key] !== null && key !== "total_amount") {
                     formData.append(key, batchPaymentForm[key]);
                 }
             });
@@ -635,8 +693,10 @@ const ProviderStatements = () => {
                 notes: "",
                 proof_file: null,
             });
-        } catch {
-            toast.error("Error al registrar pago agrupado");
+            setBatchAllocations([]);
+        } catch (error) {
+            const errorMsg = error.response?.data?.error || "Error al registrar pago agrupado";
+            toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
         }
@@ -821,6 +881,75 @@ const ProviderStatements = () => {
         await fetchTransferDetails(transfer.id, transfer.source || "transfer");
         setIsDetailModalOpen(true);
     };
+
+    // Table Filters
+    const [tableFilters, setTableFilters] = useState({
+        status: "",
+        type: "",
+        dateFrom: "",
+        dateTo: "",
+        search: ""
+    });
+    const [isTableFiltersOpen, setIsTableFiltersOpen] = useState(false);
+
+    const activeTableFiltersCount = useMemo(() => {
+        let count = 0;
+        if (tableFilters.status) count++;
+        if (tableFilters.type) count++;
+        if (tableFilters.dateFrom) count++;
+        if (tableFilters.dateTo) count++;
+        return count;
+    }, [tableFilters]);
+
+    const clearTableFilters = () => {
+        setTableFilters({
+            status: "",
+            type: "",
+            dateFrom: "",
+            dateTo: "",
+            search: ""
+        });
+    };
+
+    // Filtered Transfers
+    const filteredTransfers = useMemo(() => {
+        if (!statement?.transfers) return [];
+        
+        return statement.transfers.filter((t) => {
+            // Search
+            if (tableFilters.search) {
+                const query = tableFilters.search.toLowerCase();
+                const searchMatch =
+                    (t.invoice_number || "").toLowerCase().includes(query) ||
+                    (t.service_order || "").toLowerCase().includes(query) ||
+                    (t.description || "").toLowerCase().includes(query) ||
+                    (formatTransferType(t.type) || "").toLowerCase().includes(query);
+                if (!searchMatch) return false;
+            }
+
+            // Status
+            if (tableFilters.status && t.status !== tableFilters.status) {
+                return false;
+            }
+
+            // Type
+            if (tableFilters.type) {
+                if (t.type !== tableFilters.type) return false;
+            }
+
+            // Date Range
+            if (tableFilters.dateFrom) {
+                if (new Date(t.transaction_date) < new Date(tableFilters.dateFrom)) return false;
+            }
+            if (tableFilters.dateTo) {
+                 const toDate = new Date(tableFilters.dateTo);
+                 toDate.setHours(23, 59, 59);
+                 if (new Date(t.transaction_date) > toDate) return false;
+            }
+
+            return true;
+        });
+    }, [statement, tableFilters]);
 
     const filteredProviders = useMemo(() => {
         return providers.filter(
@@ -1468,11 +1597,85 @@ const ProviderStatements = () => {
                                     </div>
                                 </CardHeader>
                                 <CardContent>
+                                    <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                                        <div className="relative flex-1">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <Input
+                                                placeholder="Buscar por factura, OS, descripción..."
+                                                value={tableFilters.search}
+                                                onChange={(e) => setTableFilters(prev => ({ ...prev, search: e.target.value }))}
+                                                className="pl-9"
+                                            />
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setIsTableFiltersOpen(!isTableFiltersOpen)}
+                                            className={cn(isTableFiltersOpen && "bg-slate-100 border-slate-400")}
+                                        >
+                                            <Filter className="w-4 h-4 mr-2" />
+                                            Filtros
+                                            {activeTableFiltersCount > 0 && (
+                                                <Badge variant="secondary" className="ml-2 bg-slate-900 text-white hover:bg-slate-700 h-5 px-1.5 min-w-[1.25rem]">
+                                                    {activeTableFiltersCount}
+                                                </Badge>
+                                            )}
+                                        </Button>
+                                    </div>
+
+                                    {isTableFiltersOpen && (
+                                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg mb-4 animate-in slide-in-from-top-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                <SelectERP
+                                                    label="Estado"
+                                                    value={tableFilters.status}
+                                                    onChange={(val) => setTableFilters(prev => ({ ...prev, status: val }))}
+                                                    options={FILTER_STATUS_OPTIONS}
+                                                    getOptionLabel={(opt) => opt.name}
+                                                    getOptionValue={(opt) => opt.id}
+                                                    clearable
+                                                />
+                                                <SelectERP
+                                                    label="Tipo"
+                                                    value={tableFilters.type}
+                                                    onChange={(val) => setTableFilters(prev => ({ ...prev, type: val }))}
+                                                    options={FILTER_TYPE_OPTIONS}
+                                                    getOptionLabel={(opt) => opt.name}
+                                                    getOptionValue={(opt) => opt.id}
+                                                    clearable
+                                                />
+                                                <Input
+                                                    label="Desde"
+                                                    type="date"
+                                                    value={tableFilters.dateFrom}
+                                                    onChange={(e) => setTableFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                                                />
+                                                <Input
+                                                    label="Hasta"
+                                                    type="date"
+                                                    value={tableFilters.dateTo}
+                                                    onChange={(e) => setTableFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                                                />
+                                            </div>
+                                            <div className="flex justify-end mt-4">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    onClick={clearTableFilters} 
+                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                >
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Limpiar Filtros
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <DataTable
                                         columns={columns}
-                                        data={statement?.transfers || []}
+                                        data={filteredTransfers}
                                         loading={loadingStatement}
-                                        emptyMessage="No hay movimientos registrados en el período seleccionado"
+                                        searchable={false}
+                                        emptyMessage="No hay movimientos registrados con los criterios seleccionados"
                                     />
                                 </CardContent>
                             </Card>
@@ -2346,110 +2549,105 @@ const ProviderStatements = () => {
                 isOpen={isBatchPaymentModalOpen}
                 onClose={() => setIsBatchPaymentModalOpen(false)}
                 title={`Pago Múltiple - ${selectedProvider?.name || ""}`}
-                size="xl"
+                size="3xl"
             >
                 <form
                     onSubmit={handleRegisterBatchPayment}
                     className="space-y-6"
                 >
-                    {/* Resumen de Facturas */}
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
-                        <div className="px-4 py-3 bg-slate-100 border-b border-slate-200">
-                            <h4 className="font-semibold text-sm text-slate-900">
-                                Facturas Seleccionadas (
-                                {selectedTransferIds.length})
+                    {/* Detalle de Asignaciones */}
+                    <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col max-h-[400px]">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                            <h4 className="font-semibold text-sm text-slate-700">
+                                Detalle de Pagos ({batchAllocations.length})
                             </h4>
+                            <span className="text-xs text-slate-500 font-medium bg-white px-2 py-1 rounded border border-slate-200">
+                                Total Calculado: {formatCurrency(batchPaymentForm.total_amount || 0)}
+                            </span>
                         </div>
-                        <div className="max-h-48 overflow-y-auto">
+                        
+                        <div className="overflow-y-auto">
                             <table className="w-full text-sm">
-                                <thead className="bg-slate-50 sticky top-0">
+                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                                     <tr className="border-b border-slate-200">
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">
-                                            OS
+                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-[25%]">
+                                            Factura / OS
                                         </th>
-                                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-600">
-                                            Factura
+                                        <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-600 uppercase tracking-wide w-[30%]">
+                                            Descripción
                                         </th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-slate-600">
+                                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide w-[20%]">
                                             Saldo
+                                        </th>
+                                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-600 uppercase tracking-wide w-[25%]">
+                                            Abono
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {statement?.transfers
-                                        ?.filter((t) =>
-                                            selectedTransferIds.includes(t.id)
-                                        )
-                                        .map((transfer) => (
-                                            <tr
-                                                key={transfer.id}
-                                                className="hover:bg-slate-50"
-                                            >
-                                                <td className="px-3 py-2 font-mono text-xs">
-                                                    {transfer.service_order ||
-                                                        "Sin OS"}
-                                                </td>
-                                                <td className="px-3 py-2 font-mono text-xs">
-                                                    {transfer.invoice_number ||
-                                                        "-"}
-                                                </td>
-                                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
-                                                    {formatCurrency(
-                                                        transfer.balance
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                <tbody className="divide-y divide-slate-100 bg-white">
+                                    {batchAllocations.map((item) => (
+                                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col">
+                                                    <span className="font-mono font-medium text-slate-700">
+                                                        {item.invoice_number || `ID-${item.id}`}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 mt-0.5">
+                                                        {item.service_order || "Sin OS"}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <p className="text-slate-600 text-xs line-clamp-2" title={item.description}>
+                                                    {item.description}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3 text-right align-top">
+                                                <span className="font-medium text-slate-700 tabular-nums">
+                                                    {formatCurrency(item.balance)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-2 align-middle">
+                                                <div className="relative">
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">
+                                                        $
+                                                    </span>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        max={item.balance}
+                                                        value={item.amount}
+                                                        onChange={(e) => handleBatchAllocationChange(item.id, e.target.value)}
+                                                        className={cn(
+                                                            "pl-5 text-right text-sm h-9 font-mono transition-colors",
+                                                            parseFloat(item.amount) > 0
+                                                                ? "border-slate-400 bg-slate-50 font-semibold text-slate-900"
+                                                                : "text-slate-500"
+                                                        )}
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
-                                <tfoot className="bg-slate-100 border-t-2 border-slate-300">
-                                    <tr>
-                                        <td
-                                            colSpan="2"
-                                            className="px-3 py-2 text-right font-semibold text-slate-700"
-                                        >
-                                            Total:
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-bold text-lg text-slate-700">
-                                            {formatCurrency(
-                                                batchPaymentForm.total_amount ||
-                                                    0
-                                            )}
-                                        </td>
-                                    </tr>
-                                </tfoot>
                             </table>
                         </div>
-                        <div className="px-4 py-2 border-t border-dashed border-slate-300 bg-slate-50/50">
-                            <p className="text-xs text-slate-500 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-slate-400" />
-                                El monto se distribuirá automáticamente por
-                                orden de fecha (FIFO).
-                            </p>
+                        
+                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                Total a Pagar
+                            </span>
+                            <span className="text-xl font-bold text-slate-900 tabular-nums">
+                                {formatCurrency(batchPaymentForm.total_amount || 0)}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div>
-                            <Label>Monto Total a Pagar *</Label>
-                            <div className="relative">
-                                <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    className="pl-9"
-                                    value={batchPaymentForm.total_amount}
-                                    onChange={(e) =>
-                                        setBatchPaymentForm({
-                                            ...batchPaymentForm,
-                                            total_amount: e.target.value,
-                                        })
-                                    }
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Fecha de Pago *</Label>
+                            <Label className="mb-1.5 block">Fecha de Pago *</Label>
                             <Input
                                 type="date"
                                 value={batchPaymentForm.payment_date}
@@ -2462,11 +2660,8 @@ const ProviderStatements = () => {
                                 required
                             />
                         </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label>Método de Pago *</Label>
+                            <Label className="mb-1.5 block">Método de Pago *</Label>
                             <SelectERP
                                 value={batchPaymentForm.payment_method}
                                 onChange={(val) =>
@@ -2492,8 +2687,38 @@ const ProviderStatements = () => {
                                 getOptionValue={(opt) => opt.id}
                             />
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {["transferencia", "cheque", "tarjeta"].includes(
+                            batchPaymentForm.payment_method
+                        ) && (
+                            <div>
+                                <Label className="mb-1.5 block">Banco *</Label>
+                                <SelectERP
+                                    value={batchPaymentForm.bank}
+                                    onChange={(val) =>
+                                        setBatchPaymentForm({
+                                            ...batchPaymentForm,
+                                            bank: val,
+                                        })
+                                    }
+                                    options={[
+                                        { id: "", name: "Seleccionar banco" },
+                                        ...banks.map((b) => ({
+                                            id: String(b.id),
+                                            name: b.name,
+                                        })),
+                                    ]}
+                                    getOptionLabel={(opt) => opt.name}
+                                    getOptionValue={(opt) => opt.id}
+                                    searchable
+                                    clearable
+                                />
+                            </div>
+                        )}
                         <div>
-                            <Label>Referencia / No. Cheque</Label>
+                            <Label className="mb-1.5 block">Referencia / No. Cheque</Label>
                             <Input
                                 value={batchPaymentForm.reference}
                                 onChange={(e) =>
@@ -2507,36 +2732,8 @@ const ProviderStatements = () => {
                         </div>
                     </div>
 
-                    {["transferencia", "cheque", "tarjeta"].includes(
-                        batchPaymentForm.payment_method
-                    ) && (
-                        <div>
-                            <Label>Banco *</Label>
-                            <SelectERP
-                                value={batchPaymentForm.bank}
-                                onChange={(val) =>
-                                    setBatchPaymentForm({
-                                        ...batchPaymentForm,
-                                        bank: val,
-                                    })
-                                }
-                                options={[
-                                    { id: "", name: "Seleccionar banco" },
-                                    ...banks.map((b) => ({
-                                        id: String(b.id),
-                                        name: b.name,
-                                    })),
-                                ]}
-                                getOptionLabel={(opt) => opt.name}
-                                getOptionValue={(opt) => opt.id}
-                                searchable
-                                clearable
-                            />
-                        </div>
-                    )}
-
                     <div>
-                        <Label className="label-required">
+                        <Label className="label-required mb-1.5 block">
                             Comprobante Global *
                         </Label>
                         <FileUpload
@@ -2553,7 +2750,7 @@ const ProviderStatements = () => {
                     </div>
 
                     <div>
-                        <Label>Notas</Label>
+                        <Label className="mb-1.5 block">Notas</Label>
                         <Input
                             value={batchPaymentForm.notes}
                             onChange={(e) =>
@@ -2569,15 +2766,20 @@ const ProviderStatements = () => {
                     <ModalFooter>
                         <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             onClick={() => setIsBatchPaymentModalOpen(false)}
+                            className="text-slate-500 font-semibold"
                         >
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={isSubmitting}>
+                        <Button 
+                            type="submit" 
+                            disabled={isSubmitting || parseFloat(batchPaymentForm.total_amount) <= 0}
+                            className="bg-slate-900 text-white hover:bg-black min-w-[160px]"
+                        >
                             {isSubmitting
                                 ? "Procesando..."
-                                : "Registrar Pago Agrupado"}
+                                : `Pagar ${formatCurrency(batchPaymentForm.total_amount || 0)}`}
                         </Button>
                     </ModalFooter>
                 </form>
