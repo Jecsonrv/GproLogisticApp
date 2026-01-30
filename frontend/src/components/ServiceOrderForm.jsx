@@ -209,64 +209,6 @@ const ServiceOrderForm = ({
                 </div>
             </div>
 
-            {/* OS Manual Checkbox - Only visible in create mode */}
-            {!isEditing && (
-                <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
-                    <div className="flex items-start gap-3">
-                        <input
-                            type="checkbox"
-                            id="is_manual_os"
-                            checked={formData.is_manual_os}
-                            onChange={(e) =>
-                                setFormData({
-                                    ...formData,
-                                    is_manual_os: e.target.checked,
-                                    order_number: e.target.checked ? formData.order_number : "",
-                                })
-                            }
-                            className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-600 focus:ring-slate-500"
-                        />
-                        <div className="flex-1">
-                            <label
-                                htmlFor="is_manual_os"
-                                className="block text-sm font-medium text-slate-900 cursor-pointer"
-                            >
-                                Crear OS Manualmente
-                            </label>
-                            <p className="text-xs text-slate-600 mt-0.5">
-                                Activa esta opción para ingresar manualmente el número de una OS.
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Campo manual de número OS */}
-                    {formData.is_manual_os && (
-                        <div className="mt-4">
-                            <Label className="mb-1.5 block">
-                                Número de OS (Formato: NNN-YYYY)
-                            </Label>
-                            <Input
-                                type="text"
-                                placeholder="Ejemplo: 75-2023, 075-2023, 1550-2023"
-                                value={formData.order_number}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        order_number: e.target.value,
-                                    })
-                                }
-                                pattern="\d{1,4}-\d{4}"
-                                required={formData.is_manual_os}
-                                className="font-mono"
-                            />
-                            <p className="text-xs text-slate-600 mt-1">
-                                Formato: NNN-YYYY (1 a 4 dígitos - año de 4 dígitos)
-                            </p>
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* Shipment Info */}
             <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2 pt-2">
