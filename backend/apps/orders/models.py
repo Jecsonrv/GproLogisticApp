@@ -1199,13 +1199,16 @@ class PaymentItemAllocation(SoftDeleteModel):
             raise ValidationError("El gasto no pertenece a la factura de este pago")
         
         # Validar que el monto no exceda el pendiente del item
+        # FIX: Redondear a 2 decimales para evitar errores de punto flotante
+        from decimal import ROUND_HALF_UP
         item_total = self.get_item_total()
         item_paid = self.get_item_paid_amount(exclude_self=True)
-        item_pending = item_total - item_paid
+        item_pending = (item_total - item_paid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        amount_rounded = self.amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         
-        if self.amount > item_pending:
+        if amount_rounded > item_pending:
             raise ValidationError({
-                'amount': f'El monto (${self.amount}) excede el pendiente del item (${item_pending})'
+                'amount': f'El monto (${amount_rounded}) excede el pendiente del item (${item_pending})'
             })
 
     def get_item_total(self):
