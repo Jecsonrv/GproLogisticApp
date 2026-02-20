@@ -75,7 +75,7 @@ export function PaymentItemsModal({
         setIsLoading(true);
         try {
             const response = await axios.get(
-                `/orders/invoices/${invoice.id}/payment_items/`
+                `/orders/invoices/${invoice.id}/payment_items/`,
             );
             const items = response.data.items || [];
             setPaymentItems(items);
@@ -92,57 +92,71 @@ export function PaymentItemsModal({
             // Y no se ha pagado la retención aún
             const balance = parseFloat(invoice.balance || 0);
             const retention = parseFloat(invoice.retencion || 0);
-            const hasRetention = invoice.payments?.some(p => p.payment_method === 'retencion' && !p.is_deleted);
+            const hasRetention = invoice.payments?.some(
+                (p) => p.payment_method === "retencion" && !p.is_deleted,
+            );
 
-            if (retention > 0 && !hasRetention && Math.abs(balance - retention) < 0.05) {
+            if (
+                retention > 0 &&
+                !hasRetention &&
+                Math.abs(balance - retention) < 0.05
+            ) {
                 setIsAutoRetentionMode(true);
-                
+
                 // Configurar formulario automáticamente para retención
-                setPaymentForm(prev => ({
+                setPaymentForm((prev) => ({
                     ...prev,
-                    payment_method: 'retencion',
-                    amount: retention.toFixed(2)
+                    payment_method: "retencion",
+                    amount: retention.toFixed(2),
                 }));
 
                 // DISTRIBUCIÓN AUTOMÁTICA PROPORCIONAL
                 // Distribuir el monto de retención SOLO entre los items gravados
-                const gravadoItems = items.filter(item => item.iva_type === 'gravado');
-                const totalGravadoPending = gravadoItems.reduce((sum, item) => sum + parseFloat(item.pending || 0), 0);
-                
+                const gravadoItems = items.filter(
+                    (item) => item.iva_type === "gravado",
+                );
+                const totalGravadoPending = gravadoItems.reduce(
+                    (sum, item) => sum + parseFloat(item.pending || 0),
+                    0,
+                );
+
                 const newAllocations = {};
-                
+
                 // Si hay items gravados, distribuir proporcionalmente
                 if (totalGravadoPending > 0) {
                     let distributedSum = 0;
-                    
+
                     gravadoItems.forEach((item, index) => {
                         const itemPending = parseFloat(item.pending || 0);
                         // Calcular proporción: (Pendiente Item / Total Pendiente Gravado) * Monto Retención
-                        let amount = (itemPending / totalGravadoPending) * retention;
-                        
+                        let amount =
+                            (itemPending / totalGravadoPending) * retention;
+
                         // Ajuste por redondeo en el último item
                         if (index === gravadoItems.length - 1) {
                             amount = retention - distributedSum;
                         } else {
                             distributedSum += amount;
                         }
-                        
+
                         // Solo asignar si el monto es positivo y tiene sentido
                         if (amount > 0) {
                             newAllocations[item.id] = amount.toFixed(2);
                         }
                     });
-                    
+
                     setItemAllocations(newAllocations);
-                    toast.success("Se detectó saldo de retención. Modo de liquidación automática activado.", {
-                        duration: 5000,
-                        icon: '🧾'
-                    });
+                    toast.success(
+                        "Se detectó saldo de retención. Modo de liquidación automática activado.",
+                        {
+                            duration: 5000,
+                            icon: "🧾",
+                        },
+                    );
                 }
             } else {
                 setIsAutoRetentionMode(false);
             }
-
         } catch (error) {
             console.error("Error loading payment items:", error);
             toast.error("Error al cargar los items de la factura");
@@ -172,24 +186,32 @@ export function PaymentItemsModal({
     const hasRetentionPayment = () => {
         if (!invoice?.payments) return false;
         return invoice.payments.some(
-            payment => payment.payment_method === 'retencion' && !payment.is_deleted
+            (payment) =>
+                payment.payment_method === "retencion" && !payment.is_deleted,
         );
     };
 
+    // Helper para redondear a 2 decimales (evita errores de punto flotante)
+    const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+
     // Calcular suma de asignaciones
-    const totalAllocated = Object.values(itemAllocations).reduce((sum, val) => {
-        const num = parseFloat(val) || 0;
-        return sum + num;
-    }, 0);
+    const totalAllocated = round2(
+        Object.values(itemAllocations).reduce((sum, val) => {
+            const num = parseFloat(val) || 0;
+            return sum + num;
+        }, 0),
+    );
 
     // Calcular total pendiente de items
-    const totalPending = paymentItems.reduce((sum, item) => {
-        return sum + parseFloat(item.pending || 0);
-    }, 0);
+    const totalPending = round2(
+        paymentItems.reduce((sum, item) => {
+            return sum + parseFloat(item.pending || 0);
+        }, 0),
+    );
 
     // Actualizar monto total cuando cambian las asignaciones o el método de pago
     useEffect(() => {
-        if (paymentForm.payment_method === 'retencion') {
+        if (paymentForm.payment_method === "retencion") {
             // Para retenciones, el monto es fijo: el valor de la retención
             setPaymentForm((prev) => ({
                 ...prev,
@@ -206,25 +228,31 @@ export function PaymentItemsModal({
     // Llenar todos los items con su monto pendiente (menos retención si aplica)
     const handleFillAll = () => {
         const newAllocations = {};
-        const isRetentionMethod = paymentForm.payment_method === 'retencion';
+        const isRetentionMethod = paymentForm.payment_method === "retencion";
         const retentionPaid = hasRetentionPayment();
 
         paymentItems.forEach((item) => {
-            let fillAmount = parseFloat(item.pending) || 0;
+            let fillAmount = round2(parseFloat(item.pending) || 0);
 
             // LÓGICA DE PROTECCIÓN DE RETENCIÓN:
             // Si NO es un pago de retención (es efectivo/banco) y la retención aún se debe,
             // restamos la retención del monto a pagar para evitar que se pague en efectivo.
-            if (!isRetentionMethod && !retentionPaid && item.iva_type === 'gravado' && invoice?.retencion > 0) {
+            if (
+                !isRetentionMethod &&
+                !retentionPaid &&
+                item.iva_type === "gravado" &&
+                invoice?.retencion > 0
+            ) {
                 // Calcular la parte de retención de este item (1% del subtotal)
                 const subtotal = parseFloat(item.subtotal) || 0;
-                const itemRetention = subtotal * 0.01;
-                
+                const itemRetention = round2(subtotal * 0.01);
+
                 // El monto a pagar es el pendiente MENOS la retención que debe quedar viva
-                fillAmount = Math.max(0, fillAmount - itemRetention);
+                fillAmount = round2(Math.max(0, fillAmount - itemRetention));
             }
 
-            if (fillAmount > 0.005) { // Usar pequeña tolerancia para evitar ceros flotantes
+            if (fillAmount > 0.005) {
+                // Usar pequeña tolerancia para evitar ceros flotantes
                 newAllocations[item.id] = fillAmount.toFixed(2);
             } else {
                 newAllocations[item.id] = "";
@@ -255,14 +283,19 @@ export function PaymentItemsModal({
         }
 
         const item = paymentItems.find((i) => i.id === itemId);
-        let maxValue = parseFloat(item?.pending || 0);
-        
+        let maxValue = round2(parseFloat(item?.pending || 0));
+
         // Lógica de protección de retención para input manual
-        const isRetentionMethod = paymentForm.payment_method === 'retencion';
-        if (!isRetentionMethod && !hasRetentionPayment() && item?.iva_type === 'gravado' && invoice?.retencion > 0) {
-             const subtotal = parseFloat(item.subtotal) || 0;
-             const itemRetention = subtotal * 0.01;
-             maxValue = Math.max(0, maxValue - itemRetention);
+        const isRetentionMethod = paymentForm.payment_method === "retencion";
+        if (
+            !isRetentionMethod &&
+            !hasRetentionPayment() &&
+            item?.iva_type === "gravado" &&
+            invoice?.retencion > 0
+        ) {
+            const subtotal = parseFloat(item.subtotal) || 0;
+            const itemRetention = round2(subtotal * 0.01);
+            maxValue = round2(Math.max(0, maxValue - itemRetention));
         }
 
         const numValue = parseFloat(value);
@@ -271,11 +304,11 @@ export function PaymentItemsModal({
         if (!isNaN(numValue)) {
             // No permitir valores negativos ni mayores al pendiente (menos retención)
             if (numValue < 0) return;
-            
+
             // Usar una pequeña tolerancia para la validación
-            if (numValue > (maxValue + 0.009)) {
+            if (numValue > maxValue + 0.009) {
                 toast.error(
-                    `El monto máximo es ${formatCurrency(maxValue)} (se reservó la retención)`
+                    `El monto máximo es ${formatCurrency(maxValue)} (se reservó la retención)`,
                 );
                 return;
             }
@@ -317,7 +350,7 @@ export function PaymentItemsModal({
         } else {
             // Para otros métodos de pago, validar asignaciones
             const hasAllocations = Object.values(itemAllocations).some(
-                (val) => parseFloat(val) > 0
+                (val) => parseFloat(val) > 0,
             );
 
             if (paymentItems.length > 0 && !hasAllocations) {
@@ -330,10 +363,10 @@ export function PaymentItemsModal({
             if (Math.abs(totalAllocated - paymentAmount) > 0.01) {
                 toast.error(
                     `La suma de asignaciones ($${totalAllocated.toFixed(
-                        2
+                        2,
                     )}) no coincide con el monto del pago ($${paymentAmount.toFixed(
-                        2
-                    )})`
+                        2,
+                    )})`,
                 );
                 return;
             }
@@ -369,13 +402,22 @@ export function PaymentItemsModal({
                 formData.append("reference", paymentForm.reference);
             }
             if (paymentForm.numero_comprobante_retencion) {
-                formData.append("numero_comprobante_retencion", paymentForm.numero_comprobante_retencion);
+                formData.append(
+                    "numero_comprobante_retencion",
+                    paymentForm.numero_comprobante_retencion,
+                );
             }
             if (paymentForm.retention_generation_code) {
-                formData.append("retention_generation_code", paymentForm.retention_generation_code);
+                formData.append(
+                    "retention_generation_code",
+                    paymentForm.retention_generation_code,
+                );
             }
             if (paymentForm.retention_reception_stamp) {
-                formData.append("retention_reception_stamp", paymentForm.retention_reception_stamp);
+                formData.append(
+                    "retention_reception_stamp",
+                    paymentForm.retention_reception_stamp,
+                );
             }
             if (paymentForm.notes) {
                 formData.append("notes", paymentForm.notes);
@@ -389,14 +431,14 @@ export function PaymentItemsModal({
             if (allocationsArray.length > 0) {
                 formData.append(
                     "item_allocations",
-                    JSON.stringify(allocationsArray)
+                    JSON.stringify(allocationsArray),
                 );
             }
 
             await axios.post(
                 `/orders/invoices/${invoice.id}/add_payment/`,
                 formData,
-                { headers: { "Content-Type": "multipart/form-data" } }
+                { headers: { "Content-Type": "multipart/form-data" } },
             );
 
             toast.success("Pago registrado exitosamente");
@@ -417,7 +459,11 @@ export function PaymentItemsModal({
         <Modal
             isOpen={isOpen}
             onClose={onClose}
-            title={isAutoRetentionMode ? "Liquidación de Retención" : "Registrar Pago por Items"}
+            title={
+                isAutoRetentionMode
+                    ? "Liquidación de Retención"
+                    : "Registrar Pago por Items"
+            }
             size="xl"
         >
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -455,15 +501,33 @@ export function PaymentItemsModal({
                             <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                             <div className="flex-1">
                                 <h5 className="text-sm font-semibold text-blue-900 mb-1">
-                                    Liquidación Automática de Retención Detectada
+                                    Liquidación Automática de Retención
+                                    Detectada
                                 </h5>
                                 <p className="text-xs text-blue-700 leading-relaxed mb-2">
-                                    El sistema ha detectado que el saldo pendiente coincide con el monto de la retención.
+                                    El sistema ha detectado que el saldo
+                                    pendiente coincide con el monto de la
+                                    retención.
                                 </p>
                                 <ul className="text-xs text-blue-700 list-disc pl-4 space-y-1">
-                                    <li>Se ha seleccionado automáticamente el método <strong>Comprobante de Retención</strong>.</li>
-                                    <li>El pago se ha distribuido proporcionalmente entre los <strong>ítems gravados</strong> para cerrarlos.</li>
-                                    <li>Solo necesita ingresar los datos del comprobante F-910.</li>
+                                    <li>
+                                        Se ha seleccionado automáticamente el
+                                        método{" "}
+                                        <strong>
+                                            Comprobante de Retención
+                                        </strong>
+                                        .
+                                    </li>
+                                    <li>
+                                        El pago se ha distribuido
+                                        proporcionalmente entre los{" "}
+                                        <strong>ítems gravados</strong> para
+                                        cerrarlos.
+                                    </li>
+                                    <li>
+                                        Solo necesita ingresar los datos del
+                                        comprobante F-910.
+                                    </li>
                                 </ul>
                             </div>
                         </div>
@@ -471,201 +535,212 @@ export function PaymentItemsModal({
                 )}
 
                 {/* Items de la factura - Ocultos en modo retención automático para simplificar */}
-                {!isAutoRetentionMode && paymentForm.payment_method !== "retencion" && (
-                <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-slate-500" />
-                            Asignar Pago por Item
-                        </h4>
-                        <div className="flex gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleClearAll}
-                                className="text-xs"
-                            >
-                                Limpiar
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                onClick={handleFillAll}
-                                className="text-xs"
-                            >
-                                Pago Completo
-                            </Button>
-                        </div>
-                    </div>
-
-                    {isLoading ? (
-                        <div className="text-center py-8 text-slate-500">
-                            Cargando items...
-                        </div>
-                    ) : paymentItems.length === 0 ? (
-                        <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
-                            <Package className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-                            <p>No hay items en esta factura</p>
-                        </div>
-                    ) : (
-                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                            {/* Header de la tabla */}
-                            <div className="bg-slate-50 px-4 py-2.5 grid grid-cols-12 gap-2 text-xs font-medium text-slate-600 uppercase tracking-wide border-b border-slate-200">
-                                <div className="col-span-1"></div>
-                                <div className="col-span-4">Item</div>
-                                <div className="col-span-2 text-right">
-                                    Total
-                                </div>
-                                <div className="col-span-2 text-right">
-                                    Pagado
-                                </div>
-                                <div className="col-span-3 text-right">
-                                    Asignar
+                {!isAutoRetentionMode &&
+                    paymentForm.payment_method !== "retencion" && (
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-slate-500" />
+                                    Asignar Pago por Item
+                                </h4>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleClearAll}
+                                        className="text-xs"
+                                    >
+                                        Limpiar
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="default"
+                                        size="sm"
+                                        onClick={handleFillAll}
+                                        className="text-xs"
+                                    >
+                                        Pago Completo
+                                    </Button>
                                 </div>
                             </div>
 
-                            {/* Lista de items */}
-                            <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                                {paymentItems.map((item) => {
-                                    const pending =
-                                        parseFloat(item.pending) || 0;
-                                    const isPaid = pending <= 0;
-                                    const allocation =
-                                        itemAllocations[item.id] || "";
-                                    const allocationNum =
-                                        parseFloat(allocation) || 0;
-
-                                    return (
-                                        <div
-                                            key={item.id}
-                                            className={`px-4 py-3 grid grid-cols-12 gap-2 items-center ${
-                                                isPaid
-                                                    ? "bg-emerald-50/50"
-                                                    : "hover:bg-slate-50"
-                                            } transition-colors`}
-                                        >
-                                            {/* Icono tipo */}
-                                            <div className="col-span-1">
-                                                {item.item_type ===
-                                                "service" ? (
-                                                    <div className="w-8 h-8 rounded border border-slate-200 bg-white flex items-center justify-center">
-                                                        <Package className="w-4 h-4 text-slate-600" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded border border-slate-200 bg-white flex items-center justify-center">
-                                                        <Truck className="w-4 h-4 text-slate-600" />
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Nombre y descripción */}
-                                            <div className="col-span-4">
-                                                <p className="text-sm font-medium text-slate-700 truncate">
-                                                    {item.name}
-                                                </p>
-                                                <p className="text-xs text-slate-500 truncate">
-                                                    {item.description}
-                                                </p>
-                                                <Badge
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="mt-1"
-                                                >
-                                                    {item.item_type ===
-                                                    "service"
-                                                        ? "Servicio"
-                                                        : "Gasto"}
-                                                </Badge>
-                                            </div>
-
-                                            {/* Total */}
-                                            <div className="col-span-2 text-right">
-                                                <p className="text-sm font-semibold text-slate-700 tabular-nums">
-                                                    {formatCurrency(item.total)}
-                                                </p>
-                                            </div>
-
-                                            {/* Pagado */}
-                                            <div className="col-span-2 text-right">
-                                                <p className="text-sm text-slate-500 tabular-nums">
-                                                    {formatCurrency(item.paid)}
-                                                </p>
-                                            </div>
-
-                                            {/* Input asignación */}
-                                            <div className="col-span-3">
-                                                {isPaid ? (
-                                                    <div className="flex items-center justify-end gap-1.5 text-slate-600">
-                                                        <CheckCircle2 className="w-4 h-4" />
-                                                        <span className="text-xs font-medium">
-                                                            Pagado
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="relative">
-                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                                                            $
-                                                        </span>
-                                                        <Input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            max={pending}
-                                                            value={allocation}
-                                                            onChange={(e) =>
-                                                                handleAllocationChange(
-                                                                    item.id,
-                                                                    e.target
-                                                                        .value
-                                                                )
-                                                            }
-                                                            className={`pl-5 text-right text-sm h-9 font-mono ${
-                                                                allocationNum >
-                                                                0
-                                                                    ? "border-slate-400 bg-slate-50"
-                                                                    : ""
-                                                            }`}
-                                                            placeholder={`Max: ${pending.toFixed(
-                                                                2
-                                                            )}`}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
+                            {isLoading ? (
+                                <div className="text-center py-8 text-slate-500">
+                                    Cargando items...
+                                </div>
+                            ) : paymentItems.length === 0 ? (
+                                <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
+                                    <Package className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                                    <p>No hay items en esta factura</p>
+                                </div>
+                            ) : (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    {/* Header de la tabla */}
+                                    <div className="bg-slate-50 px-4 py-2.5 grid grid-cols-12 gap-2 text-xs font-medium text-slate-600 uppercase tracking-wide border-b border-slate-200">
+                                        <div className="col-span-1"></div>
+                                        <div className="col-span-4">Item</div>
+                                        <div className="col-span-2 text-right">
+                                            Total
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                        <div className="col-span-2 text-right">
+                                            Pagado
+                                        </div>
+                                        <div className="col-span-3 text-right">
+                                            Asignar
+                                        </div>
+                                    </div>
 
-                            {/* Footer con totales */}
-                            <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 grid grid-cols-12 gap-2 items-center">
-                                <div className="col-span-7">
-                                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">
-                                        Total Asignado
-                                    </p>
-                                </div>
-                                <div className="col-span-5 text-right">
-                                    <p className="text-xl font-bold tabular-nums text-slate-900">
-                                        {formatCurrency(totalAllocated)}
-                                    </p>
-                                    {totalAllocated > 0 &&
-                                        totalAllocated < totalPending && (
-                                            <p className="text-xs text-slate-500">
-                                                Pendiente:{" "}
-                                                {formatCurrency(
-                                                    totalPending -
-                                                        totalAllocated
-                                                )}
+                                    {/* Lista de items */}
+                                    <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                                        {paymentItems.map((item) => {
+                                            const pending = round2(
+                                                parseFloat(item.pending) || 0,
+                                            );
+                                            const isPaid = pending <= 0;
+                                            const allocation =
+                                                itemAllocations[item.id] || "";
+                                            const allocationNum =
+                                                parseFloat(allocation) || 0;
+
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    className={`px-4 py-3 grid grid-cols-12 gap-2 items-center ${
+                                                        isPaid
+                                                            ? "bg-emerald-50/50"
+                                                            : "hover:bg-slate-50"
+                                                    } transition-colors`}
+                                                >
+                                                    {/* Icono tipo */}
+                                                    <div className="col-span-1">
+                                                        {item.item_type ===
+                                                        "service" ? (
+                                                            <div className="w-8 h-8 rounded border border-slate-200 bg-white flex items-center justify-center">
+                                                                <Package className="w-4 h-4 text-slate-600" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded border border-slate-200 bg-white flex items-center justify-center">
+                                                                <Truck className="w-4 h-4 text-slate-600" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Nombre y descripción */}
+                                                    <div className="col-span-4">
+                                                        <p className="text-sm font-medium text-slate-700 truncate">
+                                                            {item.name}
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 truncate">
+                                                            {item.description}
+                                                        </p>
+                                                        <Badge
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="mt-1"
+                                                        >
+                                                            {item.item_type ===
+                                                            "service"
+                                                                ? "Servicio"
+                                                                : "Gasto"}
+                                                        </Badge>
+                                                    </div>
+
+                                                    {/* Total */}
+                                                    <div className="col-span-2 text-right">
+                                                        <p className="text-sm font-semibold text-slate-700 tabular-nums">
+                                                            {formatCurrency(
+                                                                item.total,
+                                                            )}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Pagado */}
+                                                    <div className="col-span-2 text-right">
+                                                        <p className="text-sm text-slate-500 tabular-nums">
+                                                            {formatCurrency(
+                                                                item.paid,
+                                                            )}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Input asignación */}
+                                                    <div className="col-span-3">
+                                                        {isPaid ? (
+                                                            <div className="flex items-center justify-end gap-1.5 text-slate-600">
+                                                                <CheckCircle2 className="w-4 h-4" />
+                                                                <span className="text-xs font-medium">
+                                                                    Pagado
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="relative">
+                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                                                                    $
+                                                                </span>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={
+                                                                        allocation
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        handleAllocationChange(
+                                                                            item.id,
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                    className={`pl-5 text-right text-sm h-9 font-mono ${
+                                                                        allocationNum >
+                                                                        0
+                                                                            ? "border-slate-400 bg-slate-50"
+                                                                            : ""
+                                                                    }`}
+                                                                    placeholder={`Max: ${pending.toFixed(
+                                                                        2,
+                                                                    )}`}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Footer con totales */}
+                                    <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 grid grid-cols-12 gap-2 items-center">
+                                        <div className="col-span-7">
+                                            <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+                                                Total Asignado
                                             </p>
-                                        )}
+                                        </div>
+                                        <div className="col-span-5 text-right">
+                                            <p className="text-xl font-bold tabular-nums text-slate-900">
+                                                {formatCurrency(totalAllocated)}
+                                            </p>
+                                            {totalAllocated > 0 &&
+                                                totalAllocated <
+                                                    totalPending && (
+                                                    <p className="text-xs text-slate-500">
+                                                        Pendiente:{" "}
+                                                        {formatCurrency(
+                                                            totalPending -
+                                                                totalAllocated,
+                                                        )}
+                                                    </p>
+                                                )}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     )}
-                </div>
-                )}
 
                 {/* Aviso si ya existe comprobante de retención */}
                 {invoice?.retencion > 0 && hasRetentionPayment() && (
@@ -677,8 +752,10 @@ export function PaymentItemsModal({
                                     Comprobante de Retención Ya Registrado
                                 </h5>
                                 <p className="text-xs text-emerald-700 leading-relaxed">
-                                    Esta factura ya tiene un comprobante F-910 registrado. 
-                                    No se pueden registrar múltiples comprobantes de retención para la misma factura.
+                                    Esta factura ya tiene un comprobante F-910
+                                    registrado. No se pueden registrar múltiples
+                                    comprobantes de retención para la misma
+                                    factura.
                                 </p>
                             </div>
                         </div>
@@ -686,23 +763,26 @@ export function PaymentItemsModal({
                 )}
 
                 {/* Aviso para pago por retención (Solo si NO es automático para evitar redundancia) */}
-                {!isAutoRetentionMode && paymentForm.payment_method === "retencion" && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                                <h5 className="text-sm font-semibold text-blue-900 mb-1">
-                                    Pago por Retención (1%)
-                                </h5>
-                                <p className="text-xs text-blue-700 leading-relaxed">
-                                    El monto de retención es fijo y corresponde al 1% sobre
-                                    la base gravada de servicios. Este pago se registra
-                                    mediante el comprobante F-910 emitido por el cliente.
-                                </p>
+                {!isAutoRetentionMode &&
+                    paymentForm.payment_method === "retencion" && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                    <h5 className="text-sm font-semibold text-blue-900 mb-1">
+                                        Pago por Retención (1%)
+                                    </h5>
+                                    <p className="text-xs text-blue-700 leading-relaxed">
+                                        El monto de retención es fijo y
+                                        corresponde al 1% sobre la base gravada
+                                        de servicios. Este pago se registra
+                                        mediante el comprobante F-910 emitido
+                                        por el cliente.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
                 {/* Detalle del pago */}
                 <div>
@@ -737,8 +817,8 @@ export function PaymentItemsModal({
                                 />
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                                {paymentForm.payment_method === "retencion" 
-                                    ? "Monto fijo de retención (1%)" 
+                                {paymentForm.payment_method === "retencion"
+                                    ? "Monto fijo de retención (1%)"
                                     : "Calculado automáticamente de las asignaciones"}
                             </p>
                         </div>
@@ -791,10 +871,15 @@ export function PaymentItemsModal({
                                     },
                                     // Solo mostrar retención si la factura tiene retención > 0
                                     // Y no existe ya un comprobante registrado
-                                    ...(invoice?.retencion > 0 && !hasRetentionPayment() ? [{
-                                        id: "retencion",
-                                        name: "Comprobante de Retención F-910",
-                                    }] : []),
+                                    ...(invoice?.retencion > 0 &&
+                                    !hasRetentionPayment()
+                                        ? [
+                                              {
+                                                  id: "retencion",
+                                                  name: "Comprobante de Retención F-910",
+                                              },
+                                          ]
+                                        : []),
                                 ]}
                                 getOptionLabel={(opt) => opt.name}
                                 getOptionValue={(opt) => opt.id}
@@ -812,16 +897,22 @@ export function PaymentItemsModal({
                                         <span className="text-red-500">*</span>
                                     </Label>
                                     <Input
-                                        value={paymentForm.numero_comprobante_retencion}
+                                        value={
+                                            paymentForm.numero_comprobante_retencion
+                                        }
                                         onChange={(e) =>
                                             setPaymentForm({
                                                 ...paymentForm,
-                                                numero_comprobante_retencion: e.target.value,
+                                                numero_comprobante_retencion:
+                                                    e.target.value,
                                             })
                                         }
                                         placeholder="Ej: 2026-001234"
                                         className="font-mono"
-                                        required={paymentForm.payment_method === "retencion"}
+                                        required={
+                                            paymentForm.payment_method ===
+                                            "retencion"
+                                        }
                                     />
                                 </div>
                                 <div>
@@ -829,11 +920,14 @@ export function PaymentItemsModal({
                                         Código de Generación
                                     </Label>
                                     <Input
-                                        value={paymentForm.retention_generation_code}
+                                        value={
+                                            paymentForm.retention_generation_code
+                                        }
                                         onChange={(e) =>
                                             setPaymentForm({
                                                 ...paymentForm,
-                                                retention_generation_code: e.target.value,
+                                                retention_generation_code:
+                                                    e.target.value,
                                             })
                                         }
                                         placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
@@ -845,11 +939,14 @@ export function PaymentItemsModal({
                                         Sello de Recepción
                                     </Label>
                                     <Input
-                                        value={paymentForm.retention_reception_stamp}
+                                        value={
+                                            paymentForm.retention_reception_stamp
+                                        }
                                         onChange={(e) =>
                                             setPaymentForm({
                                                 ...paymentForm,
-                                                retention_reception_stamp: e.target.value,
+                                                retention_reception_stamp:
+                                                    e.target.value,
                                             })
                                         }
                                         placeholder="Sello de Hacienda..."
@@ -881,13 +978,13 @@ export function PaymentItemsModal({
 
                         {/* Banco (si aplica - no para retenciones) */}
                         {["transferencia", "cheque", "deposito"].includes(
-                            paymentForm.payment_method
+                            paymentForm.payment_method,
                         ) && (
                             <div>
                                 <Label className="mb-1.5 block text-sm">
                                     Banco{" "}
                                     {["transferencia", "cheque"].includes(
-                                        paymentForm.payment_method
+                                        paymentForm.payment_method,
                                     )
                                         ? "*"
                                         : ""}
@@ -980,8 +1077,8 @@ export function PaymentItemsModal({
                                         Math.max(
                                             0,
                                             parseFloat(invoice.balance) -
-                                                totalAllocated
-                                        )
+                                                totalAllocated,
+                                        ),
                                     )}
                                 </p>
                             </div>
@@ -996,7 +1093,11 @@ export function PaymentItemsModal({
                     <Button
                         type="submit"
                         variant="default"
-                        disabled={isSubmitting || (paymentForm.payment_method !== 'retencion' && totalAllocated <= 0)}
+                        disabled={
+                            isSubmitting ||
+                            (paymentForm.payment_method !== "retencion" &&
+                                totalAllocated <= 0)
+                        }
                         className="min-w-[160px]"
                     >
                         {isSubmitting ? "Procesando..." : "Confirmar Pago"}
