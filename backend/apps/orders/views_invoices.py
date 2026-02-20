@@ -1588,6 +1588,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             if payment_method == 'retencion':
                 item_allocations_data = []
 
+            # Importar ROUND_HALF_UP para validaciones de precisión decimal
+            from decimal import ROUND_HALF_UP
+
             # Validar que la suma de asignaciones sea igual al monto total (si hay asignaciones)
             if item_allocations_data:
                 total_allocated = sum(
@@ -1618,11 +1621,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                                 payment__is_deleted=False,
                                 is_deleted=False
                             ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-                            item_pending = charge.total - item_paid
-                            if alloc_amount > item_pending:
+                            item_pending = (charge.total - item_paid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            alloc_rounded = alloc_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            if alloc_rounded > item_pending:
                                 raise ValueError(
                                     f'El monto asignado al servicio "{charge.service.name}" '
-                                    f'(${alloc_amount}) excede su pendiente (${item_pending})'
+                                    f'(${alloc_rounded}) excede su pendiente (${item_pending})'
                                 )
                         except OrderCharge.DoesNotExist:
                             raise ValueError(f'Servicio #{item_id} no encontrado en esta factura')
@@ -1637,11 +1641,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                                 is_deleted=False
                             ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
                             item_total = expense.get_customer_total()
-                            item_pending = item_total - item_paid
-                            if alloc_amount > item_pending:
+                            item_pending = (item_total - item_paid).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            alloc_rounded = alloc_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            if alloc_rounded > item_pending:
                                 raise ValueError(
                                     f'El monto asignado al gasto "{expense.description[:30]}" '
-                                    f'(${alloc_amount}) excede su pendiente (${item_pending})'
+                                    f'(${alloc_rounded}) excede su pendiente (${item_pending})'
                                 )
                         except Transfer.DoesNotExist:
                             raise ValueError(f'Gasto #{item_id} no encontrado en esta factura')

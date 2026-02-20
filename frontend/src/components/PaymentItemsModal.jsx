@@ -445,9 +445,12 @@ export function PaymentItemsModal({
             onPaymentSuccess?.();
             onClose();
         } catch (error) {
-            const errorMsg =
-                error.response?.data?.error || "Error al registrar el pago";
-            toast.error(errorMsg);
+            // El interceptor de axios ya muestra el toast automáticamente,
+            // solo loguear aquí para evitar notificación duplicada
+            console.error(
+                "Error al registrar pago:",
+                error.response?.data || error.message,
+            );
         } finally {
             setIsSubmitting(false);
         }
