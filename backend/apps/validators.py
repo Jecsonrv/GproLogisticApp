@@ -47,16 +47,22 @@ def validate_file_mime_type(value):
     allowed_mimes = ALLOWED_MIME_TYPES.get(ext, [])
 
     # Leer los primeros bytes para detectar el tipo real
+    # La especificación PDF permite que la cabecera %PDF aparezca
+    # dentro de los primeros 1024 bytes del archivo.
     value.seek(0)
-    header = value.read(16)
+    header = value.read(1024)
     value.seek(0)  # Resetear el cursor del archivo
 
     # Detectar el tipo real basado en magic bytes
     detected_mime = None
     for magic_header, mime_type in MAGIC_BYTES.items():
-        if header.startswith(magic_header):
+        if header[:16].startswith(magic_header):
             detected_mime = mime_type
             break
+
+    # Para PDFs: buscar la firma %PDF dentro de los primeros 1024 bytes
+    if detected_mime is None and b'%PDF' in header:
+        detected_mime = 'application/pdf'
 
     if detected_mime is None:
         raise ValidationError(
