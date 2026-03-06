@@ -7,7 +7,7 @@ from django.db.models import Q, Sum
 from django.db import transaction
 from django.http import HttpResponse, FileResponse
 from django_filters import rest_framework as filters
-from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication
+from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication, ProviderInvoicePayment
 from .serializers import (
     TransferSerializer, TransferListSerializer, TransferPaymentSerializer,
     BatchPaymentSerializer, BatchPaymentDetailSerializer,
@@ -939,17 +939,7 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
                     transfer_payment.save()
                     payments_created.append(transfer_payment)
 
-                # 3. Registrar documentos en Service Orders afectadas
-                if batch_payment.proof_file and service_orders_affected:
-                    from apps.orders.models import OrderDocument
-                    for service_order in service_orders_affected:
-                        OrderDocument.objects.create(
-                            order=service_order,
-                            document_type='factura_costo',
-                            file=batch_payment.proof_file,
-                            description=f"Comprobante Pago Lote {batch_payment.batch_number} - {batch_payment.provider.name}",
-                            uploaded_by=request.user
-                        )
+                # 3. Documentos en Service Orders: ya gestionado por signal sync_batch_payment_documents
 
                 serializer = BatchPaymentDetailSerializer(batch_payment)
                 return Response({
@@ -1436,6 +1426,23 @@ class ProviderCreditNoteViewSet(viewsets.ModelViewSet):
         })
 
 
+class ProviderInvoicePaymentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar pagos individuales a facturas de proveedor (costos directos).
+    Permite eliminar pagos individuales.
+    """
+    queryset = ProviderInvoicePayment.objects.select_related(
+        'provider_invoice', 'created_by'
+    ).all()
+    permission_classes = [IsOperativo]
+    http_method_names = ['get', 'delete']
+
+    def destroy(self, request, *args, **kwargs):
+        payment = self.get_object()
+        payment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class TransferPaymentViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestionar pagos individuales a transferencias/gastos.
@@ -1735,19 +1742,22 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Actualizar la factura de proveedor
-        provider_invoice.paid_amount += amount
+        # Crear registro de pago individual
+        payment = ProviderInvoicePayment(
+            provider_invoice=provider_invoice,
+            amount=amount,
+            payment_date=request.data.get('payment_date'),
+            payment_method=request.data.get('payment_method', 'transferencia'),
+            reference_number=request.data.get('reference', ''),
+            notes=request.data.get('notes', ''),
+            created_by=request.user
+        )
         
-        # Actualizar fecha de pago si se proporciona
-        payment_date = request.data.get('payment_date')
-        if payment_date:
-            from datetime import datetime
-            try:
-                provider_invoice.payment_date = datetime.strptime(payment_date, '%Y-%m-%d').date()
-            except ValueError:
-                pass  # Ignorar fecha inválida
+        # Guardar archivo de comprobante
+        if 'proof_file' in request.FILES:
+            payment.proof_file = request.FILES['proof_file']
         
-        provider_invoice.save()
+        payment.save()  # El modelo actualiza paid_amount automáticamente
         
         # Refrescar para obtener el status actualizado
         provider_invoice.refresh_from_db()
@@ -1755,8 +1765,12 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
         return Response({
             'message': 'Pago registrado exitosamente',
             'payment': {
-                'amount': str(amount),
-                'payment_date': payment_date
+                'id': payment.id,
+                'amount': str(payment.amount),
+                'payment_date': payment.payment_date,
+                'payment_method': payment.payment_method,
+                'reference_number': payment.reference_number,
+                'proof_file': payment.proof_file.url if payment.proof_file else None
             },
             'provider_invoice': {
                 'id': provider_invoice.id,
@@ -1774,6 +1788,25 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
         """Obtener detalle de la factura de proveedor (formato compatible con Transfer)"""
         provider_invoice = self.get_object()
         balance = float(provider_invoice.total_amount) - float(provider_invoice.paid_amount)
+        
+        # Obtener historial de pagos
+        payments = ProviderInvoicePayment.objects.filter(
+            provider_invoice=provider_invoice,
+            is_deleted=False
+        ).order_by('-payment_date')
+        
+        payments_data = [{
+            'id': p.id,
+            'amount': str(p.amount),
+            'payment_date': p.payment_date,
+            'payment_method': p.payment_method,
+            'payment_method_display': p.get_payment_method_display(),
+            'reference_number': p.reference_number,
+            'notes': p.notes,
+            'proof_file': p.proof_file.url if p.proof_file else None,
+            'created_by': p.created_by.username if p.created_by else None,
+            'created_at': p.created_at
+        } for p in payments]
         
         return Response({
             'id': provider_invoice.id,
@@ -1800,7 +1833,9 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
             'invoice_file': provider_invoice.invoice_file.url if provider_invoice.invoice_file else None,
             'generation_code': provider_invoice.generation_code,
             'reception_stamp': provider_invoice.reception_stamp,
-            'payments': []  # ProviderInvoice no tiene historial de pagos separado
+            'payments': payments_data,
+            'credit_notes': [],
+            'total_payments_count': len(payments_data),
         })
 
 

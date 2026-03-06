@@ -400,6 +400,88 @@ class DirectCostAllocation(SoftDeleteModel):
         return True, None
 
 
+class ProviderInvoicePayment(SoftDeleteModel):
+    """
+    Pagos parciales realizados a una factura de proveedor (costo directo).
+    Almacena cada pago individual con su comprobante.
+    """
+    provider_invoice = models.ForeignKey(
+        ProviderInvoice,
+        on_delete=models.CASCADE,
+        related_name='invoice_payments',
+        verbose_name="Factura de Proveedor"
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Monto Pagado"
+    )
+    payment_date = models.DateField(default=timezone.now, verbose_name="Fecha de Pago")
+    payment_method = models.CharField(
+        max_length=20,
+        choices=(
+            ('efectivo', 'Efectivo'),
+            ('transferencia', 'Transferencia Bancaria'),
+            ('cheque', 'Cheque'),
+            ('tarjeta', 'Tarjeta'),
+        ),
+        default='transferencia',
+        verbose_name="Método de Pago"
+    )
+    reference_number = models.CharField(max_length=100, blank=True, verbose_name="Referencia")
+    notes = models.TextField(blank=True, verbose_name="Notas")
+    proof_file = models.FileField(
+        upload_to='provider_invoices/payments/',
+        null=True,
+        blank=True,
+        verbose_name="Comprobante de Pago",
+        validators=[validate_document_file]
+    )
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Registrado por"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Pago a Factura de Proveedor"
+        verbose_name_plural = "Pagos a Facturas de Proveedores"
+        ordering = ['-payment_date']
+
+    def __str__(self):
+        return f"Pago ${self.amount} - {self.provider_invoice.invoice_number}"
+
+    def save(self, *args, **kwargs):
+        from django.db import transaction
+        from django.db.models import Sum
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            pi = ProviderInvoice.objects.select_for_update().get(pk=self.provider_invoice_id)
+            total_paid = pi.invoice_payments.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+            pi.paid_amount = total_paid
+            pi.save()
+
+    def delete(self, *args, **kwargs):
+        from django.db import transaction
+        from django.db.models import Sum
+
+        with transaction.atomic():
+            super().delete(*args, **kwargs)
+            pi = ProviderInvoice.objects.select_for_update().get(pk=self.provider_invoice_id)
+            total_paid = pi.invoice_payments.filter(is_deleted=False).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
+            pi.paid_amount = total_paid
+            pi.save()
+
+
 class Transfer(SoftDeleteModel):
     """
     Pagos a Proveedores - Registro de gastos y costos (Calculadora de Gastos Reembolsables)

@@ -68,15 +68,19 @@ def sync_transfer_document(sender, instance, created, **kwargs):
         return
     
     try:
+        # Usar clave exacta con delimitadores para evitar coincidencias parciales
+        # Ej: [Transfer:42] no matchea con [Transfer:421]
+        description_key = f"[Transfer:{instance.id}]"
+        
         # Buscar si ya existe un documento vinculado a este transfer
         existing_doc = OrderDocument.objects.filter(
             order=instance.service_order,
-            description__contains=f"Transfer-{instance.id}"
+            description__contains=description_key
         ).first()
         
         # Generar descripción descriptiva
         provider_name = instance.provider.name if instance.provider else instance.beneficiary_name or "Proveedor"
-        description = f"Comprobante - {provider_name} - ${instance.amount} - Transfer-{instance.id}"
+        description = f"Comprobante - {provider_name} - ${instance.amount} {description_key}"
         if instance.invoice_number:
             description = f"{instance.invoice_number} - {description}"
         
@@ -116,10 +120,11 @@ def delete_transfer_document(sender, instance, **kwargs):
         return
     
     try:
-        # Buscar y eliminar el documento asociado
+        # Buscar y eliminar el documento asociado usando clave exacta
+        description_key = f"[Transfer:{instance.id}]"
         OrderDocument.objects.filter(
             order=instance.service_order,
-            description__contains=f"Transfer-{instance.id}"
+            description__contains=description_key
         ).delete()
     except Exception as e:
         logger.error(f"Error al eliminar documento del transfer: {e}")
@@ -138,14 +143,17 @@ def sync_batch_payment_documents(sender, instance, created, **kwargs):
         # Obtener todas las OS únicas afectadas por este pago agrupado
         service_orders = instance.get_service_orders()
 
+        # Usar clave exacta con delimitadores
+        description_key = f"[Lote:{instance.batch_number}]"
+
         for service_order in service_orders:
             # Buscar si ya existe un documento para este lote
             existing_doc = OrderDocument.objects.filter(
                 order=service_order,
-                description__contains=f"Lote {instance.batch_number}"
+                description__contains=description_key
             ).first()
 
-            description = f"Comprobante Pago Lote {instance.batch_number} - {instance.provider.name} - ${instance.total_amount}"
+            description = f"Comprobante Pago {description_key} - {instance.provider.name} - ${instance.total_amount}"
 
             if existing_doc:
                 # Actualizar si el archivo cambió
@@ -165,7 +173,7 @@ def sync_batch_payment_documents(sender, instance, created, **kwargs):
                 # Crear nuevo documento
                 OrderDocument.objects.create(
                     order=service_order,
-                    document_type='pago_proveedor',
+                    document_type='factura_costo',
                     file=instance.proof_file,
                     description=description,
                     uploaded_by=instance.created_by
@@ -178,11 +186,12 @@ def sync_batch_payment_documents(sender, instance, created, **kwargs):
 def delete_batch_payment_documents(sender, instance, **kwargs):
     """
     Elimina los OrderDocuments asociados al BatchPayment cuando se elimina.
+    Solo elimina documentos que contengan la clave exacta del lote.
     """
     try:
-        # Eliminar todos los documentos asociados a este lote
+        description_key = f"[Lote:{instance.batch_number}]"
         OrderDocument.objects.filter(
-            description__contains=f"Lote {instance.batch_number}"
+            description__contains=description_key
         ).delete()
     except Exception as e:
         logger.error(f"Error al eliminar documentos del pago agrupado: {e}")
@@ -201,9 +210,9 @@ def sync_credit_note_document(sender, instance, created, **kwargs):
     try:
         service_order = instance.original_transfer.service_order
         
-        # Descripción única para identificar el documento
-        description_key = f"NC-{instance.note_number}"
-        description = f"Nota de Crédito {instance.note_number} - {instance.provider.name} - ${instance.amount}"
+        # Descripción única con delimitadores para evitar coincidencias parciales
+        description_key = f"[NC:{instance.note_number}]"
+        description = f"Nota de Crédito {instance.note_number} - {instance.provider.name} - ${instance.amount} {description_key}"
 
         # Buscar si ya existe
         existing_doc = OrderDocument.objects.filter(
@@ -248,7 +257,7 @@ def delete_credit_note_document(sender, instance, **kwargs):
         return
 
     try:
-        description_key = f"NC-{instance.note_number}"
+        description_key = f"[NC:{instance.note_number}]"
         OrderDocument.objects.filter(
             order=instance.original_transfer.service_order,
             description__contains=description_key
@@ -275,9 +284,9 @@ def sync_application_document(sender, instance, created, **kwargs):
         service_order = instance.transfer.service_order
         credit_note = instance.credit_note
         
-        # Descripción única
-        description_key = f"Aplicación NC-{credit_note.note_number}"
-        description = f"Aplicación NC {credit_note.note_number} a Factura {instance.transfer.invoice_number} - Aplicado: ${instance.amount}"
+        # Descripción única con delimitadores
+        description_key = f"[AppNC:{credit_note.note_number}:{instance.transfer_id}]"
+        description = f"Aplicación NC {credit_note.note_number} a Factura {instance.transfer.invoice_number} - Aplicado: ${instance.amount} {description_key}"
 
         existing_doc = OrderDocument.objects.filter(
             order=service_order,
@@ -292,7 +301,7 @@ def sync_application_document(sender, instance, created, **kwargs):
         else:
              OrderDocument.objects.create(
                 order=service_order,
-                document_type='pago_proveedor', # Clasificado como pago
+                document_type='factura_costo',
                 file=credit_note.pdf_file,
                 description=description,
                 uploaded_by=instance.applied_by
@@ -312,7 +321,7 @@ def delete_application_document(sender, instance, **kwargs):
 
     try:
         credit_note = instance.credit_note
-        description_key = f"Aplicación NC-{credit_note.note_number}"
+        description_key = f"[AppNC:{credit_note.note_number}:{instance.transfer_id}]"
         
         OrderDocument.objects.filter(
             order=instance.transfer.service_order,

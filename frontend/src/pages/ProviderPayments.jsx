@@ -212,7 +212,7 @@ const NCStatusBadge = ({ status }) => {
         <span
             className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm",
-                config.className
+                config.className,
             )}
         >
             {Icon && <Icon className="w-3.5 h-3.5" />}
@@ -231,7 +231,7 @@ const StatusBadge = ({ status }) => {
         <span
             className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm transition-colors",
-                config.className
+                config.className,
             )}
         >
             {Icon && <Icon className={cn("w-3.5 h-3.5", config.iconColor)} />}
@@ -246,7 +246,7 @@ const TypeBadge = ({ type }) => {
         <span
             className={cn(
                 "inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded border",
-                config.className
+                config.className,
             )}
         >
             {config.label}
@@ -338,10 +338,10 @@ function ProviderPayments() {
 
     // Permissions
     const canApprovePayments = usePermissionStore(
-        (state) => state.canApprovePayments
+        (state) => state.canApprovePayments,
     );
     const canRegisterPayments = usePermissionStore(
-        (state) => state.canRegisterPayments
+        (state) => state.canRegisterPayments,
     );
 
     // Search and filters
@@ -392,7 +392,7 @@ function ProviderPayments() {
                     name: `${os.order_number} - ${os.client_name}`,
                 })),
         ],
-        [serviceOrders]
+        [serviceOrders],
     );
 
     const providerOptions = useMemo(
@@ -400,7 +400,7 @@ function ProviderPayments() {
             { id: "", name: "Seleccionar proveedor" },
             ...providers.map((p) => ({ id: String(p.id), name: p.name })),
         ],
-        [providers]
+        [providers],
     );
 
     const filterProviderOptions = useMemo(
@@ -408,7 +408,7 @@ function ProviderPayments() {
             { id: "", name: "Todos" },
             ...providers.map((p) => ({ id: String(p.id), name: p.name })),
         ],
-        [providers]
+        [providers],
     );
 
     useEffect(() => {
@@ -484,7 +484,7 @@ function ProviderPayments() {
     const fetchCreditNotes = async () => {
         try {
             const response = await axios.get(
-                "/transfers/provider-credit-notes/"
+                "/transfers/provider-credit-notes/",
             );
             setCreditNotes(response.data || []);
         } catch {
@@ -525,7 +525,7 @@ function ProviderPayments() {
                 // Mapping for ProviderInvoice
                 formDataToSend.append(
                     "invoice_number",
-                    formData.invoice_number || "S/N"
+                    formData.invoice_number || "S/N",
                 );
                 formDataToSend.append("provider", formData.provider);
                 formDataToSend.append("service_order", formData.service_order);
@@ -534,17 +534,17 @@ function ProviderPayments() {
                 formDataToSend.append(
                     "notes",
                     formData.description +
-                        (formData.notes ? ` - ${formData.notes}` : "")
+                        (formData.notes ? ` - ${formData.notes}` : ""),
                 );
                 if (formData.generation_code)
                     formDataToSend.append(
                         "generation_code",
-                        formData.generation_code
+                        formData.generation_code,
                     );
                 if (formData.reception_stamp)
                     formDataToSend.append(
                         "reception_stamp",
-                        formData.reception_stamp
+                        formData.reception_stamp,
                     );
             } else {
                 // Standard mapping for Transfer
@@ -568,7 +568,7 @@ function ProviderPayments() {
             if (formData.invoice_file instanceof File) {
                 formDataToSend.append(
                     isDirectCostWithOS ? "invoice_file" : "invoice_file",
-                    formData.invoice_file
+                    formData.invoice_file,
                 );
             }
 
@@ -579,7 +579,7 @@ function ProviderPayments() {
             toast.success(
                 isDirectCostWithOS
                     ? "Costo directo registrado exitosamente"
-                    : "Gasto registrado exitosamente"
+                    : "Gasto registrado exitosamente",
             );
             setIsCreateModalOpen(false);
             resetForm();
@@ -609,7 +609,7 @@ function ProviderPayments() {
                 // Mapping for ProviderInvoice update
                 formDataToSend.append(
                     "invoice_number",
-                    formData.invoice_number || "S/N"
+                    formData.invoice_number || "S/N",
                 );
                 formDataToSend.append("provider", formData.provider);
                 formDataToSend.append("total_amount", formData.amount);
@@ -618,12 +618,12 @@ function ProviderPayments() {
                 if (formData.generation_code)
                     formDataToSend.append(
                         "generation_code",
-                        formData.generation_code
+                        formData.generation_code,
                     );
                 if (formData.reception_stamp)
                     formDataToSend.append(
                         "reception_stamp",
-                        formData.reception_stamp
+                        formData.reception_stamp,
                     );
             } else {
                 // Standard mapping for Transfer
@@ -641,7 +641,7 @@ function ProviderPayments() {
             if (formData.invoice_file instanceof File) {
                 formDataToSend.append(
                     isProviderInvoice ? "invoice_file" : "invoice_file",
-                    formData.invoice_file
+                    formData.invoice_file,
                 );
             }
 
@@ -666,21 +666,26 @@ function ProviderPayments() {
         try {
             if (deleteConfirm.type === "credit-note") {
                 await axios.delete(
-                    `/transfers/provider-credit-notes/${deleteConfirm.id}/`
+                    `/transfers/provider-credit-notes/${deleteConfirm.id}/`,
                 );
                 toast.success("Nota de crédito eliminada correctamente");
                 fetchCreditNotes();
-            } else if (deleteConfirm.type === "transfer-payment") {
-                await axios.delete(
-                    `/transfers/transfer-payments/${deleteConfirm.id}/`
-                );
+            } else if (
+                deleteConfirm.type === "transfer-payment" ||
+                deleteConfirm.type === "provider-invoice-payment"
+            ) {
+                const deleteEndpoint =
+                    deleteConfirm.type === "provider-invoice-payment"
+                        ? `/transfers/provider-invoice-payments/${deleteConfirm.id}/`
+                        : `/transfers/transfer-payments/${deleteConfirm.id}/`;
+                await axios.delete(deleteEndpoint);
                 toast.success("Pago eliminado correctamente");
                 fetchPayments();
 
                 // Update selectedPayment state to reflect deletion
                 if (selectedPayment && selectedPayment.payments) {
                     const deletedPayment = selectedPayment.payments.find(
-                        (p) => p.id === deleteConfirm.id
+                        (p) => p.id === deleteConfirm.id,
                     );
                     if (deletedPayment) {
                         const amount = parseFloat(deletedPayment.amount);
@@ -692,7 +697,7 @@ function ProviderPayments() {
                             return {
                                 ...prev,
                                 payments: prev.payments.filter(
-                                    (p) => p.id !== deleteConfirm.id
+                                    (p) => p.id !== deleteConfirm.id,
                                 ),
                                 paid_amount: newPaidAmount,
                                 balance: newBalance,
@@ -700,8 +705,8 @@ function ProviderPayments() {
                                     newPaidAmount <= 0
                                         ? "pendiente"
                                         : newPaidAmount < prev.amount
-                                        ? "parcial"
-                                        : "pagado",
+                                          ? "parcial"
+                                          : "pagado",
                             };
                         });
                     }
@@ -712,7 +717,7 @@ function ProviderPayments() {
                     (p) =>
                         p.id === deleteConfirm.id &&
                         (p.source === deleteConfirm.source ||
-                            !deleteConfirm.source)
+                            !deleteConfirm.source),
                 );
                 const source = payment?.source || "transfer";
 
@@ -772,7 +777,7 @@ function ProviderPayments() {
             const transfers = (response.data || []).filter(
                 (t) =>
                     t.provider === parseInt(providerId) ||
-                    t.provider?.id === parseInt(providerId)
+                    t.provider?.id === parseInt(providerId),
             );
             setProviderTransfers(transfers);
         } catch {
@@ -827,7 +832,7 @@ function ProviderPayments() {
     const handleViewNCDetail = async (nc) => {
         try {
             const response = await axios.get(
-                `/transfers/provider-credit-notes/${nc.id}/`
+                `/transfers/provider-credit-notes/${nc.id}/`,
             );
             setSelectedNC(response.data);
             setIsNCDetailModalOpen(true);
@@ -842,7 +847,7 @@ function ProviderPayments() {
                 `/transfers/provider-credit-notes/pending_for_provider/`,
                 {
                     params: { provider_id: providerId },
-                }
+                },
             );
             setPendingTransfers(response.data.pending_transfers || []);
         } catch {
@@ -882,7 +887,7 @@ function ProviderPayments() {
                 },
                 {
                     _skipErrorToast: true,
-                }
+                },
             );
 
             toast.success("Nota de crédito aplicada correctamente");
@@ -905,7 +910,7 @@ function ProviderPayments() {
                         <p className="font-semibold">{errorMsg}</p>
                         <p className="text-sm opacity-90 mt-1">{errorDetail}</p>
                     </div>,
-                    { duration: 5000 }
+                    { duration: 5000 },
                 );
             } else {
                 toast.error(errorMsg);
@@ -927,7 +932,7 @@ function ProviderPayments() {
                 },
                 {
                     _skipErrorToast: true,
-                }
+                },
             );
 
             toast.success("Nota de crédito anulada correctamente");
@@ -979,7 +984,7 @@ function ProviderPayments() {
             if (payFormData.payment_method)
                 formDataToSend.append(
                     "payment_method",
-                    payFormData.payment_method
+                    payFormData.payment_method,
                 );
             if (payFormData.bank)
                 formDataToSend.append("bank", payFormData.bank);
@@ -1019,7 +1024,7 @@ function ProviderPayments() {
             ) {
                 const firstError = Object.values(errorData)[0];
                 toast.error(
-                    Array.isArray(firstError) ? firstError[0] : errorMsg
+                    Array.isArray(firstError) ? firstError[0] : errorMsg,
                 );
             } else {
                 toast.error(errorMsg);
@@ -1036,7 +1041,7 @@ function ProviderPayments() {
             const os = serviceOrders.find((o) => o.id === Number(osId));
             if (os && os.status === "cerrada") {
                 toast.error(
-                    "No se puede editar: la orden de servicio está cerrada"
+                    "No se puede editar: la orden de servicio está cerrada",
                 );
                 return;
             }
@@ -1047,21 +1052,21 @@ function ProviderPayments() {
             service_order: payment.service_order?.id
                 ? String(payment.service_order?.id)
                 : payment.service_order
-                ? String(payment.service_order)
-                : "",
+                  ? String(payment.service_order)
+                  : "",
             transfer_type: payment.transfer_type || "costos",
             provider: payment.provider?.id
                 ? String(payment.provider?.id)
                 : payment.provider
-                ? String(payment.provider)
-                : "",
+                  ? String(payment.provider)
+                  : "",
             description: payment.description || "",
             amount: payment.amount ? String(payment.amount) : "",
             bank: payment.bank?.id
                 ? String(payment.bank?.id)
                 : payment.bank
-                ? String(payment.bank)
-                : "",
+                  ? String(payment.bank)
+                  : "",
             payment_method: payment.payment_method || "transferencia",
             invoice_number: payment.invoice_number || "",
             ccf: payment.ccf || "",
@@ -1125,7 +1130,7 @@ function ProviderPayments() {
             setSelectedPayment((prev) =>
                 prev && prev.id === approveConfirm.id
                     ? { ...prev, status: "aprobado" }
-                    : prev
+                    : prev,
             );
         } catch {
             // El interceptor de axios ya muestra el toast de error
@@ -1153,7 +1158,7 @@ function ProviderPayments() {
                 {
                     responseType: "blob",
                     params: params,
-                }
+                },
             );
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -1277,7 +1282,7 @@ function ProviderPayments() {
     const kpis = useMemo(() => {
         const total = payments.reduce(
             (sum, p) => sum + parseFloat(p.amount || 0),
-            0
+            0,
         );
         const pendiente = payments
             .filter((p) => p.status === "pendiente")
@@ -1326,7 +1331,7 @@ function ProviderPayments() {
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(
-                                    `/service-orders/${row.service_order}`
+                                    `/service-orders/${row.service_order}`,
                                 );
                             }}
                             className="font-mono text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit"
@@ -1471,7 +1476,7 @@ function ProviderPayments() {
                                     <Banknote className="w-4 h-4" />
                                 </button>
                             ) : !isProviderInvoice &&
-                                      row.status === "pendiente" ? (
+                              row.status === "pendiente" ? (
                                 <span
                                     className="p-1.5 text-slate-300 cursor-not-allowed"
                                     title="Requiere Aprobación"
@@ -1603,7 +1608,7 @@ function ProviderPayments() {
                             "font-semibold tabular-nums text-sm",
                             parseFloat(row.applied_amount) > 0
                                 ? "text-slate-700"
-                                : "text-slate-300"
+                                : "text-slate-300",
                         )}
                     >
                         {parseFloat(row.applied_amount) > 0
@@ -1626,7 +1631,7 @@ function ProviderPayments() {
                             "font-bold tabular-nums text-sm",
                             parseFloat(row.available_amount) > 0
                                 ? "text-slate-900"
-                                : "text-slate-400"
+                                : "text-slate-400",
                         )}
                     >
                         {formatCurrency(row.available_amount)}
@@ -2026,7 +2031,7 @@ function ProviderPayments() {
                                             "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
                                             activeTab === "gastos"
                                                 ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50",
                                         )}
                                     >
                                         Gastos
@@ -2037,7 +2042,7 @@ function ProviderPayments() {
                                             "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
                                             activeTab === "nc"
                                                 ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50",
                                         )}
                                     >
                                         N. Crédito
@@ -2074,7 +2079,7 @@ function ProviderPayments() {
                                             className={cn(
                                                 "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
                                                 isFiltersOpen &&
-                                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50",
                                             )}
                                         >
                                             <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
@@ -2213,7 +2218,7 @@ function ProviderPayments() {
                         {activeTab === "gastos" ? (
                             <DataTable
                                 key={`gastos-${searchQuery}-${JSON.stringify(
-                                    filters
+                                    filters,
                                 )}`}
                                 data={filteredPayments}
                                 columns={columns}
@@ -2225,7 +2230,7 @@ function ProviderPayments() {
                         ) : (
                             <DataTable
                                 key={`nc-${searchQuery}-${JSON.stringify(
-                                    filters
+                                    filters,
                                 )}`}
                                 data={creditNotes}
                                 columns={ncColumns}
@@ -2330,7 +2335,7 @@ function ProviderPayments() {
                                                         <p className="text-sm font-bold text-blue-900 tabular-nums">
                                                             {formatCurrency(
                                                                 selectedPayment.paid_amount ||
-                                                                    0
+                                                                    0,
                                                             )}
                                                         </p>
                                                     </div>
@@ -2341,7 +2346,7 @@ function ProviderPayments() {
                                                         <p className="text-sm font-bold text-blue-900 tabular-nums">
                                                             {formatCurrency(
                                                                 selectedPayment.balance ||
-                                                                    0
+                                                                    0,
                                                             )}
                                                         </p>
                                                     </div>
@@ -2604,8 +2609,8 @@ function ProviderPayments() {
                                     {isSubmitting
                                         ? "Procesando..."
                                         : selectedPayment
-                                        ? "Actualizar Movimiento"
-                                        : "Registrar Movimiento"}
+                                          ? "Actualizar Movimiento"
+                                          : "Registrar Movimiento"}
                                 </Button>
                             </ModalFooter>
                         </form>
@@ -2692,7 +2697,7 @@ function ProviderPayments() {
                                     <div className="text-sm">
                                         {formatDateSafe(
                                             selectedPayment.transaction_date,
-                                            "long"
+                                            "long",
                                         )}
                                     </div>
                                 </div>
@@ -2744,12 +2749,12 @@ function ProviderPayments() {
                                     </div>
                                     <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                         {formatCurrency(
-                                            selectedPayment.paid_amount || 0
+                                            selectedPayment.paid_amount || 0,
                                         )}
                                     </div>
                                 </div>
                                 {parseFloat(
-                                    selectedPayment.credited_amount || 0
+                                    selectedPayment.credited_amount || 0,
                                 ) > 0 && (
                                     <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
@@ -2758,7 +2763,7 @@ function ProviderPayments() {
                                         <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 selectedPayment.credited_amount ||
-                                                    0
+                                                    0,
                                             )}
                                         </div>
                                     </div>
@@ -2771,14 +2776,14 @@ function ProviderPayments() {
                                         className={cn(
                                             "text-xl font-bold tabular-nums",
                                             parseFloat(
-                                                selectedPayment.balance
+                                                selectedPayment.balance,
                                             ) > 0
                                                 ? "text-red-600"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                         )}
                                     >
                                         {formatCurrency(
-                                            selectedPayment.balance || 0
+                                            selectedPayment.balance || 0,
                                         )}
                                     </div>
                                 </div>
@@ -2816,7 +2821,7 @@ function ProviderPayments() {
                                             window.open(
                                                 selectedPayment.invoice_file,
                                                 "_blank",
-                                                "noopener,noreferrer"
+                                                "noopener,noreferrer",
                                             );
                                         }}
                                         type="button"
@@ -2868,7 +2873,7 @@ function ProviderPayments() {
                                                     >
                                                         <td className="px-4 py-2 text-slate-700">
                                                             {formatDateSafe(
-                                                                payment.payment_date
+                                                                payment.payment_date,
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-2 capitalize text-slate-700">
@@ -2882,7 +2887,7 @@ function ProviderPayments() {
                                                         </td>
                                                         <td className="px-4 py-2 text-right font-semibold text-emerald-600 tabular-nums">
                                                             {formatCurrency(
-                                                                payment.amount
+                                                                payment.amount,
                                                             )}
                                                         </td>
                                                         <td className="px-4 py-2 text-center">
@@ -2891,12 +2896,12 @@ function ProviderPayments() {
                                                                     variant="ghost"
                                                                     size="sm"
                                                                     onClick={(
-                                                                        e
+                                                                        e,
                                                                     ) => {
                                                                         e.stopPropagation();
                                                                         window.open(
                                                                             payment.proof_file,
-                                                                            "_blank"
+                                                                            "_blank",
                                                                         );
                                                                     }}
                                                                     className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
@@ -2915,14 +2920,20 @@ function ProviderPayments() {
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 onClick={(
-                                                                    e
+                                                                    e,
                                                                 ) => {
                                                                     e.stopPropagation();
-                                                                    setDeleteConfirm({
-                                                                        open: true,
-                                                                        id: payment.id,
-                                                                        type: "transfer-payment",
-                                                                    });
+                                                                    setDeleteConfirm(
+                                                                        {
+                                                                            open: true,
+                                                                            id: payment.id,
+                                                                            type:
+                                                                                selectedPayment?.source ===
+                                                                                "provider_invoice"
+                                                                                    ? "provider-invoice-payment"
+                                                                                    : "transfer-payment",
+                                                                        },
+                                                                    );
                                                                 }}
                                                                 className="text-red-500 hover:text-red-700 hover:bg-red-50"
                                                                 title="Eliminar pago"
@@ -2931,7 +2942,7 @@ function ProviderPayments() {
                                                             </Button>
                                                         </td>
                                                     </tr>
-                                                )
+                                                ),
                                             )}
                                         </tbody>
                                     </table>
@@ -2981,7 +2992,7 @@ function ProviderPayments() {
                                                         >
                                                             <td className="px-4 py-2 text-slate-700">
                                                                 {formatDateSafe(
-                                                                    nc.payment_date
+                                                                    nc.payment_date,
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-2 font-mono text-xs text-slate-600">
@@ -2996,7 +3007,7 @@ function ProviderPayments() {
                                                             <td className="px-4 py-2 text-right font-semibold text-slate-700 tabular-nums">
                                                                 -
                                                                 {formatCurrency(
-                                                                    nc.amount
+                                                                    nc.amount,
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-2 text-center">
@@ -3005,12 +3016,12 @@ function ProviderPayments() {
                                                                         variant="ghost"
                                                                         size="sm"
                                                                         onClick={(
-                                                                            e
+                                                                            e,
                                                                         ) => {
                                                                             e.stopPropagation();
                                                                             window.open(
                                                                                 nc.proof_file,
-                                                                                "_blank"
+                                                                                "_blank",
                                                                             );
                                                                         }}
                                                                         className="text-slate-500 hover:text-slate-700 hover:bg-slate-100"
@@ -3025,7 +3036,7 @@ function ProviderPayments() {
                                                                 )}
                                                             </td>
                                                         </tr>
-                                                    )
+                                                    ),
                                                 )}
                                             </tbody>
                                         </table>
@@ -3051,7 +3062,7 @@ function ProviderPayments() {
                                         <Button
                                             onClick={() =>
                                                 handleApprove(
-                                                    selectedPayment.id
+                                                    selectedPayment.id,
                                                 )
                                             }
                                         >
@@ -3069,7 +3080,7 @@ function ProviderPayments() {
                                             onClick={() => {
                                                 setIsDetailModalOpen(false);
                                                 openPaymentModal(
-                                                    selectedPayment
+                                                    selectedPayment,
                                                 );
                                             }}
                                         >
@@ -3117,7 +3128,7 @@ function ProviderPayments() {
                                     {formatCurrency(
                                         selectedPayment.balance !== undefined
                                             ? selectedPayment.balance
-                                            : selectedPayment.amount
+                                            : selectedPayment.amount,
                                     )}
                                 </p>
                             </div>
@@ -3143,7 +3154,7 @@ function ProviderPayments() {
                                             })
                                         }
                                         options={Object.entries(
-                                            PAYMENT_METHODS
+                                            PAYMENT_METHODS,
                                         ).map(([id, name]) => ({ id, name }))}
                                         getOptionLabel={(opt) => opt.name}
                                         getOptionValue={(opt) => opt.id}
@@ -3357,7 +3368,7 @@ function ProviderPayments() {
                                             } - ${formatCurrency(t.amount)} - ${
                                                 t.description?.substring(
                                                     0,
-                                                    30
+                                                    30,
                                                 ) || "Sin descripción"
                                             }...`,
                                         })),
@@ -3390,7 +3401,8 @@ function ProviderPayments() {
                                     const selectedTransfer =
                                         providerTransfers.find(
                                             (t) =>
-                                                String(t.id) === ncForm.transfer
+                                                String(t.id) ===
+                                                ncForm.transfer,
                                         );
                                     if (!selectedTransfer) return null;
                                     return (
@@ -3415,19 +3427,19 @@ function ProviderPayments() {
                                                 </p>
                                                 <p className="text-lg font-bold text-slate-900 tabular-nums">
                                                     {formatCurrency(
-                                                        selectedTransfer.amount
+                                                        selectedTransfer.amount,
                                                     )}
                                                 </p>
                                                 {parseFloat(
-                                                    selectedTransfer.balance
+                                                    selectedTransfer.balance,
                                                 ) <
                                                     parseFloat(
-                                                        selectedTransfer.amount
+                                                        selectedTransfer.amount,
                                                     ) && (
                                                     <p className="text-xs text-slate-500 mt-0.5">
                                                         Saldo:{" "}
                                                         {formatCurrency(
-                                                            selectedTransfer.balance
+                                                            selectedTransfer.balance,
                                                         )}
                                                     </p>
                                                 )}
@@ -3682,7 +3694,7 @@ function ProviderPayments() {
                                 </label>
                                 <p className="text-sm font-medium text-slate-700">
                                     {NC_REASON_OPTIONS.find(
-                                        (r) => r.id === selectedNC.reason
+                                        (r) => r.id === selectedNC.reason,
                                     )?.name || selectedNC.reason}
                                 </p>
                                 {selectedNC.reason_detail && (
@@ -3742,7 +3754,7 @@ function ProviderPayments() {
                                     <span className="text-sm font-bold text-slate-900 tabular-nums">
                                         {formatCurrency(
                                             selectedNC.original_transfer_info
-                                                .amount
+                                                .amount,
                                         )}
                                     </span>
                                 </div>
@@ -3773,7 +3785,7 @@ function ProviderPayments() {
                                 </label>
                                 <p className="text-lg font-bold text-slate-900 tabular-nums">
                                     {formatCurrency(
-                                        selectedNC.available_amount
+                                        selectedNC.available_amount,
                                     )}
                                 </p>
                             </div>
@@ -3801,17 +3813,17 @@ function ProviderPayments() {
                                                         </p>
                                                         <p className="text-xs text-slate-500">
                                                             {formatDate(
-                                                                app.applied_at
+                                                                app.applied_at,
                                                             )}
                                                         </p>
                                                     </div>
                                                     <span className="text-sm font-bold text-slate-900 tabular-nums">
                                                         {formatCurrency(
-                                                            app.amount
+                                                            app.amount,
                                                         )}
                                                     </span>
                                                 </div>
-                                            )
+                                            ),
                                         )}
                                     </div>
                                 </div>
@@ -3913,7 +3925,7 @@ function ProviderPayments() {
                                     </p>
                                     <p className="text-2xl font-bold tabular-nums text-slate-900">
                                         {formatCurrency(
-                                            selectedNC.available_amount
+                                            selectedNC.available_amount,
                                         )}
                                     </p>
                                 </div>
@@ -3961,7 +3973,7 @@ function ProviderPayments() {
                                                         applyFormData.find(
                                                             (a) =>
                                                                 a.transfer_id ===
-                                                                transfer.id
+                                                                transfer.id,
                                                         ) || { amount: "" };
                                                     return (
                                                         <tr
@@ -3978,7 +3990,7 @@ function ProviderPayments() {
                                                                         transfer.transaction_date,
                                                                         {
                                                                             format: "short",
-                                                                        }
+                                                                        },
                                                                     )}
                                                                 </span>
                                                             </td>
@@ -3997,7 +4009,7 @@ function ProviderPayments() {
                                                             <td className="px-4 py-3 text-right">
                                                                 <span className="font-bold text-slate-700 tabular-nums">
                                                                     {formatCurrency(
-                                                                        transfer.balance
+                                                                        transfer.balance,
                                                                     )}
                                                                 </span>
                                                             </td>
@@ -4012,17 +4024,17 @@ function ProviderPayments() {
                                                                         min="0"
                                                                         max={Math.min(
                                                                             parseFloat(
-                                                                                transfer.balance
+                                                                                transfer.balance,
                                                                             ),
                                                                             parseFloat(
-                                                                                selectedNC.available_amount
-                                                                            )
+                                                                                selectedNC.available_amount,
+                                                                            ),
                                                                         )}
                                                                         value={
                                                                             appData.amount
                                                                         }
                                                                         onChange={(
-                                                                            e
+                                                                            e,
                                                                         ) => {
                                                                             const newValue =
                                                                                 e
@@ -4030,22 +4042,22 @@ function ProviderPayments() {
                                                                                     .value;
                                                                             setApplyFormData(
                                                                                 (
-                                                                                    prev
+                                                                                    prev,
                                                                                 ) => {
                                                                                     const existing =
                                                                                         prev.find(
                                                                                             (
-                                                                                                a
+                                                                                                a,
                                                                                             ) =>
                                                                                                 a.transfer_id ===
-                                                                                                transfer.id
+                                                                                                transfer.id,
                                                                                         );
                                                                                     if (
                                                                                         existing
                                                                                     ) {
                                                                                         return prev.map(
                                                                                             (
-                                                                                                a
+                                                                                                a,
                                                                                             ) =>
                                                                                                 a.transfer_id ===
                                                                                                 transfer.id
@@ -4053,7 +4065,7 @@ function ProviderPayments() {
                                                                                                           ...a,
                                                                                                           amount: newValue,
                                                                                                       }
-                                                                                                    : a
+                                                                                                    : a,
                                                                                         );
                                                                                     } else {
                                                                                         return [
@@ -4066,7 +4078,7 @@ function ProviderPayments() {
                                                                                             },
                                                                                         ];
                                                                                     }
-                                                                                }
+                                                                                },
                                                                             );
                                                                         }}
                                                                         className="w-full pl-6 pr-2 py-1.5 text-sm font-mono border border-slate-200 rounded-md focus:border-slate-400 focus:outline-none text-right"
@@ -4076,7 +4088,7 @@ function ProviderPayments() {
                                                             </td>
                                                         </tr>
                                                     );
-                                                }
+                                                },
                                             )}
                                         </tbody>
                                     </table>
@@ -4097,8 +4109,8 @@ function ProviderPayments() {
                                                 (sum, a) =>
                                                     sum +
                                                     (parseFloat(a.amount) || 0),
-                                                0
-                                            )
+                                                0,
+                                            ),
                                         )}
                                     </span>
                                 </div>
@@ -4123,7 +4135,7 @@ function ProviderPayments() {
                                 disabled={
                                     isSubmitting ||
                                     applyFormData.filter(
-                                        (a) => parseFloat(a.amount) > 0
+                                        (a) => parseFloat(a.amount) > 0,
                                     ).length === 0
                                 }
                                 className="bg-slate-900 text-white hover:bg-slate-800 min-w-[160px]"
