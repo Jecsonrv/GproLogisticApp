@@ -317,6 +317,7 @@ function ProviderPayments() {
         open: false,
         totalFiles: 0,
         totalRecords: 0,
+        payload: null,
     });
     const [pendingExportPayload, setPendingExportPayload] = useState(null);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -1338,6 +1339,7 @@ function ProviderPayments() {
                 open: true,
                 totalFiles,
                 totalRecords: selectedRows.length,
+                payload,
             });
         } catch (error) {
             const detail =
@@ -1382,8 +1384,10 @@ function ProviderPayments() {
         );
     };
 
-    const executeDocumentExport = async () => {
-        if (!pendingExportPayload) {
+    const executeDocumentExport = async (payloadFromConfirm = null) => {
+        const payloadToUse = payloadFromConfirm || pendingExportPayload;
+
+        if (!payloadToUse) {
             toast.error("No hay selección válida para exportar.");
             return;
         }
@@ -1403,7 +1407,7 @@ function ProviderPayments() {
 
             const response = await axios.post(
                 "/transfers/transfers/export_documents/",
-                pendingExportPayload,
+                payloadToUse,
                 {
                     responseType: "blob",
                     onDownloadProgress: (progressEvent) => {
@@ -1470,7 +1474,12 @@ function ProviderPayments() {
             setIsExecutingDocumentExport(false);
             setExportDownloadProgress(0);
             setExportProgressMessage("");
-            setExportConfirm({ open: false, totalFiles: 0, totalRecords: 0 });
+            setExportConfirm({
+                open: false,
+                totalFiles: 0,
+                totalRecords: 0,
+                payload: null,
+            });
         }
     };
 
@@ -3745,6 +3754,7 @@ function ProviderPayments() {
                         open: false,
                         totalFiles: 0,
                         totalRecords: 0,
+                        payload: null,
                     })
                 }
                 title="Confirmar exportación"
@@ -3753,7 +3763,7 @@ function ProviderPayments() {
                     isExecutingDocumentExport ? "Exportando..." : "Exportar ZIP"
                 }
                 cancelText="Cancelar"
-                onConfirm={executeDocumentExport}
+                onConfirm={() => executeDocumentExport(exportConfirm.payload)}
             />
 
             {isExecutingDocumentExport && (
