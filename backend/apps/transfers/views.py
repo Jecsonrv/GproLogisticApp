@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions as drf_permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -857,7 +857,7 @@ class TransferViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo2OrAdmin])
     def register_payment(self, request, pk=None):
         """Registrar un pago parcial o total a una transferencia (gasto a proveedor)"""
         from .models import TransferPayment
@@ -1845,13 +1845,22 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
     queryset = ProviderInvoice.objects.select_related(
         'provider', 'service_order', 'created_by'
     ).prefetch_related('allocations').all()
-    permission_classes = [IsOperativo2OrAdmin]
+    permission_classes = [IsOperativo2OrAdmin]  # overridden by get_permissions()
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     filterset_class = ProviderInvoiceFilter
     search_fields = ['invoice_number', 'provider__name', 'service_order__order_number']
     ordering_fields = ['issue_date', 'total_amount', 'created_at']
     ordering = ['-created_at']
     pagination_class = None
+
+    def get_permissions(self):
+        """
+        Operativo básico puede leer facturas de proveedor (GET/HEAD/OPTIONS).
+        Crear, actualizar y eliminar requiere rol operativo2 o admin.
+        """
+        if self.request.method in drf_permissions.SAFE_METHODS:
+            return [IsAnyOperativo()]
+        return [IsOperativo2OrAdmin()]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -2027,7 +2036,7 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
         serializer = ProviderInvoiceListSerializer(invoices, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsOperativo])
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo2OrAdmin])
     def register_payment(self, request, pk=None):
         """Registrar un pago parcial o total a una factura de proveedor (costo directo)"""
         from decimal import Decimal

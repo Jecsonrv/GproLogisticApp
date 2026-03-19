@@ -440,7 +440,7 @@ function ProviderPayments() {
     const fetchPayments = async () => {
         try {
             setLoading(true);
-            const [transfersRes, invoicesRes] = await Promise.all([
+            const [transfersResult, invoicesResult] = await Promise.allSettled([
                 axios.get("/transfers/transfers/"),
                 axios.get("/transfers/provider-invoices/"),
             ]);
@@ -452,14 +452,24 @@ function ProviderPayments() {
                 return [];
             };
 
-            const transfers = getResults(transfersRes).map((t) => ({
+            const transfersData =
+                transfersResult.status === "fulfilled"
+                    ? getResults(transfersResult.value)
+                    : [];
+
+            const invoicesData =
+                invoicesResult.status === "fulfilled"
+                    ? getResults(invoicesResult.value)
+                    : [];
+
+            const transfers = transfersData.map((t) => ({
                 ...t,
                 source: "transfer",
                 // Ensure ID is unique if needed, but keeping original ID for API calls
                 original_id: t.id,
             }));
 
-            const invoices = getResults(invoicesRes).map((inv) => ({
+            const invoices = invoicesData.map((inv) => ({
                 id: inv.id, // Keeping original ID
                 original_id: inv.id,
                 source: "provider_invoice",
@@ -520,9 +530,9 @@ function ProviderPayments() {
                 axios.get("/catalogs/providers/"),
                 axios.get("/catalogs/banks/"),
             ]);
-            setServiceOrders(ordersRes.data);
-            setProviders(providersRes.data);
-            setBanks(banksRes.data);
+            setServiceOrders(Array.isArray(ordersRes.data) ? ordersRes.data : []);
+            setProviders(Array.isArray(providersRes.data) ? providersRes.data : []);
+            setBanks(Array.isArray(banksRes.data) ? banksRes.data : []);
         } catch {
             // Silencioso
         }
@@ -830,7 +840,7 @@ function ProviderPayments() {
                 formData.append("reception_stamp", ncForm.reception_stamp);
 
             await axios.post("/transfers/provider-credit-notes/", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
+                headers: { "Content-Type": undefined },
                 _skipErrorToast: true,
             });
 
