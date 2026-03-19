@@ -303,7 +303,12 @@ function ProviderPayments() {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
-    const [isExportingDocuments, setIsExportingDocuments] = useState(false);
+    const [isPreparingDocumentExport, setIsPreparingDocumentExport] =
+        useState(false);
+    const [isExecutingDocumentExport, setIsExecutingDocumentExport] =
+        useState(false);
+    const [exportDownloadProgress, setExportDownloadProgress] = useState(0);
+    const [exportProgressMessage, setExportProgressMessage] = useState("");
     const [isExportSelectorOpen, setIsExportSelectorOpen] = useState(false);
     const [selectedExportKeys, setSelectedExportKeys] = useState(new Set());
     const [exportSelectionError, setExportSelectionError] = useState("");
@@ -1297,7 +1302,7 @@ function ProviderPayments() {
         }
 
         try {
-            setIsExportingDocuments(true);
+            setIsPreparingDocumentExport(true);
             setExportSelectionError("");
 
             const previewResponse = await axios.post(
@@ -1341,23 +1346,100 @@ function ProviderPayments() {
                 "No se pudo calcular la exportación.";
             setExportSelectionError(detail);
         } finally {
-            setIsExportingDocuments(false);
+            setIsPreparingDocumentExport(false);
         }
     };
 
+    const getExportErrorMessage = async (error) => {
+        const fallback = "Error al exportar documentos PDF";
+        const responseData = error?.response?.data;
+
+        if (responseData instanceof Blob) {
+            try {
+                const text = await responseData.text();
+                if (!text) return fallback;
+                try {
+                    const parsed = JSON.parse(text);
+                    return (
+                        parsed.detail ||
+                        parsed.error ||
+                        parsed.message ||
+                        fallback
+                    );
+                } catch {
+                    return text;
+                }
+            } catch {
+                return fallback;
+            }
+        }
+
+        return (
+            error?.response?.data?.detail ||
+            error?.response?.data?.error ||
+            error?.response?.data?.message ||
+            fallback
+        );
+    };
+
     const executeDocumentExport = async () => {
-        if (!pendingExportPayload) return;
+        if (!pendingExportPayload) {
+            toast.error("No hay selección válida para exportar.");
+            return;
+        }
+
+        let progressInterval = null;
 
         try {
-            setIsExportingDocuments(true);
+            setIsExecutingDocumentExport(true);
+            setExportProgressMessage("Preparando archivos...");
+            setExportDownloadProgress(10);
+
+            progressInterval = window.setInterval(() => {
+                setExportDownloadProgress((prev) =>
+                    prev < 85 ? prev + 5 : prev,
+                );
+            }, 300);
 
             const response = await axios.post(
                 "/transfers/transfers/export_documents/",
                 pendingExportPayload,
                 {
                     responseType: "blob",
+                    onDownloadProgress: (progressEvent) => {
+                        if (!progressEvent.total) return;
+                        const percent = Math.round(
+                            (progressEvent.loaded * 100) / progressEvent.total,
+                        );
+                        setExportProgressMessage("Descargando ZIP...");
+                        setExportDownloadProgress(
+                            Math.max(15, Math.min(percent, 95)),
+                        );
+                    },
                 },
             );
+
+            const contentType = String(
+                response.headers?.["content-type"] || response.data?.type || "",
+            ).toLowerCase();
+            if (contentType.includes("application/json")) {
+                const text = await response.data.text();
+                let backendMessage = "No se pudo generar el ZIP.";
+                try {
+                    const parsed = JSON.parse(text);
+                    backendMessage =
+                        parsed.detail ||
+                        parsed.error ||
+                        parsed.message ||
+                        backendMessage;
+                } catch {
+                    if (text) backendMessage = text;
+                }
+                throw new Error(backendMessage);
+            }
+
+            setExportProgressMessage("Finalizando descarga...");
+            setExportDownloadProgress(100);
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement("a");
@@ -1379,13 +1461,15 @@ function ProviderPayments() {
             setExportPreview(null);
             setPendingExportPayload(null);
         } catch (error) {
-            const detail =
-                error.response?.data?.detail ||
-                error.response?.data?.error ||
-                "Error al exportar documentos PDF";
+            const detail = await getExportErrorMessage(error);
             toast.error(detail);
         } finally {
-            setIsExportingDocuments(false);
+            if (progressInterval) {
+                window.clearInterval(progressInterval);
+            }
+            setIsExecutingDocumentExport(false);
+            setExportDownloadProgress(0);
+            setExportProgressMessage("");
             setExportConfirm({ open: false, totalFiles: 0, totalRecords: 0 });
         }
     };
@@ -2370,7 +2454,8 @@ function ProviderPayments() {
                                             size="sm"
                                             onClick={openExportSelector}
                                             disabled={
-                                                isExportingDocuments ||
+                                                isPreparingDocumentExport ||
+                                                isExecutingDocumentExport ||
                                                 exportSelectableRows.length ===
                                                     0
                                             }
@@ -2378,9 +2463,11 @@ function ProviderPayments() {
                                             title="Seleccionar registros y exportar ZIP con documentos PDF"
                                         >
                                             <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
-                                            {isExportingDocuments
-                                                ? "Exportando..."
-                                                : "Docs PDF"}
+                                            {isPreparingDocumentExport
+                                                ? "Validando..."
+                                                : isExecutingDocumentExport
+                                                  ? "Exportando..."
+                                                  : "Docs PDF"}
                                         </Button>
                                     </>
                                 )}
@@ -3635,12 +3722,17 @@ function ProviderPayments() {
                         <Button
                             type="button"
                             onClick={prepareDocumentExport}
-                            disabled={isExportingDocuments}
+                            disabled={
+                                isPreparingDocumentExport ||
+                                isExecutingDocumentExport
+                            }
                             className="bg-slate-900 hover:bg-slate-800"
                         >
-                            {isExportingDocuments
+                            {isPreparingDocumentExport
                                 ? "Validando..."
-                                : "Continuar"}
+                                : isExecutingDocumentExport
+                                  ? "Exportando..."
+                                  : "Continuar"}
                         </Button>
                     </ModalFooter>
                 </div>
@@ -3658,11 +3750,52 @@ function ProviderPayments() {
                 title="Confirmar exportación"
                 description={`¿Está seguro que desea exportar ${exportConfirm.totalFiles} archivo(s) PDF correspondientes a ${exportConfirm.totalRecords} registro(s)?`}
                 confirmText={
-                    isExportingDocuments ? "Exportando..." : "Exportar ZIP"
+                    isExecutingDocumentExport ? "Exportando..." : "Exportar ZIP"
                 }
                 cancelText="Cancelar"
                 onConfirm={executeDocumentExport}
             />
+
+            {isExecutingDocumentExport && (
+                <div className="fixed inset-0 z-[120] bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-4">
+                    <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 p-5 sm:p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <RefreshCw className="w-5 h-5 text-slate-700 animate-spin" />
+                            <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                    Exportando documentos PDF
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                    {exportProgressMessage || "Procesando..."}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                            <div
+                                className="h-full bg-slate-900 transition-all duration-300"
+                                style={{
+                                    width: `${Math.max(
+                                        8,
+                                        Math.min(100, exportDownloadProgress),
+                                    )}%`,
+                                }}
+                            />
+                        </div>
+
+                        <p className="text-[11px] text-slate-500 mt-2 text-right font-medium">
+                            {Math.max(
+                                8,
+                                Math.min(
+                                    100,
+                                    Math.round(exportDownloadProgress),
+                                ),
+                            )}
+                            %
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Void Credit Note Dialog */}
             <PromptDialog
