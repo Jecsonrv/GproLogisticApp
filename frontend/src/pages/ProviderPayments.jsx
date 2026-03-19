@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
     Plus,
@@ -3766,46 +3767,53 @@ function ProviderPayments() {
                 onConfirm={() => executeDocumentExport(exportConfirm.payload)}
             />
 
-            {isExecutingDocumentExport && (
-                <div className="fixed inset-0 z-[120] bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 p-5 sm:p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <RefreshCw className="w-5 h-5 text-slate-700 animate-spin" />
-                            <div>
-                                <p className="text-sm font-semibold text-slate-900">
-                                    Exportando documentos PDF
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                    {exportProgressMessage || "Procesando..."}
-                                </p>
+            {isExecutingDocumentExport &&
+                typeof document !== "undefined" &&
+                createPortal(
+                    <div className="fixed inset-0 z-[120] bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-4">
+                        <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 p-5 sm:p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <RefreshCw className="w-5 h-5 text-slate-700 animate-spin" />
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-900">
+                                        Exportando documentos PDF
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        {exportProgressMessage ||
+                                            "Procesando..."}
+                                    </p>
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                            <div
-                                className="h-full bg-slate-900 transition-all duration-300"
-                                style={{
-                                    width: `${Math.max(
-                                        8,
-                                        Math.min(100, exportDownloadProgress),
-                                    )}%`,
-                                }}
-                            />
-                        </div>
+                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                <div
+                                    className="h-full bg-slate-900 transition-all duration-300"
+                                    style={{
+                                        width: `${Math.max(
+                                            8,
+                                            Math.min(
+                                                100,
+                                                exportDownloadProgress,
+                                            ),
+                                        )}%`,
+                                    }}
+                                />
+                            </div>
 
-                        <p className="text-[11px] text-slate-500 mt-2 text-right font-medium">
-                            {Math.max(
-                                8,
-                                Math.min(
-                                    100,
-                                    Math.round(exportDownloadProgress),
-                                ),
-                            )}
-                            %
-                        </p>
-                    </div>
-                </div>
-            )}
+                            <p className="text-[11px] text-slate-500 mt-2 text-right font-medium">
+                                {Math.max(
+                                    8,
+                                    Math.min(
+                                        100,
+                                        Math.round(exportDownloadProgress),
+                                    ),
+                                )}
+                                %
+                            </p>
+                        </div>
+                    </div>,
+                    document.body,
+                )}
 
             {/* Void Credit Note Dialog */}
             <PromptDialog
