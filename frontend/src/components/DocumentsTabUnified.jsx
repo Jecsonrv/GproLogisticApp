@@ -70,14 +70,14 @@ const DocumentsTabUnified = ({
         try {
             setLoading(true);
             const response = await axios.get(
-                `/orders/service-orders/${orderId}/all_documents/`
+                `/orders/service-orders/${orderId}/all_documents/`,
             );
             setAllDocuments(response.data.documents || []);
             setCategoriesSummary(response.data.categories_summary || {});
             setTotalDocuments(response.data.total_documents || 0);
 
             const categories = Object.keys(
-                response.data.categories_summary || {}
+                response.data.categories_summary || {},
             );
             const expanded = {};
             categories.forEach((cat) => {
@@ -271,7 +271,7 @@ const DocumentsTabUnified = ({
                         const fileName = generateFileName(
                             doc,
                             i,
-                            config.prefix
+                            config.prefix,
                         );
                         folder.file(fileName, blob);
                     } catch {
@@ -295,7 +295,7 @@ const DocumentsTabUnified = ({
             window.URL.revokeObjectURL(downloadUrl);
 
             toast.success(
-                `${docsToExport.length} documentos exportados exitosamente`
+                `${docsToExport.length} documentos exportados exitosamente`,
             );
             setSelectedDocs(new Set());
         } catch {
@@ -321,7 +321,7 @@ const DocumentsTabUnified = ({
             }
             if (!validTypes.includes(file.type)) {
                 toast.error(
-                    `${file.name}: Solo se permiten archivos PDF, JPG o PNG`
+                    `${file.name}: Solo se permiten archivos PDF, JPG o PNG`,
                 );
                 continue;
             }
@@ -364,9 +364,17 @@ const DocumentsTabUnified = ({
             setIsUploading(true);
             let successCount = 0;
             let errorCount = 0;
+            const uploadTargetOrderId = orderId;
 
             for (const file of uploadForm.files) {
                 try {
+                    // Evitar que cambios de OS durante subida por lote envíen archivos a otra orden.
+                    if (orderId !== uploadTargetOrderId) {
+                        throw new Error(
+                            "La orden cambió durante la carga. Intente nuevamente.",
+                        );
+                    }
+
                     // Obtener el nombre del archivo sin extensión como descripción
                     const fileName = file.name;
                     const fileNameWithoutExt =
@@ -374,7 +382,7 @@ const DocumentsTabUnified = ({
                         fileName;
 
                     const formData = new FormData();
-                    formData.append("order", orderId);
+                    formData.append("order", uploadTargetOrderId);
                     formData.append("document_type", uploadForm.document_type);
                     formData.append("description", fileNameWithoutExt);
                     formData.append("file", file);
@@ -391,12 +399,12 @@ const DocumentsTabUnified = ({
 
             if (successCount > 0) {
                 toast.success(
-                    `${successCount} documento(s) subido(s) exitosamente`
+                    `${successCount} documento(s) subido(s) exitosamente`,
                 );
             }
             if (errorCount > 0) {
                 toast.error(
-                    `${errorCount} documento(s) no pudieron ser subidos`
+                    `${errorCount} documento(s) no pudieron ser subidos`,
                 );
             }
 
@@ -619,7 +627,7 @@ const DocumentsTabUnified = ({
                                 "relative border-2 border-dashed rounded-lg p-6 text-center transition-all bg-white",
                                 dragOver
                                     ? "border-slate-500 bg-slate-50"
-                                    : "border-slate-300 hover:border-slate-400 hover:bg-slate-50/50"
+                                    : "border-slate-300 hover:border-slate-400 hover:bg-slate-50/50",
                             )}
                         >
                             <input
@@ -672,7 +680,7 @@ const DocumentsTabUnified = ({
                                                     </p>
                                                     <p className="text-xs text-slate-500">
                                                         {formatFileSize(
-                                                            file.size
+                                                            file.size,
                                                         )}
                                                     </p>
                                                 </div>
@@ -683,7 +691,7 @@ const DocumentsTabUnified = ({
                                                     const newFiles =
                                                         uploadForm.files.filter(
                                                             (_, i) =>
-                                                                i !== index
+                                                                i !== index,
                                                         );
                                                     setUploadForm({
                                                         ...uploadForm,
@@ -743,7 +751,7 @@ const DocumentsTabUnified = ({
                         "px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap border",
                         activeFilter === "all"
                             ? "bg-slate-800 text-white border-slate-800 shadow-sm"
-                            : "bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900"
+                            : "bg-white text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900",
                     )}
                 >
                     Todos
@@ -752,7 +760,7 @@ const DocumentsTabUnified = ({
                             "ml-2 px-1.5 py-0.5 text-[10px] rounded-full",
                             activeFilter === "all"
                                 ? "bg-slate-600 text-slate-100"
-                                : "bg-slate-100 text-slate-600"
+                                : "bg-slate-100 text-slate-600",
                         )}
                     >
                         {totalDocuments}
@@ -774,7 +782,7 @@ const DocumentsTabUnified = ({
                                 "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap border",
                                 isActive
                                     ? "bg-white border-slate-300 text-slate-900 shadow-sm ring-1 ring-slate-200"
-                                    : "bg-white border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                    : "bg-white border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50",
                             )}
                         >
                             <Icon
@@ -782,7 +790,7 @@ const DocumentsTabUnified = ({
                                     "w-4 h-4",
                                     isActive
                                         ? "text-slate-900"
-                                        : "text-slate-400"
+                                        : "text-slate-400",
                                 )}
                             />
                             {config.label}
@@ -791,7 +799,7 @@ const DocumentsTabUnified = ({
                                     "px-1.5 py-0.5 text-[10px] rounded-full font-bold",
                                     isActive
                                         ? "bg-slate-100 text-slate-900"
-                                        : "bg-slate-50 text-slate-400"
+                                        : "bg-slate-50 text-slate-400",
                                 )}
                             >
                                 {data.count}
@@ -873,7 +881,7 @@ const DocumentsTabUnified = ({
                                     const isExpanded =
                                         expandedCategories[category] !== false;
                                     const allSelected = docs.every((doc) =>
-                                        selectedDocs.has(doc.id)
+                                        selectedDocs.has(doc.id),
                                     );
 
                                     return (
@@ -888,7 +896,7 @@ const DocumentsTabUnified = ({
                                                         <button
                                                             onClick={() =>
                                                                 toggleCategory(
-                                                                    category
+                                                                    category,
                                                                 )
                                                             }
                                                             className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-slate-700"
@@ -914,7 +922,7 @@ const DocumentsTabUnified = ({
                                                         <button
                                                             onClick={() =>
                                                                 selectAllInCategory(
-                                                                    category
+                                                                    category,
                                                                 )
                                                             }
                                                             className="text-xs text-slate-400 hover:text-slate-600 font-medium px-2 py-1 hover:bg-white rounded transition-colors"
@@ -932,7 +940,7 @@ const DocumentsTabUnified = ({
                                                 docs.map((doc) => {
                                                     const isSelected =
                                                         selectedDocs.has(
-                                                            doc.id
+                                                            doc.id,
                                                         );
                                                     return (
                                                         <tr
@@ -940,14 +948,14 @@ const DocumentsTabUnified = ({
                                                             className={cn(
                                                                 "group/row transition-colors hover:bg-slate-50",
                                                                 isSelected &&
-                                                                    "bg-blue-50/30 hover:bg-blue-50/50"
+                                                                    "bg-blue-50/30 hover:bg-blue-50/50",
                                                             )}
                                                         >
                                                             <td className="px-4 py-3 text-center align-top pt-4">
                                                                 <button
                                                                     onClick={() =>
                                                                         toggleDocSelection(
-                                                                            doc.id
+                                                                            doc.id,
                                                                         )
                                                                     }
                                                                     className="outline-none focus:ring-2 focus:ring-slate-400 rounded"
@@ -964,7 +972,7 @@ const DocumentsTabUnified = ({
                                                                     <div
                                                                         className={cn(
                                                                             "mt-0.5 p-2 rounded-lg bg-slate-50 border border-slate-100 text-slate-400",
-                                                                            config.color
+                                                                            config.color,
                                                                         )}
                                                                     >
                                                                         <config.icon className="w-4 h-4" />
@@ -975,7 +983,7 @@ const DocumentsTabUnified = ({
                                                                             onClick={() =>
                                                                                 window.open(
                                                                                     doc.file_url,
-                                                                                    "_blank"
+                                                                                    "_blank",
                                                                                 )
                                                                             }
                                                                             title={
@@ -1003,7 +1011,7 @@ const DocumentsTabUnified = ({
                                                                                     className="text-[10px] py-0 h-4 border-slate-200 text-slate-600 bg-white"
                                                                                 >
                                                                                     {formatCurrency(
-                                                                                        doc.amount
+                                                                                        doc.amount,
                                                                                     )}
                                                                                 </Badge>
                                                                             )}
@@ -1031,7 +1039,7 @@ const DocumentsTabUnified = ({
                                                                             doc.uploaded_at,
                                                                             {
                                                                                 format: "short",
-                                                                            }
+                                                                            },
                                                                         )}
                                                                     </span>
                                                                     <span className="text-[10px] text-slate-400">
@@ -1046,7 +1054,7 @@ const DocumentsTabUnified = ({
                                                                         onClick={() =>
                                                                             window.open(
                                                                                 doc.file_url,
-                                                                                "_blank"
+                                                                                "_blank",
                                                                             )
                                                                         }
                                                                         className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
@@ -1057,7 +1065,7 @@ const DocumentsTabUnified = ({
                                                                     <button
                                                                         onClick={() =>
                                                                             handleDownload(
-                                                                                doc
+                                                                                doc,
                                                                             )
                                                                         }
                                                                         className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
@@ -1069,7 +1077,7 @@ const DocumentsTabUnified = ({
                                                                         <button
                                                                             onClick={() =>
                                                                                 handleDelete(
-                                                                                    doc
+                                                                                    doc,
                                                                                 )
                                                                             }
                                                                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
@@ -1085,7 +1093,7 @@ const DocumentsTabUnified = ({
                                                 })}
                                         </React.Fragment>
                                     );
-                                }
+                                },
                             )}
                         </tbody>
                     </table>

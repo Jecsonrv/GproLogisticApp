@@ -13,6 +13,42 @@ class OrderDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderDocument
         fields = '__all__'
+
+    def validate_order(self, value):
+        """
+        Evita cargar documentos en órdenes eliminadas/cerradas y asegura
+        consistencia del contexto del endpoint de detalle cuando aplica.
+        """
+        request = self.context.get('request')
+
+        if getattr(value, 'is_deleted', False):
+            raise serializers.ValidationError('No se pueden adjuntar documentos a una orden eliminada.')
+
+        if getattr(value, 'status', None) == 'cerrada':
+            raise serializers.ValidationError('No se pueden adjuntar documentos a una orden cerrada.')
+
+        # Si la URL trae pk de OS, reforzar que el order enviado coincida.
+        if request and hasattr(request, 'parser_context'):
+            kwargs = request.parser_context.get('kwargs', {}) or {}
+            route_pk = kwargs.get('pk')
+            if route_pk is not None:
+                try:
+                    if int(route_pk) != value.id:
+                        raise serializers.ValidationError(
+                            'El documento no coincide con la orden de servicio del endpoint.'
+                        )
+                except (TypeError, ValueError):
+                    pass
+
+        return value
+
+    def validate(self, attrs):
+        # Inmutabilidad de pertenencia: un documento no puede cambiar de OS.
+        if self.instance and 'order' in attrs and attrs['order'].id != self.instance.order_id:
+            raise serializers.ValidationError({
+                'order': 'No se permite mover un documento a otra orden de servicio.'
+            })
+        return attrs
     
     def get_file_size(self, obj):
         """Retornar tamaño del archivo en bytes"""
@@ -88,6 +124,7 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
     total_transfers = serializers.SerializerMethodField()
     total_direct_costs = serializers.SerializerMethodField()
     total_admin_costs = serializers.SerializerMethodField()
+    total_expenses = serializers.SerializerMethodField()
     total_amount = serializers.SerializerMethodField()
     total_services = serializers.SerializerMethodField()
     total_third_party = serializers.SerializerMethodField()
@@ -118,10 +155,24 @@ class ServiceOrderListSerializer(serializers.ModelSerializer):
         return self._get_annotated_value(obj, 'annotated_total_transfers')
     
     def get_total_direct_costs(self, obj):
+        if hasattr(obj, 'annotated_total_direct_costs'):
+            return float(obj.annotated_total_direct_costs or 0)
+        if hasattr(obj, 'annotated_total_allocations'):
+            propios = getattr(obj, 'annotated_total_propios', 0) or 0
+            alloc = getattr(obj, 'annotated_total_allocations', 0) or 0
+            return float(propios + alloc)
         return self._get_annotated_value(obj, 'annotated_total_propios', 'get_total_direct_costs')
     
     def get_total_admin_costs(self, obj):
         return 0  # No se usa en listado, evitar query
+
+    def get_total_expenses(self, obj):
+        if hasattr(obj, 'annotated_total_expenses'):
+            return float(obj.annotated_total_expenses or 0)
+        # Fallback: transfers + costos directos
+        transfers = self._get_annotated_value(obj, 'annotated_total_transfers')
+        direct = self.get_total_direct_costs(obj)
+        return float(transfers + direct)
     
     def get_total_amount(self, obj):
         services = self._get_annotated_value(obj, 'annotated_total_services')
@@ -161,6 +212,7 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     total_transfers = serializers.SerializerMethodField()
     total_direct_costs = serializers.SerializerMethodField()
     total_admin_costs = serializers.SerializerMethodField()
+    total_expenses = serializers.SerializerMethodField()
     # Campos principales para el listado
     total_amount = serializers.SerializerMethodField()
     total_services = serializers.SerializerMethodField()
@@ -188,6 +240,12 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
     
     def get_total_direct_costs(self, obj):
         """Total de costos directos - usa anotación si existe"""
+        if hasattr(obj, 'annotated_total_direct_costs'):
+            return obj.annotated_total_direct_costs or 0
+        if hasattr(obj, 'annotated_total_allocations'):
+            propios = obj.annotated_total_propios or 0
+            alloc = obj.annotated_total_allocations or 0
+            return propios + alloc
         if hasattr(obj, 'annotated_total_propios'):
             return obj.annotated_total_propios or 0
         return obj.get_total_direct_costs()
@@ -199,6 +257,15 @@ class ServiceOrderSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'annotated_total_transfers'):
             return 0  # Optimización: no calcular en listado
         return obj.get_total_admin_costs()
+
+    def get_total_expenses(self, obj):
+        """Total gastos consolidados (transfers + costos directos por asignación)"""
+        if hasattr(obj, 'annotated_total_expenses'):
+            return obj.annotated_total_expenses or 0
+        # Fallback: transfers + costos directos
+        transfers = self.get_total_transfers(obj)
+        direct = self.get_total_direct_costs(obj)
+        return transfers + direct
     
     def get_total_amount(self, obj):
         """Total general de la OS (servicios + terceros)"""

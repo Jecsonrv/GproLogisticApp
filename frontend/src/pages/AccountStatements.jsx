@@ -136,7 +136,7 @@ const StatusBadge = ({ status }) => {
                 "inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full border",
                 config.bgColor,
                 config.textColor,
-                config.borderColor
+                config.borderColor,
             )}
         >
             <span className={cn("w-1.5 h-1.5 rounded-full", config.dotColor)} />
@@ -189,7 +189,7 @@ const ClientCard = ({ client, isSelected, onClick }) => {
                 "p-3 rounded-lg border cursor-pointer transition-all",
                 isSelected
                     ? "border-slate-300 bg-slate-50 shadow-sm"
-                    : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50"
+                    : "border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50",
             )}
         >
             <div className="flex items-start justify-between mb-2">
@@ -199,7 +199,7 @@ const ClientCard = ({ client, isSelected, onClick }) => {
                             "w-9 h-9 rounded-lg flex items-center justify-center font-semibold text-xs border",
                             isSelected
                                 ? "bg-slate-100 text-slate-700 border-slate-300"
-                                : "bg-slate-50 text-slate-600 border-slate-200"
+                                : "bg-slate-50 text-slate-600 border-slate-200",
                         )}
                     >
                         {client.name?.charAt(0).toUpperCase()}
@@ -274,7 +274,7 @@ function AccountStatements() {
     const [isExporting, setIsExporting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [clientSearchQuery, setClientSearchQuery] = useState("");
-    
+
     // Initialize selectedYear from sessionStorage or default to "" (All time)
     const [selectedYear, setSelectedYear] = useState(() => {
         const saved = sessionStorage.getItem("accountStatements_year");
@@ -313,7 +313,10 @@ function AccountStatements() {
         if (selectedYear === "") {
             sessionStorage.setItem("accountStatements_year", "");
         } else {
-            sessionStorage.setItem("accountStatements_year", String(selectedYear));
+            sessionStorage.setItem(
+                "accountStatements_year",
+                String(selectedYear),
+            );
         }
     }, [selectedYear]);
 
@@ -339,7 +342,7 @@ function AccountStatements() {
     useEffect(() => {
         if (clientIdFromUrl && clients.length > 0 && !selectedClient) {
             const clientFromUrl = clients.find(
-                (c) => c.id === parseInt(clientIdFromUrl)
+                (c) => c.id === parseInt(clientIdFromUrl),
             );
             if (clientFromUrl) {
                 setSelectedClient(clientFromUrl);
@@ -367,20 +370,20 @@ function AccountStatements() {
         try {
             setLoading(true);
             const response = await axios.get("/clients/", {
-                params: { year: selectedYear }
+                params: { year: selectedYear },
             });
             // Como el backend ya envía el total_pending calculado, lo usamos directamente.
             // Si necesitamos info detallada (como overdue_amount), podríamos mantener el cálculo
             // o pedirle al backend que lo envíe. Por ahora, confiamos en total_pending.
-            const clientsData = response.data.map(client => ({
+            const clientsData = response.data.map((client) => ({
                 ...client,
                 // Usar el valor que viene del backend (anotado) o 0
                 total_pending: client.total_pending || 0,
                 // Si quisieramos calcular overdue en backend, habría que anotarlo también.
                 // Por ahora lo dejamos en 0 para no hacer N+1 requests
-                overdue_amount: 0 
+                overdue_amount: 0,
             }));
-            
+
             setClients(clientsData);
         } catch {
             toast.error("Error al cargar clientes");
@@ -392,7 +395,7 @@ function AccountStatements() {
     const fetchGeneralStats = async () => {
         try {
             const response = await axios.get("/clients/general_summary/", {
-                params: { year: selectedYear }
+                params: { year: selectedYear },
             });
             setGeneralStats(response.data);
         } catch (error) {
@@ -416,7 +419,7 @@ function AccountStatements() {
                 `/clients/${clientId}/account_statement/`,
                 {
                     params: { year: selectedYear },
-                }
+                },
             );
             setStatement(response.data);
         } catch {
@@ -477,7 +480,7 @@ function AccountStatements() {
                     {
                         responseType: "blob",
                         params: params,
-                    }
+                    },
                 );
                 filename = `facturas_filtradas_${selectedClient.name}_${
                     new Date().toISOString().split("T")[0]
@@ -490,7 +493,7 @@ function AccountStatements() {
                     {
                         responseType: "blob",
                         params: { year: selectedYear },
-                    }
+                    },
                 );
                 filename = `estado_cuenta_${selectedClient.name}_${selectedYear}.xlsx`;
                 toast.success("Estado de cuenta exportado exitosamente");
@@ -580,11 +583,16 @@ function AccountStatements() {
     // Filtered invoices
     const filteredInvoices = useMemo(() => {
         return invoices.filter((inv) => {
-            // Filtro por año (ESTRICTO: Solo facturas emitidas en ese año)
+            // Filtro por año alineado con backend:
+            // mostrar facturas del año seleccionado O con saldo pendiente de cualquier año.
             if (selectedYear) {
                 // Parseo seguro de año (evita errores de timezone con new Date)
-                const invYear = parseInt(String(inv.issue_date).substring(0, 4));
-                if (invYear !== selectedYear) return false;
+                const invYear = parseInt(
+                    String(inv.issue_date).substring(0, 4),
+                );
+                const hasPendingBalance = parseFloat(inv.balance || 0) > 0.01;
+                if (invYear !== selectedYear && !hasPendingBalance)
+                    return false;
             }
 
             // Búsqueda por texto
@@ -654,7 +662,9 @@ function AccountStatements() {
         if (!statement) return null;
 
         // Base de facturas válidas (no anuladas) para KPIs financieros
-        const validInvoices = filteredInvoices.filter(inv => inv.status !== 'cancelled');
+        const validInvoices = filteredInvoices.filter(
+            (inv) => inv.status !== "cancelled",
+        );
 
         return {
             creditLimit: statement.credit_limit || 0,
@@ -663,23 +673,20 @@ function AccountStatements() {
             pendingOrders: statement.total_pending_orders || 0,
             totalInvoiced: validInvoices.reduce(
                 (sum, inv) => sum + parseFloat(inv.total_amount || 0),
-                0
+                0,
             ),
-            // Recuperado = Pagos + Notas de Crédito + Retenciones
-            // (Todo lo que ya no debemos cobrar)
+            // Cobrado/Recuperado = Total facturado - saldo actual.
+            // Equivale a pagos + notas de crédito aplicadas.
             totalPaid: validInvoices.reduce(
-                (sum, inv) => 
-                    sum + 
-                    parseFloat(inv.paid_amount || 0) + 
-                    parseFloat(inv.credited_amount || 0) + 
-                    parseFloat(inv.retencion || 0),
-                0
+                (sum, inv) =>
+                    sum +
+                    (parseFloat(inv.total_amount || 0) -
+                        parseFloat(inv.balance || 0)),
+                0,
             ),
             // Por Cobrar = Balance (lo que aún falta cobrar)
             totalPending: validInvoices
-                .filter(
-                    (inv) => inv.status !== "paid"
-                )
+                .filter((inv) => inv.status !== "paid")
                 .reduce((sum, inv) => sum + parseFloat(inv.balance || 0), 0),
         };
     }, [statement, filteredInvoices]);
@@ -717,7 +724,7 @@ function AccountStatements() {
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(
-                                    `/service-orders/${row.service_order}`
+                                    `/service-orders/${row.service_order}`,
                                 );
                             }}
                             className="font-mono text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:underline text-left w-fit flex items-center gap-1"
@@ -760,7 +767,7 @@ function AccountStatements() {
                         const today = new Date(
                             now.getFullYear(),
                             now.getMonth(),
-                            now.getDate()
+                            now.getDate(),
                         );
                         isOverdue = dueDateObj < today;
                     }
@@ -775,7 +782,7 @@ function AccountStatements() {
                                         "text-[11px] font-semibold tabular-nums",
                                         isOverdue
                                             ? "text-red-600"
-                                            : "text-slate-500"
+                                            : "text-slate-500",
                                     )}
                                 >
                                     {formattedDueDate}
@@ -833,7 +840,7 @@ function AccountStatements() {
                         "font-bold tabular-nums text-sm tracking-tight py-1",
                         parseFloat(row.balance) > 0.01
                             ? "text-slate-900"
-                            : "text-emerald-600"
+                            : "text-emerald-600",
                     )}
                 >
                     {parseFloat(row.balance) > 0.01 ? (
@@ -1063,7 +1070,7 @@ function AccountStatements() {
                     <RefreshCw
                         className={cn(
                             "w-4 h-4 mr-2",
-                            loading && "animate-spin"
+                            loading && "animate-spin",
                         )}
                     />
                     Actualizar
@@ -1148,37 +1155,82 @@ function AccountStatements() {
                                             <table className="w-full text-sm text-left">
                                                 <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                                                     <tr>
-                                                        <th className="px-4 py-3">Total Facturación</th>
-                                                        <th className="px-4 py-3">Total Servicios</th>
-                                                        <th className="px-4 py-3">Gastos a Terceros</th>
-                                                        <th className="px-4 py-3">Notas de Crédito</th>
-                                                        <th className="px-4 py-3">Retenciones</th>
-                                                        <th className="px-4 py-3">Total Pagado</th>
-                                                        <th className="px-4 py-3 text-right">Total Pendiente</th>
+                                                        <th className="px-4 py-3">
+                                                            Total Facturación
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Total Servicios
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Gastos a Terceros
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Notas de Crédito
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Retenciones
+                                                        </th>
+                                                        <th className="px-4 py-3">
+                                                            Total Cobrado
+                                                        </th>
+                                                        <th className="px-4 py-3 text-right">
+                                                            Total Pendiente
+                                                        </th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-100">
                                                     <tr className="hover:bg-slate-50/50">
                                                         <td className="px-4 py-3 font-semibold text-slate-900">
-                                                            {formatCurrency(generalStats.financial.total_invoiced)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_invoiced,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-slate-700">
-                                                            {formatCurrency(generalStats.financial.total_services)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_services,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-slate-700">
-                                                            {formatCurrency(generalStats.financial.total_third_party)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_third_party,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-amber-600 font-medium">
-                                                            {formatCurrency(generalStats.financial.total_credited)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_credited,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-slate-600">
-                                                            {formatCurrency(generalStats.financial.total_retention)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_retention,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-emerald-600 font-medium">
-                                                            {formatCurrency(generalStats.financial.total_paid)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_collected ??
+                                                                    generalStats
+                                                                        .financial
+                                                                        .total_paid,
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 text-right font-bold text-red-600">
-                                                            {formatCurrency(generalStats.financial.total_pending)}
+                                                            {formatCurrency(
+                                                                generalStats
+                                                                    .financial
+                                                                    .total_pending,
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -1196,20 +1248,45 @@ function AccountStatements() {
                                         </div>
                                         <div className="grid grid-cols-4 divide-x divide-slate-100">
                                             <div className="p-4 text-center">
-                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Clientes</p>
-                                                <p className="text-xl font-bold text-slate-900">{generalStats.clients.total}</p>
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                    Total Clientes
+                                                </p>
+                                                <p className="text-xl font-bold text-slate-900">
+                                                    {generalStats.clients.total}
+                                                </p>
                                             </div>
                                             <div className="p-4 text-center">
-                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes con Crédito</p>
-                                                <p className="text-xl font-bold text-slate-900">{generalStats.clients.credit}</p>
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                    Clientes con Crédito
+                                                </p>
+                                                <p className="text-xl font-bold text-slate-900">
+                                                    {
+                                                        generalStats.clients
+                                                            .credit
+                                                    }
+                                                </p>
                                             </div>
                                             <div className="p-4 text-center">
-                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes al Día</p>
-                                                <p className="text-xl font-bold text-emerald-600">{generalStats.clients.up_to_date}</p>
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                    Clientes al Día
+                                                </p>
+                                                <p className="text-xl font-bold text-emerald-600">
+                                                    {
+                                                        generalStats.clients
+                                                            .up_to_date
+                                                    }
+                                                </p>
                                             </div>
                                             <div className="p-4 text-center">
-                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Clientes Pendientes</p>
-                                                <p className="text-xl font-bold text-red-600">{generalStats.clients.pending}</p>
+                                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">
+                                                    Clientes Pendientes
+                                                </p>
+                                                <p className="text-xl font-bold text-red-600">
+                                                    {
+                                                        generalStats.clients
+                                                            .pending
+                                                    }
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -1227,17 +1304,30 @@ function AccountStatements() {
                                 <CardContent className="pt-0">
                                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                                         {clients
-                                            .filter(c => (c.total_pending || 0) > 0)
-                                            .sort((a, b) => (b.total_pending || 0) - (a.total_pending || 0))
+                                            .filter(
+                                                (c) =>
+                                                    (c.total_pending || 0) > 0,
+                                            )
+                                            .sort(
+                                                (a, b) =>
+                                                    (b.total_pending || 0) -
+                                                    (a.total_pending || 0),
+                                            )
                                             .map((client) => (
                                                 <div
                                                     key={client.id}
-                                                    onClick={() => setSelectedClient(client)}
+                                                    onClick={() =>
+                                                        setSelectedClient(
+                                                            client,
+                                                        )
+                                                    }
                                                     className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors border border-slate-200"
                                                 >
                                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                                         <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-semibold text-xs text-slate-700 flex-shrink-0">
-                                                            {client.name?.charAt(0).toUpperCase()}
+                                                            {client.name
+                                                                ?.charAt(0)
+                                                                .toUpperCase()}
                                                         </div>
                                                         <div className="min-w-0 flex-1">
                                                             <p className="font-medium text-sm text-slate-900 truncate">
@@ -1250,16 +1340,22 @@ function AccountStatements() {
                                                     </div>
                                                     <div className="text-right ml-3 flex-shrink-0">
                                                         <p className="font-bold text-sm text-red-600 tabular-nums">
-                                                            {formatCurrency(client.total_pending || 0)}
+                                                            {formatCurrency(
+                                                                client.total_pending ||
+                                                                    0,
+                                                            )}
                                                         </p>
                                                     </div>
                                                 </div>
                                             ))}
-                                        {clients.filter(c => (c.total_pending || 0) > 0).length === 0 && (
+                                        {clients.filter(
+                                            (c) => (c.total_pending || 0) > 0,
+                                        ).length === 0 && (
                                             <div className="text-center py-8 text-slate-500">
                                                 <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500 mb-2" />
                                                 <p className="text-sm font-medium">
-                                                    ¡Excelente! Todos los clientes están al día
+                                                    ¡Excelente! Todos los
+                                                    clientes están al día
                                                 </p>
                                             </div>
                                         )}
@@ -1315,7 +1411,7 @@ function AccountStatements() {
                                                     size="sm"
                                                     onClick={() =>
                                                         window.open(
-                                                            `tel:${selectedClient.phone}`
+                                                            `tel:${selectedClient.phone}`,
                                                         )
                                                     }
                                                 >
@@ -1329,7 +1425,7 @@ function AccountStatements() {
                                                     size="sm"
                                                     onClick={() =>
                                                         window.open(
-                                                            `mailto:${selectedClient.email}`
+                                                            `mailto:${selectedClient.email}`,
                                                         )
                                                     }
                                                 >
@@ -1347,7 +1443,7 @@ function AccountStatements() {
                                     <KPICard
                                         label="Total Facturado"
                                         value={formatCurrency(
-                                            clientKPIs.totalInvoiced
+                                            clientKPIs.totalInvoiced,
                                         )}
                                         icon={FileText}
                                         variant="primary"
@@ -1355,16 +1451,16 @@ function AccountStatements() {
                                     <KPICard
                                         label="Recuperado"
                                         value={formatCurrency(
-                                            clientKPIs.totalPaid
+                                            clientKPIs.totalPaid,
                                         )}
                                         icon={CheckCircle2}
                                         variant="success"
-                                        tooltip="Incluye pagos, notas de crédito y retenciones"
+                                        tooltip="Incluye pagos registrados y notas de crédito aplicadas"
                                     />
                                     <KPICard
                                         label="Por Cobrar"
                                         value={formatCurrency(
-                                            clientKPIs.totalPending
+                                            clientKPIs.totalPending,
                                         )}
                                         icon={TrendingUp}
                                         variant={
@@ -1404,7 +1500,7 @@ function AccountStatements() {
                                                 </div>
                                                 <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                                     {formatCurrency(
-                                                        statement.aging.current
+                                                        statement.aging.current,
                                                     )}
                                                 </div>
                                             </div>
@@ -1418,7 +1514,7 @@ function AccountStatements() {
                                                 </div>
                                                 <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                                     {formatCurrency(
-                                                        statement.aging["1-30"]
+                                                        statement.aging["1-30"],
                                                     )}
                                                 </div>
                                             </div>
@@ -1432,7 +1528,9 @@ function AccountStatements() {
                                                 </div>
                                                 <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                                     {formatCurrency(
-                                                        statement.aging["31-60"]
+                                                        statement.aging[
+                                                            "31-60"
+                                                        ],
                                                     )}
                                                 </div>
                                             </div>
@@ -1446,7 +1544,9 @@ function AccountStatements() {
                                                 </div>
                                                 <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                                     {formatCurrency(
-                                                        statement.aging["61-90"]
+                                                        statement.aging[
+                                                            "61-90"
+                                                        ],
                                                     )}
                                                 </div>
                                             </div>
@@ -1460,7 +1560,7 @@ function AccountStatements() {
                                                 </div>
                                                 <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                                     {formatCurrency(
-                                                        statement.aging["90+"]
+                                                        statement.aging["90+"],
                                                     )}
                                                 </div>
                                             </div>
@@ -1509,7 +1609,7 @@ function AccountStatements() {
                                                     value={searchQuery}
                                                     onChange={(e) =>
                                                         setSearchQuery(
-                                                            e.target.value
+                                                            e.target.value,
                                                         )
                                                     }
                                                     className="pl-9"
@@ -1520,12 +1620,12 @@ function AccountStatements() {
                                                 size="sm"
                                                 onClick={() =>
                                                     setIsFiltersOpen(
-                                                        !isFiltersOpen
+                                                        !isFiltersOpen,
                                                     )
                                                 }
                                                 className={cn(
                                                     isFiltersOpen &&
-                                                        "bg-slate-100"
+                                                        "bg-slate-100",
                                                 )}
                                             >
                                                 <Filter className="w-4 h-4 mr-2" />
@@ -1735,10 +1835,10 @@ function AccountStatements() {
                                                                 },
                                                             ]}
                                                             getOptionLabel={(
-                                                                opt
+                                                                opt,
                                                             ) => opt.name}
                                                             getOptionValue={(
-                                                                opt
+                                                                opt,
                                                             ) => opt.id}
                                                             clearable
                                                             size="sm"
@@ -1851,7 +1951,7 @@ function AccountStatements() {
                                 </div>
                                 <div className="text-2xl font-semibold text-slate-700 tabular-nums">
                                     {formatCurrency(
-                                        selectedInvoice.total_amount
+                                        selectedInvoice.total_amount,
                                     )}
                                 </div>
                             </div>
@@ -1868,7 +1968,7 @@ function AccountStatements() {
                                         <button
                                             onClick={() =>
                                                 navigate(
-                                                    `/service-orders/${selectedInvoice.service_order_id}`
+                                                    `/service-orders/${selectedInvoice.service_order_id}`,
                                                 )
                                             }
                                             className="font-mono text-sm text-blue-700 hover:text-blue-900 hover:underline transition-colors flex items-center gap-1 group"
@@ -1885,8 +1985,12 @@ function AccountStatements() {
                                     )}
                                     {selectedInvoice.purchase_order && (
                                         <div className="mt-1 flex items-center gap-1">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
-                                            <span className="font-mono text-xs text-slate-600">{selectedInvoice.purchase_order}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                PO:
+                                            </span>
+                                            <span className="font-mono text-xs text-slate-600">
+                                                {selectedInvoice.purchase_order}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -1897,7 +2001,7 @@ function AccountStatements() {
                                     <div className="text-sm">
                                         {formatDateSafe(
                                             selectedInvoice.issue_date,
-                                            "long"
+                                            "long",
                                         )}
                                     </div>
                                 </div>
@@ -1909,7 +2013,7 @@ function AccountStatements() {
                                         {selectedInvoice.due_date
                                             ? formatDateSafe(
                                                   selectedInvoice.due_date,
-                                                  "long"
+                                                  "long",
                                               )
                                             : "—"}
                                     </div>
@@ -1922,12 +2026,12 @@ function AccountStatements() {
                                     </div>
                                     <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                         {formatCurrency(
-                                            selectedInvoice.paid_amount || 0
+                                            selectedInvoice.paid_amount || 0,
                                         )}
                                     </div>
                                 </div>
                                 {parseFloat(
-                                    selectedInvoice.credited_amount || 0
+                                    selectedInvoice.credited_amount || 0,
                                 ) > 0 && (
                                     <div className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm">
                                         <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
@@ -1936,7 +2040,7 @@ function AccountStatements() {
                                         <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                             {formatCurrency(
                                                 selectedInvoice.credited_amount ||
-                                                    0
+                                                    0,
                                             )}
                                         </div>
                                     </div>
@@ -1949,14 +2053,14 @@ function AccountStatements() {
                                         className={cn(
                                             "text-xl font-bold tabular-nums",
                                             parseFloat(
-                                                selectedInvoice.balance
+                                                selectedInvoice.balance,
                                             ) > 0
                                                 ? "text-red-600"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                         )}
                                     >
                                         {formatCurrency(
-                                            selectedInvoice.balance || 0
+                                            selectedInvoice.balance || 0,
                                         )}
                                     </div>
                                 </div>
@@ -1964,7 +2068,8 @@ function AccountStatements() {
                         </div>
 
                         {/* Datos Fiscales DTE */}
-                        {(selectedInvoice.generation_code || selectedInvoice.reception_stamp) && (
+                        {(selectedInvoice.generation_code ||
+                            selectedInvoice.reception_stamp) && (
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -1973,17 +2078,25 @@ function AccountStatements() {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {selectedInvoice.generation_code && (
                                         <div>
-                                            <p className="text-xs text-slate-500 mb-0.5">Código de Generación</p>
+                                            <p className="text-xs text-slate-500 mb-0.5">
+                                                Código de Generación
+                                            </p>
                                             <p className="font-mono text-sm font-medium text-slate-700 select-all">
-                                                {selectedInvoice.generation_code}
+                                                {
+                                                    selectedInvoice.generation_code
+                                                }
                                             </p>
                                         </div>
                                     )}
                                     {selectedInvoice.reception_stamp && (
                                         <div>
-                                            <p className="text-xs text-slate-500 mb-0.5">Sello de Recepción</p>
+                                            <p className="text-xs text-slate-500 mb-0.5">
+                                                Sello de Recepción
+                                            </p>
                                             <p className="font-mono text-sm font-medium text-slate-700 select-all">
-                                                {selectedInvoice.reception_stamp}
+                                                {
+                                                    selectedInvoice.reception_stamp
+                                                }
                                             </p>
                                         </div>
                                     )}
@@ -2036,7 +2149,7 @@ function AccountStatements() {
                                         onClick={() => {
                                             setIsDetailModalOpen(false);
                                             openPaymentItemsModal(
-                                                selectedInvoice
+                                                selectedInvoice,
                                             );
                                         }}
                                     >
@@ -2072,7 +2185,7 @@ function AccountStatements() {
                 onClose={() => setDeletePaymentConfirm(null)}
                 title="¿Eliminar pago?"
                 description={`Se eliminará el pago de ${formatCurrency(
-                    deletePaymentConfirm?.amount || 0
+                    deletePaymentConfirm?.amount || 0,
                 )}. El saldo de la factura será recalculado automáticamente.`}
                 confirmText="Eliminar Pago"
                 cancelText="Cancelar"

@@ -37,10 +37,7 @@ import {
     StatCard,
 } from "../components/ui/Card";
 import { Badge, StatusBadge } from "../components/ui/Badge";
-import { 
-    Button,
-    SelectERP,
-} from "../components/ui";
+import { Button, SelectERP } from "../components/ui";
 import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
 import api from "../lib/axios";
 import { cn, formatCurrency } from "../lib/utils";
@@ -55,7 +52,7 @@ function Dashboard() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
+
     // Initialize from localStorage or default to "All Time" (Year 0)
     const [selectedMonth, setSelectedMonth] = useState(() => {
         const saved = localStorage.getItem("dashboard_month");
@@ -95,7 +92,10 @@ function Dashboard() {
     const [clientBreakdown, setClientBreakdown] = useState([]);
     const [cashFlowData, setCashFlowData] = useState([]);
     const [revenueComposition, setRevenueComposition] = useState(null);
-    const [profitabilityData, setProfitabilityData] = useState({ margen: 0, rentabilidad_porcentaje: 0 });
+    const [profitabilityData, setProfitabilityData] = useState({
+        margen: 0,
+        rentabilidad_porcentaje: 0,
+    });
 
     const fetchDashboardData = useCallback(async () => {
         try {
@@ -106,12 +106,12 @@ function Dashboard() {
                 api.get("/dashboard/", {
                     params: {
                         month: selectedMonth,
-                        year: selectedYear
-                    }
+                        year: selectedYear,
+                    },
                 }),
-                api.get("/dashboard/alerts/")
+                api.get("/dashboard/alerts/"),
             ]);
-            
+
             const data = response.data;
             const alertsData = alertsResponse.data; // Now returns a flat list
 
@@ -123,11 +123,7 @@ function Dashboard() {
                 pendingInvoices: data.overall?.pending_invoices || 0,
                 ordersThisMonth: data.current_month?.total_os_month || 0,
                 ordersThisMonthTrend: data.trends?.os_trend || 0,
-                profitability: data.current_month?.billed_amount
-                    ? data.current_month.billed_amount -
-                      data.current_month.operating_costs -
-                      data.current_month.admin_costs
-                    : 0,
+                profitability: data.profitability?.margen || 0,
                 profitabilityTrend: data.trends?.billing_trend || 0,
                 averageOrderValue:
                     data.current_month?.total_os_month > 0
@@ -140,7 +136,7 @@ function Dashboard() {
                               (data.overall.os_cerradas /
                                   (data.overall.os_abiertas +
                                       data.overall.os_cerradas)) *
-                                  100
+                                  100,
                           )
                         : 0,
             });
@@ -166,32 +162,44 @@ function Dashboard() {
             // New data for advanced charts
             setCashFlowData(data.cash_flow_data || []);
             setRevenueComposition(data.revenue_composition || null);
-            setProfitabilityData(data.profitability || { margen: 0, rentabilidad_porcentaje: 0 });
+            setProfitabilityData(
+                data.profitability || { margen: 0, rentabilidad_porcentaje: 0 },
+            );
 
             // Construir chartData solo con datos reales disponibles
             const chartDataPoints = [];
 
             if (data.monthly_breakdown && data.monthly_breakdown.length > 0) {
                 // Annual View: Use full breakdown
-                data.monthly_breakdown.forEach(m => {
+                data.monthly_breakdown.forEach((m) => {
                     chartDataPoints.push({
                         name: m.name,
                         ingresos: m.ingresos,
                         gastos: m.gastos,
-                        value: m.total_os
+                        value: m.total_os,
                     });
                 });
             } else {
                 // Monthly View: Current vs Previous
                 // Generar datos de gráficos solo con el mes actual si hay datos
                 // No inventamos historial que no existe
-                const currentMonthName = new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1, 1).toLocaleDateString("es-SV", {
+                const currentMonthName = new Date(
+                    selectedYear || new Date().getFullYear(),
+                    selectedMonth - 1,
+                    1,
+                ).toLocaleDateString("es-SV", {
                     month: "short",
                 });
                 // Fix prev month name calculation for UI
-                const prevDate = new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1, 1);
+                const prevDate = new Date(
+                    selectedYear || new Date().getFullYear(),
+                    selectedMonth - 1,
+                    1,
+                );
                 prevDate.setMonth(prevDate.getMonth() - 1);
-                const prevMonthName = prevDate.toLocaleDateString("es-SV", { month: "short" });
+                const prevMonthName = prevDate.toLocaleDateString("es-SV", {
+                    month: "short",
+                });
 
                 // Si hay datos del mes anterior, incluirlos
                 if (
@@ -262,7 +270,7 @@ function Dashboard() {
             });
         } catch {
             setError(
-                "No se pudo conectar con el servidor. Verifique su conexión e intente de nuevo."
+                "No se pudo conectar con el servidor. Verifique su conexión e intente de nuevo.",
             );
 
             // En caso de error, mostrar estados vacíos en lugar de datos ficticios
@@ -300,71 +308,95 @@ function Dashboard() {
     }, [fetchDashboardData]);
 
     // KPI Cards data
-    const kpiCards = useMemo(
-        () => {
-            const monthName = selectedMonth > 0 
-                ? new Date(selectedYear || new Date().getFullYear(), selectedMonth - 1).toLocaleString('es-SV', { month: 'long' }) 
-                : '';
-            
-            const billingTitle = selectedYear === 0 
-                ? "Facturación Histórica Total" 
-                : (selectedMonth === 0 ? `Facturación Anual ${selectedYear}` : `Facturación de ${monthName}`);
-            
-            const ordersTitle = selectedYear === 0 
-                ? "OS Totales Históricas" 
-                : (selectedMonth === 0 ? `OS Totales ${selectedYear}` : `OS de ${monthName}`);
+    const kpiCards = useMemo(() => {
+        const monthName =
+            selectedMonth > 0
+                ? new Date(
+                      selectedYear || new Date().getFullYear(),
+                      selectedMonth - 1,
+                  ).toLocaleString("es-SV", { month: "long" })
+                : "";
 
-            return [
-                {
-                    title: "Órdenes Activas",
-                    value: stats.activeOrders,
-                    icon: Truck,
-                    variant: "primary",
-                },
-                {
-                    title: billingTitle,
-                    value: formatCurrency(stats.monthlyRevenue),
-                    icon: DollarSign,
-                    variant: "success",
-                },
-                {
-                    title: ordersTitle,
-                    value: stats.ordersThisMonth,
-                    trend:
-                        stats.ordersThisMonthTrend > 0
-                            ? "up"
-                            : stats.ordersThisMonthTrend < 0
-                            ? "down"
-                            : "neutral",
-                    trendValue: `${Math.abs(stats.ordersThisMonthTrend)}%`,
-                    icon: FileText,
-                    variant: "info",
-                },
-                {
-                    title: "Margen Bruto",
-                    value: formatCurrency(profitabilityData.margen),
-                    icon: TrendingUp,
-                    variant: profitabilityData.margen >= 0 ? "success" : "danger",
-                },
-                {
-                    title: "Rentabilidad",
-                    value: `${profitabilityData.rentabilidad_porcentaje.toFixed(1)}%`,
-                    icon: BarChart3,
-                    variant: profitabilityData.rentabilidad_porcentaje >= 20 ? "success" : profitabilityData.rentabilidad_porcentaje >= 10 ? "warning" : "danger",
-                },
-            ];
-        },
-        [stats, profitabilityData, selectedYear, selectedMonth]
-    );
+        const billingTitle =
+            selectedYear === 0
+                ? "Facturación Histórica Total"
+                : selectedMonth === 0
+                  ? `Facturación Anual ${selectedYear}`
+                  : `Facturación de ${monthName}`;
+
+        const ordersTitle =
+            selectedYear === 0
+                ? "OS Totales Históricas"
+                : selectedMonth === 0
+                  ? `OS Totales ${selectedYear}`
+                  : `OS de ${monthName}`;
+
+        return [
+            {
+                title: "Órdenes Activas",
+                value: stats.activeOrders,
+                icon: Truck,
+                variant: "primary",
+            },
+            {
+                title: billingTitle,
+                value: formatCurrency(stats.monthlyRevenue),
+                icon: DollarSign,
+                variant: "success",
+            },
+            {
+                title: ordersTitle,
+                value: stats.ordersThisMonth,
+                trend:
+                    stats.ordersThisMonthTrend > 0
+                        ? "up"
+                        : stats.ordersThisMonthTrend < 0
+                          ? "down"
+                          : "neutral",
+                trendValue: `${Math.abs(stats.ordersThisMonthTrend)}%`,
+                icon: FileText,
+                variant: "info",
+            },
+            {
+                title: "Margen Bruto",
+                value: formatCurrency(profitabilityData.margen),
+                icon: TrendingUp,
+                variant: profitabilityData.margen >= 0 ? "success" : "danger",
+            },
+            {
+                title: "Rentabilidad",
+                value: `${profitabilityData.rentabilidad_porcentaje.toFixed(1)}%`,
+                icon: BarChart3,
+                variant:
+                    profitabilityData.rentabilidad_porcentaje >= 20
+                        ? "success"
+                        : profitabilityData.rentabilidad_porcentaje >= 10
+                          ? "warning"
+                          : "danger",
+            },
+        ];
+    }, [stats, profitabilityData, selectedYear, selectedMonth]);
 
     // Prepare data for Revenue Composition Donut Chart
     const revenuePieData = useMemo(() => {
         if (!revenueComposition) return [];
         return [
-            { name: 'Propios', value: revenueComposition.servicios_propios, color: '#10b981' }, // emerald-500
-            { name: 'Tercerizados', value: revenueComposition.servicios_tercerizados, color: '#3b82f6' }, // blue-500
-            { name: 'Gastos', value: revenueComposition.gastos_terceros, color: '#f59e0b' } // amber-500
-        ].filter(item => item.value > 0);
+            {
+                name: "Propios",
+                value: revenueComposition.servicios_propios,
+                color: "#10b981",
+            }, // emerald-500
+            {
+                name: "Tercerizados",
+                value: revenueComposition.servicios_tercerizados,
+                color: "#3b82f6",
+            }, // blue-500
+            {
+                name: "Gastos",
+                value: revenueComposition.gastos_terceros,
+                color: "#f59e0b",
+            }, // amber-500
+        ].filter((item) => item.value > 0);
     }, [revenueComposition]);
 
     if (loading) {
@@ -410,8 +442,12 @@ function Dashboard() {
             {/* Header - Responsive */}
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                 <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-slate-900">Panel de Control</h2>
-                    <p className="text-xs sm:text-sm text-slate-500">Resumen operativo y financiero</p>
+                    <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+                        Panel de Control
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-500">
+                        Resumen operativo y financiero
+                    </p>
                 </div>
                 {/* Filtros - Stack en móvil, inline en desktop */}
                 <div className="flex flex-wrap items-center gap-2">
@@ -421,12 +457,18 @@ function Dashboard() {
                             onChange={(val) => setSelectedMonth(val)}
                             options={[
                                 { id: 0, name: "Todo el año" },
-                                { id: 1, name: "Ene" }, { id: 2, name: "Feb" },
-                                { id: 3, name: "Mar" }, { id: 4, name: "Abr" },
-                                { id: 5, name: "May" }, { id: 6, name: "Jun" },
-                                { id: 7, name: "Jul" }, { id: 8, name: "Ago" },
-                                { id: 9, name: "Sep" }, { id: 10, name: "Oct" },
-                                { id: 11, name: "Nov" }, { id: 12, name: "Dic" },
+                                { id: 1, name: "Ene" },
+                                { id: 2, name: "Feb" },
+                                { id: 3, name: "Mar" },
+                                { id: 4, name: "Abr" },
+                                { id: 5, name: "May" },
+                                { id: 6, name: "Jun" },
+                                { id: 7, name: "Jul" },
+                                { id: 8, name: "Ago" },
+                                { id: 9, name: "Sep" },
+                                { id: 10, name: "Oct" },
+                                { id: 11, name: "Nov" },
+                                { id: 12, name: "Dic" },
                             ]}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -445,8 +487,8 @@ function Dashboard() {
                                 { id: 0, name: "Todo el tiempo" },
                                 ...Array.from({ length: 4 }, (_, i) => ({
                                     id: new Date().getFullYear() - i,
-                                    name: String(new Date().getFullYear() - i)
-                                }))
+                                    name: String(new Date().getFullYear() - i),
+                                })),
                             ]}
                             getOptionLabel={(opt) => opt.name}
                             getOptionValue={(opt) => opt.id}
@@ -509,8 +551,12 @@ function Dashboard() {
                 {/* Main Table - Client Financial Breakdown */}
                 <Card className="lg:col-span-4">
                     <CardHeader>
-                        <CardTitle>Análisis de Saldos Pendientes por Cliente</CardTitle>
-                        <CardDescription>Desglose de cuentas por cobrar</CardDescription>
+                        <CardTitle>
+                            Análisis de Saldos Pendientes por Cliente
+                        </CardTitle>
+                        <CardDescription>
+                            Desglose de cuentas por cobrar
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-0">
                         <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
@@ -543,29 +589,43 @@ function Dashboard() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {clientBreakdown.map((client, index) => {
-                                            return (
-                                                <tr
-                                                    key={client.client_id || index}
-                                                    className="hover:bg-slate-50/50 transition-colors group"
-                                                >
-                                                    <td className="px-4 py-3.5 text-slate-900 font-medium">
-                                                        {client.client_name}
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">
-                                                        <span className="text-emerald-700">
-                                                            {formatCurrency(client.total_ingresos || 0)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
-                                                        {formatCurrency(client.total_servicios || 0)}
-                                                    </td>
-                                                    <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
-                                                        {formatCurrency(client.total_prestamos || 0)}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                        {clientBreakdown.map(
+                                            (client, index) => {
+                                                return (
+                                                    <tr
+                                                        key={
+                                                            client.client_id ||
+                                                            index
+                                                        }
+                                                        className="hover:bg-slate-50/50 transition-colors group"
+                                                    >
+                                                        <td className="px-4 py-3.5 text-slate-900 font-medium">
+                                                            {client.client_name}
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-right font-semibold text-slate-900 tabular-nums">
+                                                            <span className="text-emerald-700">
+                                                                {formatCurrency(
+                                                                    client.total_ingresos ||
+                                                                        0,
+                                                                )}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
+                                                            {formatCurrency(
+                                                                client.total_servicios ||
+                                                                    0,
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-right font-medium text-slate-700 tabular-nums">
+                                                            {formatCurrency(
+                                                                client.total_prestamos ||
+                                                                    0,
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            },
+                                        )}
                                     </tbody>
                                     <tfoot className="sticky bottom-0 z-10 bg-slate-100 border-t-2 border-slate-300 font-bold shadow-[0_-2px_4px_rgba(0,0,0,0.1)]">
                                         <tr>
@@ -575,18 +635,36 @@ function Dashboard() {
                                             <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
                                                 <span className="text-emerald-700">
                                                     {formatCurrency(
-                                                        clientBreakdown.reduce((sum, c) => sum + (c.total_ingresos || 0), 0)
+                                                        clientBreakdown.reduce(
+                                                            (sum, c) =>
+                                                                sum +
+                                                                (c.total_ingresos ||
+                                                                    0),
+                                                            0,
+                                                        ),
                                                     )}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
                                                 {formatCurrency(
-                                                    clientBreakdown.reduce((sum, c) => sum + (c.total_servicios || 0), 0)
+                                                    clientBreakdown.reduce(
+                                                        (sum, c) =>
+                                                            sum +
+                                                            (c.total_servicios ||
+                                                                0),
+                                                        0,
+                                                    ),
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 text-right text-slate-900 tabular-nums">
                                                 {formatCurrency(
-                                                    clientBreakdown.reduce((sum, c) => sum + (c.total_prestamos || 0), 0)
+                                                    clientBreakdown.reduce(
+                                                        (sum, c) =>
+                                                            sum +
+                                                            (c.total_prestamos ||
+                                                                0),
+                                                        0,
+                                                    ),
                                                 )}
                                             </td>
                                         </tr>
@@ -602,10 +680,19 @@ function Dashboard() {
                     <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="text-base">Alertas</CardTitle>
-                                <CardDescription className="text-xs">Requieren atención</CardDescription>
+                                <CardTitle className="text-base">
+                                    Alertas
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Requieren atención
+                                </CardDescription>
                             </div>
-                            <Badge variant={alerts.length > 0 ? "danger" : "success"} className="text-xs px-2 py-0.5">
+                            <Badge
+                                variant={
+                                    alerts.length > 0 ? "danger" : "success"
+                                }
+                                className="text-xs px-2 py-0.5"
+                            >
                                 {alerts.length}
                             </Badge>
                         </div>
@@ -615,22 +702,31 @@ function Dashboard() {
                             {alerts.length === 0 ? (
                                 <div className="py-8 flex flex-col items-center justify-center text-slate-400">
                                     <CheckCircle className="h-10 w-10 mb-2 text-emerald-400" />
-                                    <p className="text-sm font-medium text-slate-600">Todo en orden</p>
-                                    <p className="text-xs text-slate-400 mt-1">No hay alertas pendientes</p>
+                                    <p className="text-sm font-medium text-slate-600">
+                                        Todo en orden
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        No hay alertas pendientes
+                                    </p>
                                 </div>
                             ) : (
                                 alerts.map((alert) => {
-                                    const isHigh = alert.severity === 'high';
-                                    const isMedium = alert.severity === 'medium';
-                                    
+                                    const isHigh = alert.severity === "high";
+                                    const isMedium =
+                                        alert.severity === "medium";
+
                                     return (
                                         <div
                                             key={alert.id}
                                             className={cn(
                                                 "p-3 rounded-lg border-l-3 transition-all",
-                                                isHigh && "bg-red-50 border-l-red-500 hover:bg-red-100/70",
-                                                isMedium && "bg-amber-50 border-l-amber-500 hover:bg-amber-100/70",
-                                                !isHigh && !isMedium && "bg-blue-50 border-l-blue-500 hover:bg-blue-100/70"
+                                                isHigh &&
+                                                    "bg-red-50 border-l-red-500 hover:bg-red-100/70",
+                                                isMedium &&
+                                                    "bg-amber-50 border-l-amber-500 hover:bg-amber-100/70",
+                                                !isHigh &&
+                                                    !isMedium &&
+                                                    "bg-blue-50 border-l-blue-500 hover:bg-blue-100/70",
                                             )}
                                         >
                                             <div className="flex items-start gap-2.5">
@@ -647,12 +743,17 @@ function Dashboard() {
                                                     </p>
                                                     {alert.client && (
                                                         <p className="text-xs text-slate-600 mt-1 truncate">
-                                                            <span className="font-medium">Cliente:</span> {alert.client}
+                                                            <span className="font-medium">
+                                                                Cliente:
+                                                            </span>{" "}
+                                                            {alert.client}
                                                         </p>
                                                     )}
                                                     {alert.amount && (
                                                         <p className="text-xs font-semibold text-slate-900 mt-1.5">
-                                                            {formatCurrency(alert.amount)}
+                                                            {formatCurrency(
+                                                                alert.amount,
+                                                            )}
                                                         </p>
                                                     )}
                                                 </div>
@@ -672,23 +773,33 @@ function Dashboard() {
                 <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle>
-                            {selectedYear === 0 
-                                ? "Flujo de Caja Histórico" 
-                                : (selectedMonth === 0 ? "Flujo de Caja Anual" : "Flujo de Caja Mensual")}
+                            {selectedYear === 0
+                                ? "Flujo de Caja Histórico"
+                                : selectedMonth === 0
+                                  ? "Flujo de Caja Anual"
+                                  : "Flujo de Caja Mensual"}
                         </CardTitle>
-                        <CardDescription>Facturación Emitida vs Cobros vs Saldos Pendientes</CardDescription>
+                        <CardDescription>
+                            Facturación Emitida vs Cobros vs Saldos Pendientes
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-[280px] w-full">
                             {cashFlowData.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <DollarSign className="h-12 w-12 mb-3 text-slate-300" />
-                                    <p className="text-sm font-medium">Sin datos de flujo de caja</p>
+                                    <p className="text-sm font-medium">
+                                        Sin datos de flujo de caja
+                                    </p>
                                 </div>
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={cashFlowData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            vertical={false}
+                                            stroke="#e2e8f0"
+                                        />
                                         <XAxis
                                             dataKey="month"
                                             stroke="#94a3b8"
@@ -701,25 +812,51 @@ function Dashboard() {
                                             fontSize={12}
                                             tickLine={false}
                                             axisLine={false}
-                                            tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                                            tickFormatter={(value) =>
+                                                `$${(value / 1000).toFixed(0)}k`
+                                            }
                                         />
                                         <Tooltip
                                             cursor={{ fill: "#f1f5f9" }}
                                             contentStyle={{
                                                 borderRadius: "8px",
                                                 border: "1px solid #e2e8f0",
-                                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                                                boxShadow:
+                                                    "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                                                 fontSize: "13px",
                                             }}
-                                            formatter={(value) => formatCurrency(value)}
+                                            formatter={(value) =>
+                                                formatCurrency(value)
+                                            }
                                         />
                                         <Legend
-                                            wrapperStyle={{ fontSize: "12px", paddingTop: "12px" }}
+                                            wrapperStyle={{
+                                                fontSize: "12px",
+                                                paddingTop: "12px",
+                                            }}
                                             iconType="circle"
                                         />
-                                        <Bar dataKey="facturado" fill="#10b981" radius={[4, 4, 0, 0]} name="Facturado (Emitido)" barSize={40} />
-                                        <Bar dataKey="cobrado" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Cobrado (Pagos)" barSize={40} />
-                                        <Bar dataKey="pendiente" fill="#ef4444" radius={[4, 4, 0, 0]} name="Pendiente (Saldo)" barSize={40} />
+                                        <Bar
+                                            dataKey="facturado"
+                                            fill="#10b981"
+                                            radius={[4, 4, 0, 0]}
+                                            name="Facturado (Emitido)"
+                                            barSize={40}
+                                        />
+                                        <Bar
+                                            dataKey="cobrado"
+                                            fill="#3b82f6"
+                                            radius={[4, 4, 0, 0]}
+                                            name="Cobrado (Pagos)"
+                                            barSize={40}
+                                        />
+                                        <Bar
+                                            dataKey="pendiente"
+                                            fill="#ef4444"
+                                            radius={[4, 4, 0, 0]}
+                                            name="Pendiente (Saldo)"
+                                            barSize={40}
+                                        />
                                     </BarChart>
                                 </ResponsiveContainer>
                             )}
@@ -731,14 +868,19 @@ function Dashboard() {
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle className="text-base">
-                            {selectedYear === 0 
-                                ? "Composición Histórica" 
-                                : (selectedMonth === 0 ? "Composición Anual" : "Composición Mensual")}
+                            {selectedYear === 0
+                                ? "Composición Histórica"
+                                : selectedMonth === 0
+                                  ? "Composición Anual"
+                                  : "Composición Mensual"}
                         </CardTitle>
-                        <CardDescription className="text-xs">Desglose de Facturación</CardDescription>
+                        <CardDescription className="text-xs">
+                            Desglose de Facturación
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {!revenueComposition || revenueComposition.total === 0 ? (
+                        {!revenueComposition ||
+                        revenueComposition.total === 0 ? (
                             <div className="h-[240px] flex flex-col items-center justify-center text-slate-400">
                                 <BarChart3 className="h-10 w-10 mb-2 text-slate-300" />
                                 <p className="text-sm font-medium">Sin datos</p>
@@ -749,66 +891,97 @@ function Dashboard() {
                                     {/* Servicios Propios */}
                                     <div>
                                         <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-xs font-medium text-slate-700">Servicios Propios</span>
+                                            <span className="text-xs font-medium text-slate-700">
+                                                Servicios Propios
+                                            </span>
                                             <span className="text-xs font-bold text-emerald-700">
-                                                {revenueComposition.porcentaje_propios}%
+                                                {
+                                                    revenueComposition.porcentaje_propios
+                                                }
+                                                %
                                             </span>
                                         </div>
                                         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-emerald-600"
-                                                style={{ width: `${revenueComposition.porcentaje_propios}%` }}
+                                                style={{
+                                                    width: `${revenueComposition.porcentaje_propios}%`,
+                                                }}
                                             />
                                         </div>
                                         <p className="text-xs text-slate-600 mt-1 font-semibold">
-                                            {formatCurrency(revenueComposition.servicios_propios)}
+                                            {formatCurrency(
+                                                revenueComposition.servicios_propios,
+                                            )}
                                         </p>
                                     </div>
-                                    
+
                                     {/* Servicios Tercerizados */}
                                     <div>
                                         <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-xs font-medium text-slate-700">Servicios Tercerizados</span>
+                                            <span className="text-xs font-medium text-slate-700">
+                                                Servicios Tercerizados
+                                            </span>
                                             <span className="text-xs font-bold text-blue-700">
-                                                {revenueComposition.porcentaje_tercerizados}%
+                                                {
+                                                    revenueComposition.porcentaje_tercerizados
+                                                }
+                                                %
                                             </span>
                                         </div>
                                         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-blue-600"
-                                                style={{ width: `${revenueComposition.porcentaje_tercerizados}%` }}
+                                                style={{
+                                                    width: `${revenueComposition.porcentaje_tercerizados}%`,
+                                                }}
                                             />
                                         </div>
                                         <p className="text-xs text-slate-600 mt-1 font-semibold">
-                                            {formatCurrency(revenueComposition.servicios_tercerizados)}
+                                            {formatCurrency(
+                                                revenueComposition.servicios_tercerizados,
+                                            )}
                                         </p>
                                     </div>
 
                                     {/* Gastos a Terceros (Nuevo) */}
                                     <div>
                                         <div className="flex justify-between items-center mb-1.5">
-                                            <span className="text-xs font-medium text-slate-700">Gastos a Terceros</span>
+                                            <span className="text-xs font-medium text-slate-700">
+                                                Gastos a Terceros
+                                            </span>
                                             <span className="text-xs font-bold text-amber-700">
-                                                {revenueComposition.porcentaje_gastos}%
+                                                {
+                                                    revenueComposition.porcentaje_gastos
+                                                }
+                                                %
                                             </span>
                                         </div>
                                         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-amber-500"
-                                                style={{ width: `${revenueComposition.porcentaje_gastos}%` }}
+                                                style={{
+                                                    width: `${revenueComposition.porcentaje_gastos}%`,
+                                                }}
                                             />
                                         </div>
                                         <p className="text-xs text-slate-600 mt-1 font-semibold">
-                                            {formatCurrency(revenueComposition.gastos_terceros)}
+                                            {formatCurrency(
+                                                revenueComposition.gastos_terceros,
+                                            )}
                                         </p>
                                     </div>
                                 </div>
 
                                 <div className="pt-3 border-t border-slate-200">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm font-bold text-slate-900">Total Facturado</span>
                                         <span className="text-sm font-bold text-slate-900">
-                                            {formatCurrency(revenueComposition.total)}
+                                            Total Facturado
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-900">
+                                            {formatCurrency(
+                                                revenueComposition.total,
+                                            )}
                                         </span>
                                     </div>
                                 </div>
@@ -831,7 +1004,7 @@ function Dashboard() {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => navigate('/service-orders')}
+                            onClick={() => navigate("/service-orders")}
                             className="text-xs h-7 px-2 hover:bg-slate-100"
                         >
                             Ver todas
@@ -842,8 +1015,12 @@ function Dashboard() {
                     {recentOrders.length === 0 ? (
                         <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                             <FileText className="h-12 w-12 mb-3 text-slate-300" />
-                            <p className="text-sm font-medium text-slate-600">No hay órdenes recientes</p>
-                            <p className="text-xs text-slate-400 mt-1">Las nuevas órdenes aparecerán aquí</p>
+                            <p className="text-sm font-medium text-slate-600">
+                                No hay órdenes recientes
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Las nuevas órdenes aparecerán aquí
+                            </p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -871,7 +1048,11 @@ function Dashboard() {
                                     {recentOrders.slice(0, 8).map((order) => (
                                         <tr
                                             key={order.id}
-                                            onClick={() => navigate(`/service-orders/${order.id}`)}
+                                            onClick={() =>
+                                                navigate(
+                                                    `/service-orders/${order.id}`,
+                                                )
+                                            }
                                             className="hover:bg-slate-50 transition-colors cursor-pointer"
                                         >
                                             <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-900">
@@ -882,18 +1063,27 @@ function Dashboard() {
                                             </td>
                                             <td className="px-3 py-2.5 text-xs text-slate-500 hidden sm:table-cell">
                                                 {order.created_at
-                                                    ? new Date(order.created_at).toLocaleDateString("es-SV", {
-                                                        day: '2-digit',
-                                                        month: 'short',
-                                                        year: 'numeric'
-                                                    })
+                                                    ? new Date(
+                                                          order.created_at,
+                                                      ).toLocaleDateString(
+                                                          "es-SV",
+                                                          {
+                                                              day: "2-digit",
+                                                              month: "short",
+                                                              year: "numeric",
+                                                          },
+                                                      )
                                                     : "-"}
                                             </td>
                                             <td className="px-3 py-2.5 text-right text-sm font-semibold text-slate-900 tabular-nums">
-                                                {formatCurrency(order.total_amount || 0)}
+                                                {formatCurrency(
+                                                    order.total_amount || 0,
+                                                )}
                                             </td>
                                             <td className="px-3 py-2.5 text-center">
-                                                <StatusBadge status={order.status} />
+                                                <StatusBadge
+                                                    status={order.status}
+                                                />
                                             </td>
                                         </tr>
                                     ))}
@@ -904,7 +1094,7 @@ function Dashboard() {
                 </CardContent>
             </Card>
         </div>
-        );
-    }
+    );
+}
 
-    export default Dashboard;
+export default Dashboard;

@@ -4,12 +4,23 @@ from django.db.models import Sum
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
+import os
+import uuid
 from decimal import Decimal
 from apps.clients.models import Client
 from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank, Customs
 from apps.validators import validate_document_file
 from apps.core.models import SoftDeleteModel
 from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
+
+
+def order_document_upload_path(instance, filename):
+    """Generate a unique file path per OS to avoid shared/overwritten files across orders."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    order_id = getattr(instance, 'order_id', None) or 'unknown'
+    date_prefix = timezone.now().strftime('%Y/%m/%d')
+    unique_name = f"{uuid.uuid4().hex}{ext}"
+    return f"orders/docs/os_{order_id}/{date_prefix}/{unique_name}"
 
 class ServiceOrder(SoftDeleteModel):
     order_number = models.CharField(max_length=50, unique=True, blank=True, verbose_name="Número de Orden")
@@ -283,7 +294,7 @@ class OrderDocument(models.Model):
         verbose_name="Tipo de Documento"
     )
     file = models.FileField(
-        upload_to='orders/docs/',
+        upload_to=order_document_upload_path,
         verbose_name="Archivo",
         validators=[validate_document_file],
         help_text="Solo PDF, JPG, PNG. Máximo 5MB"

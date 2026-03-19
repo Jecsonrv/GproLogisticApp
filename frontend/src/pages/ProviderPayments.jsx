@@ -301,6 +301,7 @@ function ProviderPayments() {
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [isExportingDocuments, setIsExportingDocuments] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
         open: false,
@@ -452,6 +453,7 @@ function ProviderPayments() {
                 paid_amount: inv.paid_amount,
                 status: inv.payment_status,
                 transaction_date: inv.issue_date,
+                payment_date: inv.payment_date,
                 service_order: inv.service_order,
                 service_order_number: inv.service_order_number,
                 purchase_order: inv.purchase_order,
@@ -584,7 +586,7 @@ function ProviderPayments() {
             setIsCreateModalOpen(false);
             resetForm();
             fetchPayments();
-        } catch (error) {
+        } catch {
             // Error handled by interceptor
         } finally {
             setIsSubmitting(false);
@@ -1187,6 +1189,72 @@ function ProviderPayments() {
         }
     };
 
+    const handleExportDocuments = async (exportType = "filtered") => {
+        const dataToExport =
+            exportType === "filtered" ? filteredPayments : payments;
+
+        if (dataToExport.length === 0) {
+            toast.error("No hay registros para exportar documentos");
+            return;
+        }
+
+        const transferIds = dataToExport
+            .filter((row) => row.source !== "provider_invoice")
+            .map((row) => row.original_id || row.id)
+            .filter(Boolean);
+
+        const providerInvoiceIds = dataToExport
+            .filter((row) => row.source === "provider_invoice")
+            .map((row) => row.original_id || row.id)
+            .filter(Boolean);
+
+        if (transferIds.length === 0 && providerInvoiceIds.length === 0) {
+            toast.error("No se encontraron IDs válidos para exportar");
+            return;
+        }
+
+        try {
+            setIsExportingDocuments(true);
+
+            const response = await axios.post(
+                "/transfers/transfers/export_documents/",
+                {
+                    transfer_ids: transferIds,
+                    provider_invoice_ids: providerInvoiceIds,
+                    only_pdf: true,
+                    include_payment_proofs: true,
+                },
+                {
+                    responseType: "blob",
+                },
+            );
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement("a");
+            link.href = url;
+            const timestamp = new Date().toISOString().split("T")[0];
+            const filename =
+                exportType === "filtered"
+                    ? `GPRO_Documentos_Filtrados_${timestamp}.zip`
+                    : `GPRO_Documentos_Pagos_${timestamp}.zip`;
+            link.setAttribute("download", filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            toast.success(
+                exportType === "filtered"
+                    ? "Documentos PDF filtrados exportados"
+                    : "Documentos PDF exportados",
+            );
+        } catch {
+            toast.error("Error al exportar documentos PDF");
+        } finally {
+            setIsExportingDocuments(false);
+        }
+    };
+
     const clearFilters = () => {
         setFilters({
             transfer_type: "",
@@ -1280,6 +1348,17 @@ function ProviderPayments() {
 
     // KPIs
     const kpis = useMemo(() => {
+        const now = new Date();
+        const isCurrentMonth = (dateValue) => {
+            if (!dateValue) return false;
+            const date = new Date(dateValue);
+            if (Number.isNaN(date.getTime())) return false;
+            return (
+                date.getMonth() === now.getMonth() &&
+                date.getFullYear() === now.getFullYear()
+            );
+        };
+
         const total = payments.reduce(
             (sum, p) => sum + parseFloat(p.amount || 0),
             0,
@@ -1290,14 +1369,22 @@ function ProviderPayments() {
         const aprobado = payments
             .filter((p) => p.status === "aprobado")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
-        const pagado = payments
-            .filter((p) => p.status === "pagado" || p.status === "pagada")
-            .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        const pagadoMes = payments.reduce((sum, p) => {
+            const paidAmount = parseFloat(p.paid_amount || 0);
+
+            if (paidAmount <= 0) return sum;
+
+            const referenceDate =
+                p.payment_date || p.updated_at || p.transaction_date;
+            if (!isCurrentMonth(referenceDate)) return sum;
+
+            return sum + paidAmount;
+        }, 0);
         const costos = payments
             .filter((p) => p.transfer_type === "costos")
             .reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
-        return { total, pendiente, aprobado, pagado, costos };
+        return { total, pendiente, aprobado, pagadoMes, costos };
     }, [payments]);
 
     const activeFiltersCount = useMemo(() => {
@@ -1768,11 +1855,11 @@ function ProviderPayments() {
                     />
                     <KPICard
                         label="Pagado este mes"
-                        value={formatCurrency(kpis.pagado)}
+                        value={formatCurrency(kpis.pagadoMes)}
                         icon={Banknote}
                     />
                     <KPICard
-                        label="Gastos operativos"
+                        label="Costos directos"
                         value={formatCurrency(kpis.costos)}
                         icon={TrendingDown}
                     />
@@ -2099,21 +2186,46 @@ function ProviderPayments() {
                             {/* Derecha: Acciones */}
                             <div className="flex items-center gap-2 sm:gap-3 justify-end shrink-0">
                                 {activeTab === "gastos" && (
-                                    <ExportButton
-                                        onExportAll={() =>
-                                            handleExportExcel("all")
-                                        }
-                                        onExportFiltered={() =>
-                                            handleExportExcel("filtered")
-                                        }
-                                        filteredCount={filteredPayments.length}
-                                        totalCount={payments.length}
-                                        isExporting={isExporting}
-                                        allLabel="Todos los Pagos"
-                                        allDescription="Exportar registro completo"
-                                        filteredLabel="Filtrados"
-                                        filteredDescription="Solo visibles"
-                                    />
+                                    <>
+                                        <ExportButton
+                                            onExportAll={() =>
+                                                handleExportExcel("all")
+                                            }
+                                            onExportFiltered={() =>
+                                                handleExportExcel("filtered")
+                                            }
+                                            filteredCount={
+                                                filteredPayments.length
+                                            }
+                                            totalCount={payments.length}
+                                            isExporting={isExporting}
+                                            allLabel="Todos los Pagos"
+                                            allDescription="Exportar registro completo"
+                                            filteredLabel="Filtrados"
+                                            filteredDescription="Solo visibles"
+                                        />
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                handleExportDocuments(
+                                                    "filtered",
+                                                )
+                                            }
+                                            disabled={
+                                                isExportingDocuments ||
+                                                filteredPayments.length === 0
+                                            }
+                                            className="border-slate-200 text-slate-700 bg-white hover:bg-slate-50 h-10 sm:h-9 px-3 sm:px-4 whitespace-nowrap"
+                                            title="Exportar ZIP con documentos PDF de los registros visibles"
+                                        >
+                                            <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
+                                            {isExportingDocuments
+                                                ? "Exportando..."
+                                                : "Docs PDF"}
+                                        </Button>
+                                    </>
                                 )}
 
                                 <Button

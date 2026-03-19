@@ -132,7 +132,7 @@ const StatusBadge = ({ status }) => {
         <span
             className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm transition-colors",
-                config.className
+                config.className,
             )}
         >
             {Icon && <Icon className={cn("w-3.5 h-3.5", config.iconColor)} />}
@@ -254,14 +254,14 @@ const ServiceOrders = () => {
             ];
 
             const validCategories = categoriesRes.data.filter((cat) =>
-                allowedCategories.includes(cat.name.toLowerCase())
+                allowedCategories.includes(cat.name.toLowerCase()),
             );
 
             const validCategoryIds = validCategories.map((cat) => cat.id);
 
             const filteredProviders = providersRes.data.filter(
                 (prov) =>
-                    prov.category && validCategoryIds.includes(prov.category)
+                    prov.category && validCategoryIds.includes(prov.category),
             );
 
             setProviders(filteredProviders);
@@ -276,16 +276,16 @@ const ServiceOrders = () => {
                 // Update logic
                 await axios.patch(
                     `/orders/service-orders/${selectedOrder.id}/`,
-                    dataToSend
+                    dataToSend,
                 );
                 toast.success(
-                    "La orden de servicio ha sido actualizada correctamente."
+                    "La orden de servicio ha sido actualizada correctamente.",
                 );
             } else {
                 // Create logic
                 await axios.post("/orders/service-orders/", dataToSend);
                 toast.success(
-                    "La orden de servicio ha sido creada correctamente."
+                    "La orden de servicio ha sido creada correctamente.",
                 );
             }
             fetchOrders();
@@ -325,7 +325,7 @@ const ServiceOrders = () => {
     const confirmDelete = async () => {
         try {
             await axios.delete(
-                `/orders/service-orders/${confirmDeleteDialog.id}/`
+                `/orders/service-orders/${confirmDeleteDialog.id}/`,
             );
             toast.success("La orden de servicio ha sido eliminada.");
             fetchOrders();
@@ -346,7 +346,7 @@ const ServiceOrders = () => {
                 `/orders/service-orders/${confirmCloseDialog.id}/`,
                 {
                     status: "cerrada",
-                }
+                },
             );
             toast.success("La orden ha sido cerrada correctamente.");
             fetchOrders();
@@ -376,7 +376,7 @@ const ServiceOrders = () => {
                 {
                     responseType: "blob",
                     params: params,
-                }
+                },
             );
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -417,9 +417,13 @@ const ServiceOrders = () => {
 
     // Tabs classification logic
     const tabData = useMemo(() => {
-        const activas = orders.filter(o => ["pendiente", "en_transito", "en_puerto", "en_almacen"].includes(o.status));
-        const finalizadas = orders.filter(o => o.status === "finalizada");
-        const cerradas = orders.filter(o => o.status === "cerrada");
+        const activas = orders.filter((o) =>
+            ["pendiente", "en_transito", "en_puerto", "en_almacen"].includes(
+                o.status,
+            ),
+        );
+        const finalizadas = orders.filter((o) => o.status === "finalizada");
+        const cerradas = orders.filter((o) => o.status === "cerrada");
         return { activas, finalizadas, cerradas };
     }, [orders]);
 
@@ -468,13 +472,13 @@ const ServiceOrders = () => {
     const kpis = useMemo(() => {
         const total = orders.length;
         const inTransit = orders.filter(
-            (o) => o.status === "en_transito"
+            (o) => o.status === "en_transito",
         ).length;
         const closed = orders.filter((o) => o.status === "cerrada").length;
         const invoiced = orders.filter((o) => o.facturado).length;
         const totalAmount = orders.reduce(
             (acc, curr) => acc + (parseFloat(curr.total_amount) || 0),
-            0
+            0,
         );
         return { total, inTransit, closed, invoiced, totalAmount };
     }, [orders]);
@@ -574,8 +578,12 @@ const ServiceOrders = () => {
             headerClassName: "text-center",
             sortable: false,
             cell: (row) => {
-                // Usar el total de transferencias para incluir TODOS los gastos (Cargos, Costos, Admin, etc.)
-                const totalCosts = row.total_transfers || 0;
+                // Mostrar gastos consolidados: transfers + costos directos por asignación
+                const totalCosts =
+                    row.total_expenses ||
+                    row.total_direct_costs ||
+                    row.total_transfers ||
+                    0;
 
                 return (
                     <div className="flex flex-col gap-0.5">
@@ -683,7 +691,9 @@ const ServiceOrders = () => {
                             </div>
                             <div className="col-span-2 flex items-center justify-center">
                                 <Lock className="w-3.5 h-3.5 text-slate-300" />
-                                <span className="text-[10px] text-slate-300 font-bold ml-1 uppercase">Cerrada</span>
+                                <span className="text-[10px] text-slate-300 font-bold ml-1 uppercase">
+                                    Cerrada
+                                </span>
                             </div>
                         </>
                     )}
@@ -746,15 +756,19 @@ const ServiceOrders = () => {
                             "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
                             activeTab === "activas"
                                 ? "bg-white text-slate-900 shadow-sm border border-slate-200"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100",
                         )}
                     >
                         <RefreshCw className="w-3.5 h-3.5" />
                         Activas
-                        <span className={cn(
-                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
-                            activeTab === "activas" ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600"
-                        )}>
+                        <span
+                            className={cn(
+                                "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                                activeTab === "activas"
+                                    ? "bg-slate-900 text-white"
+                                    : "bg-slate-200 text-slate-600",
+                            )}
+                        >
                             {tabData.activas.length}
                         </span>
                     </button>
@@ -764,15 +778,19 @@ const ServiceOrders = () => {
                             "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
                             activeTab === "finalizadas"
                                 ? "bg-white text-emerald-700 shadow-sm border border-emerald-100"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100",
                         )}
                     >
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Finalizadas
-                        <span className={cn(
-                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
-                            activeTab === "finalizadas" ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
-                        )}>
+                        <span
+                            className={cn(
+                                "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                                activeTab === "finalizadas"
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-slate-200 text-slate-600",
+                            )}
+                        >
                             {tabData.finalizadas.length}
                         </span>
                     </button>
@@ -782,15 +800,19 @@ const ServiceOrders = () => {
                             "flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-md transition-all uppercase tracking-wider",
                             activeTab === "cerradas"
                                 ? "bg-white text-slate-900 shadow-sm border border-slate-200"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-100",
                         )}
                     >
                         <Lock className="w-3.5 h-3.5" />
                         Cerradas
-                        <span className={cn(
-                            "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
-                            activeTab === "cerradas" ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600"
-                        )}>
+                        <span
+                            className={cn(
+                                "ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                                activeTab === "cerradas"
+                                    ? "bg-slate-900 text-white"
+                                    : "bg-slate-200 text-slate-600",
+                            )}
+                        >
                             {tabData.cerradas.length}
                         </span>
                     </button>
@@ -817,7 +839,7 @@ const ServiceOrders = () => {
                             className={cn(
                                 "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
                                 isFiltersOpen &&
-                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
+                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50",
                             )}
                         >
                             <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
@@ -838,7 +860,13 @@ const ServiceOrders = () => {
                                 handleExportExcel("filtered")
                             }
                             filteredCount={filteredOrders.length}
-                            totalCount={activeTab === 'activas' ? tabData.activas.length : activeTab === 'finalizadas' ? tabData.finalizadas.length : tabData.cerradas.length}
+                            totalCount={
+                                activeTab === "activas"
+                                    ? tabData.activas.length
+                                    : activeTab === "finalizadas"
+                                      ? tabData.finalizadas.length
+                                      : tabData.cerradas.length
+                            }
                             isExporting={isExporting}
                             allLabel={`Todas las ${activeTab}`}
                             allDescription="Exportar registro completo"
@@ -869,16 +897,38 @@ const ServiceOrders = () => {
                                         setFilters({ ...filters, status: val })
                                     }
                                     options={
-                                        activeTab === 'activas' 
-                                        ? [
-                                            { id: "pendiente", name: "Pendiente" },
-                                            { id: "en_transito", name: "En Tránsito" },
-                                            { id: "en_puerto", name: "En Puerto" },
-                                            { id: "en_almacen", name: "En Almacenadora" }
-                                          ]
-                                        : activeTab === 'finalizadas'
-                                        ? [{ id: "finalizada", name: "Finalizada" }]
-                                        : [{ id: "cerrada", name: "Cerrada" }]
+                                        activeTab === "activas"
+                                            ? [
+                                                  {
+                                                      id: "pendiente",
+                                                      name: "Pendiente",
+                                                  },
+                                                  {
+                                                      id: "en_transito",
+                                                      name: "En Tránsito",
+                                                  },
+                                                  {
+                                                      id: "en_puerto",
+                                                      name: "En Puerto",
+                                                  },
+                                                  {
+                                                      id: "en_almacen",
+                                                      name: "En Almacenadora",
+                                                  },
+                                              ]
+                                            : activeTab === "finalizadas"
+                                              ? [
+                                                    {
+                                                        id: "finalizada",
+                                                        name: "Finalizada",
+                                                    },
+                                                ]
+                                              : [
+                                                    {
+                                                        id: "cerrada",
+                                                        name: "Cerrada",
+                                                    },
+                                                ]
                                     }
                                     getOptionLabel={(opt) => opt.name}
                                     getOptionValue={(opt) => opt.id}

@@ -20,6 +20,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from datetime import datetime
 import os
+import io
+import zipfile
 
 class TransferFilter(filters.FilterSet):
     """Filtros avanzados para transfers"""
@@ -56,6 +58,67 @@ class TransferViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return TransferListSerializer
         return TransferSerializer
+
+    def _parse_ids(self, raw_value):
+        """Normalize list/CSV IDs from request payload."""
+        if raw_value is None:
+            return []
+        if isinstance(raw_value, str):
+            raw_items = [item.strip() for item in raw_value.split(',') if item.strip()]
+        elif isinstance(raw_value, list):
+            raw_items = raw_value
+        else:
+            raw_items = [raw_value]
+
+        normalized = []
+        for item in raw_items:
+            try:
+                normalized.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return normalized
+
+    def _zip_unique_name(self, used_names, proposed_name):
+        """Prevent duplicate names inside ZIP file."""
+        base_name = proposed_name.replace('\\', '/')
+        if base_name not in used_names:
+            used_names.add(base_name)
+            return base_name
+
+        root, ext = os.path.splitext(base_name)
+        idx = 2
+        while True:
+            candidate = f"{root}_{idx}{ext}"
+            if candidate not in used_names:
+                used_names.add(candidate)
+                return candidate
+            idx += 1
+
+    def _add_file_to_zip(self, zip_file, used_names, file_field, zip_subpath, only_pdf=False):
+        """Add file field to ZIP if available and valid."""
+        if not file_field:
+            return False
+
+        name = (getattr(file_field, 'name', '') or '').strip()
+        if not name:
+            return False
+
+        _, ext = os.path.splitext(name)
+        ext = ext.lower()
+        if only_pdf and ext != '.pdf':
+            return False
+
+        storage = getattr(file_field, 'storage', None)
+        if not storage or not storage.exists(name):
+            return False
+
+        base_name = os.path.basename(name) or 'documento'
+        zip_name = self._zip_unique_name(used_names, f"{zip_subpath}/{base_name}")
+
+        with storage.open(name, 'rb') as source:
+            zip_file.writestr(zip_name, source.read())
+
+        return True
     
     def _validate_transfer_edit(self, transfer, request):
         """
@@ -467,6 +530,111 @@ class TransferViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename=GPRO_Cuentas_Por_Pagar_{datetime.now().strftime("%Y%m%d")}.xlsx'
 
         wb.save(response)
+        return response
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAnyOperativo])
+    def export_documents(self, request):
+        """
+        Exporta documentos de soporte (facturas/comprobantes) a ZIP.
+
+        Payload esperado:
+        {
+            "transfer_ids": [1,2,3],
+            "provider_invoice_ids": [10,11],
+            "only_pdf": true,
+            "include_payment_proofs": true
+        }
+        """
+        from .models import ProviderInvoice
+
+        transfer_ids = self._parse_ids(request.data.get('transfer_ids'))
+        provider_invoice_ids = self._parse_ids(request.data.get('provider_invoice_ids'))
+
+        only_pdf = str(request.data.get('only_pdf', 'true')).lower() in ('1', 'true', 'yes', 'on')
+        include_payment_proofs = str(request.data.get('include_payment_proofs', 'true')).lower() in ('1', 'true', 'yes', 'on')
+
+        if not transfer_ids and not provider_invoice_ids:
+            return Response(
+                {'error': 'Debe enviar al menos un ID de transferencia o factura de proveedor.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        transfers = Transfer.objects.filter(id__in=transfer_ids).select_related(
+            'provider', 'service_order'
+        ).prefetch_related('payments')
+
+        provider_invoices = ProviderInvoice.objects.filter(id__in=provider_invoice_ids).select_related(
+            'provider', 'service_order'
+        ).prefetch_related('invoice_payments')
+
+        buffer = io.BytesIO()
+        used_names = set()
+        files_added = 0
+
+        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            for transfer in transfers:
+                transfer_folder = f"transfers/transfer_{transfer.id}"
+                if self._add_file_to_zip(
+                    zip_file,
+                    used_names,
+                    transfer.invoice_file,
+                    f"{transfer_folder}/soporte",
+                    only_pdf=only_pdf,
+                ):
+                    files_added += 1
+
+                if include_payment_proofs:
+                    for payment in transfer.payments.all():
+                        if getattr(payment, 'is_deleted', False):
+                            continue
+                        if self._add_file_to_zip(
+                            zip_file,
+                            used_names,
+                            payment.proof_file,
+                            f"{transfer_folder}/pagos/pago_{payment.id}",
+                            only_pdf=only_pdf,
+                        ):
+                            files_added += 1
+
+            for invoice in provider_invoices:
+                invoice_folder = f"provider_invoices/factura_{invoice.id}"
+                if self._add_file_to_zip(
+                    zip_file,
+                    used_names,
+                    invoice.invoice_file,
+                    f"{invoice_folder}/soporte",
+                    only_pdf=only_pdf,
+                ):
+                    files_added += 1
+
+                if include_payment_proofs:
+                    for payment in invoice.invoice_payments.all():
+                        if getattr(payment, 'is_deleted', False):
+                            continue
+                        if self._add_file_to_zip(
+                            zip_file,
+                            used_names,
+                            payment.proof_file,
+                            f"{invoice_folder}/pagos/pago_{payment.id}",
+                            only_pdf=only_pdf,
+                        ):
+                            files_added += 1
+
+        if files_added == 0:
+            return Response(
+                {
+                    'error': 'No se encontraron documentos para exportar con los criterios enviados.',
+                    'detail': 'Verifique que los registros tengan soporte adjunto y coincidan con el tipo de archivo solicitado.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        buffer.seek(0)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"GPRO_Documentos_Pagos_{timestamp}.zip"
+
+        response = HttpResponse(buffer.getvalue(), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename={filename}'
         return response
 
     @action(detail=False, methods=['get'])
@@ -1516,7 +1684,7 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
     queryset = ProviderInvoice.objects.select_related(
         'provider', 'service_order', 'created_by'
     ).prefetch_related('allocations').all()
-    permission_classes = [IsAnyOperativo]
+    permission_classes = [IsOperativo2OrAdmin]
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     filterset_class = ProviderInvoiceFilter
     search_fields = ['invoice_number', 'provider__name', 'service_order__order_number']
@@ -1850,7 +2018,7 @@ class DirectCostAllocationViewSet(viewsets.ModelViewSet):
         'order_charge', 'order_charge__service',
         'created_by'
     ).all()
-    permission_classes = [IsAnyOperativo]
+    permission_classes = [IsOperativo2OrAdmin]
     search_fields = ['description', 'provider_invoice__invoice_number']
     ordering = ['-created_at']
 

@@ -215,6 +215,14 @@ class ProviderInvoice(SoftDeleteModel):
         """
         Bloquea la eliminación si la factura ya tiene servicios facturados al cliente.
         """
+        # Inmutabilidad financiera: si la OS ya tuvo facturación, no permitir eliminar
+        # costos directos para preservar trazabilidad contable.
+        if self.service_order and self.service_order.invoices.exists():
+            raise ValidationError(
+                "No se puede eliminar la factura de proveedor porque la OS ya tiene facturas generadas. "
+                "Anule/ajuste la factura del cliente y refacture para corregir."
+            )
+
         if self.status == 'facturado':
             raise ValidationError(
                 "No se puede eliminar la factura de proveedor porque sus servicios ya fueron facturados al cliente."
@@ -364,6 +372,14 @@ class DirectCostAllocation(SoftDeleteModel):
         """Al eliminar, actualizar factura y desmarcar servicio"""
         order_charge = self.order_charge
         provider_invoice = self.provider_invoice
+
+        # Inmutabilidad financiera: si la OS ya tuvo facturación, no permitir romper
+        # la trazabilidad entre factura de proveedor y servicio facturado.
+        if provider_invoice.service_order and provider_invoice.service_order.invoices.exists():
+            raise ValidationError(
+                "No se puede eliminar la asignación de costo porque la OS ya tiene facturas generadas. "
+                "Use anulación/ajuste y refacturación para corregir."
+            )
 
         # Bloquear eliminación si el cargo ya está facturado
         if order_charge and order_charge.invoice_id:

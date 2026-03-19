@@ -57,7 +57,7 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
         # Para el listado, usar anotaciones para calcular totales en una sola query
         if self.action == 'list':
             from django.db.models import Subquery, OuterRef
-            from apps.transfers.models import Transfer
+            from apps.transfers.models import Transfer, DirectCostAllocation
 
             # Subqueries para evitar producto cartesiano (duplicidad) en sumas múltiples
             charges_sum = OrderCharge.objects.filter(
@@ -90,6 +90,13 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                 sum_amount=Sum('amount')
             ).values('sum_amount')
 
+            allocations_sum = DirectCostAllocation.objects.filter(
+                order_charge__service_order=OuterRef('pk'),
+                order_charge__is_deleted=False
+            ).values('order_charge__service_order').annotate(
+                sum_cost=Sum('cost_amount')
+            ).values('sum_cost')
+
             queryset = queryset.annotate(
                 # Total de servicios (charges.total)
                 annotated_total_services=Coalesce(
@@ -115,6 +122,32 @@ class ServiceOrderViewSet(viewsets.ModelViewSet):
                     Value(Decimal('0.00')),
                     output_field=DecimalField(max_digits=12, decimal_places=2)
                 ),
+                # Total costos directos por asignaciones (ProviderInvoice -> DirectCostAllocation)
+                annotated_total_allocations=Coalesce(
+                    Subquery(allocations_sum),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+                # Total costos directos consolidados: transfers propios/costos + asignaciones
+                annotated_total_direct_costs=Coalesce(
+                    Subquery(transfers_propios_sum),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ) + Coalesce(
+                    Subquery(allocations_sum),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=12, decimal_places=2)
+                ),
+                    # Total gastos consolidados para listado (todos los transfers + costos directos por asignación)
+                    annotated_total_expenses=Coalesce(
+                        Subquery(transfers_sum),
+                        Value(Decimal('0.00')),
+                        output_field=DecimalField(max_digits=12, decimal_places=2)
+                    ) + Coalesce(
+                        Subquery(allocations_sum),
+                        Value(Decimal('0.00')),
+                        output_field=DecimalField(max_digits=12, decimal_places=2)
+                    ),
             )
 
         # Para el detalle, prefetch los objetos relacionados
@@ -1081,6 +1114,16 @@ class OrderDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = OrderDocumentSerializer
     permission_classes = [IsOperativo]
     filterset_fields = ['order', 'document_type']
+
+    def get_queryset(self):
+        # Punto único para futuras políticas por rol/tenant y evitar bypass accidental.
+        return self.queryset.select_related('order', 'uploaded_by')
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
     
     def perform_destroy(self, instance):
         """Set current user before deletion for signal"""
@@ -1110,6 +1153,16 @@ class OrderChargeViewSet(viewsets.ModelViewSet):
         if charge.invoice_id:
             return Response(
                 {'error': 'No se puede eliminar un cargo que ya ha sido facturado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Integridad financiera: evitar eliminar cargos con costo directo asignado.
+        if hasattr(charge, 'cost_allocation') and charge.cost_allocation and not charge.cost_allocation.is_deleted:
+            return Response(
+                {
+                    'error': 'No se puede eliminar un cargo con costo directo asignado.',
+                    'detail': 'Elimine/corrija primero la trazabilidad financiera mediante anulación y refacturación.'
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 

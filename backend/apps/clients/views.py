@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, F, ExpressionWrapper, DecimalField
 from django.http import HttpResponse
 from .models import Client
 from .serializers import ClientSerializer, ClientListSerializer
@@ -157,6 +157,11 @@ class ClientViewSet(viewsets.ModelViewSet):
                 pass
 
         # === 1. Métricas Financieras Globales ===
+        collected_expression = ExpressionWrapper(
+            F('total_amount') - F('balance'),
+            output_field=DecimalField(max_digits=15, decimal_places=2)
+        )
+
         financial_stats = invoices_qs.aggregate(
             total_invoiced=Sum('total_amount'),
             total_services=Sum('total_services'),
@@ -164,7 +169,8 @@ class ClientViewSet(viewsets.ModelViewSet):
             total_paid=Sum('paid_amount'),
             total_balance=Sum('balance'),
             total_credited=Sum('credited_amount'),
-            total_retention=Sum('retencion')
+            total_retention=Sum('retencion'),
+            total_collected=Sum(collected_expression)
         )
 
         # === 2. Métricas de Clientes ===
@@ -194,6 +200,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                 'total_pending': float(financial_stats['total_balance'] or 0),
                 'total_credited': float(financial_stats['total_credited'] or 0),
                 'total_retention': float(financial_stats['total_retention'] or 0),
+                'total_collected': float(financial_stats['total_collected'] or 0),
             },
             'clients': {
                 'total': total_clients,
@@ -246,10 +253,21 @@ class ClientViewSet(viewsets.ModelViewSet):
         # Serializar facturas con información completa
         invoices_data = InvoiceListSerializer(invoices_qs, many=True).data
 
+        # Facturas válidas para métricas financieras (excluye anuladas)
+        valid_invoices_qs = invoices_qs.exclude(status='cancelled')
+
+        collected_expression = ExpressionWrapper(
+            F('total_amount') - F('balance'),
+            output_field=DecimalField(max_digits=15, decimal_places=2)
+        )
+
         # Calcular estadísticas de facturas
-        total_invoiced = invoices_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        total_paid = invoices_qs.aggregate(Sum('paid_amount'))['paid_amount__sum'] or 0
-        total_pending = invoices_qs.filter(
+        total_invoiced = valid_invoices_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        total_paid = valid_invoices_qs.aggregate(Sum('paid_amount'))['paid_amount__sum'] or 0
+        total_collected = valid_invoices_qs.aggregate(
+            total_collected=Sum(collected_expression)
+        )['total_collected'] or 0
+        total_pending = valid_invoices_qs.filter(
             status__in=['pending', 'partial', 'overdue']
         ).aggregate(Sum('balance'))['balance__sum'] or 0
 
@@ -264,12 +282,12 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         # Facturas vencidas y próximas a vencer
         today = datetime.now().date()
-        overdue_invoices = invoices_qs.filter(
+        overdue_invoices = valid_invoices_qs.filter(
             due_date__lt=today,
             balance__gt=0
         ).exclude(status='paid').count()
 
-        upcoming_due = invoices_qs.filter(
+        upcoming_due = valid_invoices_qs.filter(
             due_date__gte=today,
             due_date__lte=today + timedelta(days=7),
             balance__gt=0
@@ -350,6 +368,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             # Estadísticas de facturación
             'total_invoiced': float(total_invoiced),
             'total_paid': float(total_paid),
+            'total_collected': float(total_collected),
             'total_pending': float(total_pending),
             'total_pending_orders': pending_orders_qs.count(),
 

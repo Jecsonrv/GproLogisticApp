@@ -909,7 +909,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'charge_id': charge.id
         })
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo2])
     def remove_item(self, request, pk=None):
         """
         Quita un item de la factura (servicio o gasto).
@@ -946,6 +946,18 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 from .models import OrderCharge
                 try:
                     charge = OrderCharge.objects.select_for_update().get(id=item_id, invoice=invoice)
+
+                    # Integridad financiera: no permitir desamarrar cargos tercerizados con
+                    # costo directo ya asignado para evitar pérdida de trazabilidad.
+                    if hasattr(charge, 'cost_allocation') and charge.cost_allocation and not charge.cost_allocation.is_deleted:
+                        return Response(
+                            {
+                                'error': 'No se puede remover este servicio de la factura porque tiene costo directo asignado.',
+                                'detail': 'Para corregir, use anulación/ajuste y refacturación completa.',
+                                'code': 'DIRECT_COST_LOCKED'
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
 
                     # Guardar información para historial
                     description = f'{charge.service.name} - {charge.description}'
