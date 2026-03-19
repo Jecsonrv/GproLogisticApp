@@ -136,6 +136,8 @@ const PAYMENT_METHODS = {
     tarjeta: "Tarjeta",
 };
 
+const MAX_EXPORT_PDF_FILES = 20;
+
 // ============================================
 // SELECT OPTIONS
 // ============================================
@@ -302,6 +304,16 @@ function ProviderPayments() {
     const [selectedPayment, setSelectedPayment] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     const [isExportingDocuments, setIsExportingDocuments] = useState(false);
+    const [isExportSelectorOpen, setIsExportSelectorOpen] = useState(false);
+    const [selectedExportKeys, setSelectedExportKeys] = useState(new Set());
+    const [exportSelectionError, setExportSelectionError] = useState("");
+    const [exportPreview, setExportPreview] = useState(null);
+    const [exportConfirm, setExportConfirm] = useState({
+        open: false,
+        totalFiles: 0,
+        totalRecords: 0,
+    });
+    const [pendingExportPayload, setPendingExportPayload] = useState(null);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState({
         open: false,
@@ -1189,41 +1201,159 @@ function ProviderPayments() {
         }
     };
 
-    const handleExportDocuments = async (exportType = "filtered") => {
-        const dataToExport =
-            exportType === "filtered" ? filteredPayments : payments;
+    const getExportRowKey = (row) => {
+        const source =
+            row.source === "provider_invoice" ? "provider_invoice" : "transfer";
+        const rowId = row.original_id || row.id;
+        return `${source}:${rowId}`;
+    };
 
-        if (dataToExport.length === 0) {
-            toast.error("No hay registros para exportar documentos");
-            return;
-        }
-
-        const transferIds = dataToExport
+    const buildExportPayloadFromRows = (rows) => {
+        const transferIds = rows
             .filter((row) => row.source !== "provider_invoice")
             .map((row) => row.original_id || row.id)
             .filter(Boolean);
 
-        const providerInvoiceIds = dataToExport
+        const providerInvoiceIds = rows
             .filter((row) => row.source === "provider_invoice")
             .map((row) => row.original_id || row.id)
             .filter(Boolean);
 
-        if (transferIds.length === 0 && providerInvoiceIds.length === 0) {
-            toast.error("No se encontraron IDs válidos para exportar");
+        return {
+            transfer_ids: transferIds,
+            provider_invoice_ids: providerInvoiceIds,
+            only_pdf: true,
+            include_payment_proofs: true,
+            max_files: MAX_EXPORT_PDF_FILES,
+        };
+    };
+
+    const openExportSelector = () => {
+        if (exportSelectableRows.length === 0) {
+            toast.error("No hay registros filtrados para exportar");
             return;
         }
+
+        const defaultSelection = new Set(
+            exportSelectableRows.map((row) => getExportRowKey(row)),
+        );
+
+        setSelectedExportKeys(defaultSelection);
+        setExportSelectionError("");
+        setExportPreview(null);
+        setPendingExportPayload(null);
+        setIsExportSelectorOpen(true);
+    };
+
+    const toggleExportRowSelection = (row) => {
+        const rowKey = getExportRowKey(row);
+        setSelectedExportKeys((prev) => {
+            const next = new Set(prev);
+            if (next.has(rowKey)) {
+                next.delete(rowKey);
+            } else {
+                next.add(rowKey);
+            }
+            return next;
+        });
+    };
+
+    const toggleSelectAllExportRows = () => {
+        const allKeys = exportSelectableRows.map((row) => getExportRowKey(row));
+        const areAllSelected =
+            allKeys.length > 0 &&
+            allKeys.every((key) => selectedExportKeys.has(key));
+
+        if (areAllSelected) {
+            setSelectedExportKeys(new Set());
+            return;
+        }
+
+        setSelectedExportKeys(new Set(allKeys));
+    };
+
+    const prepareDocumentExport = async () => {
+        const selectedRows = exportSelectableRows.filter((row) =>
+            selectedExportKeys.has(getExportRowKey(row)),
+        );
+
+        if (selectedRows.length === 0) {
+            setExportSelectionError(
+                "Seleccione al menos un registro para exportar.",
+            );
+            return;
+        }
+
+        const payload = buildExportPayloadFromRows(selectedRows);
+
+        if (
+            payload.transfer_ids.length === 0 &&
+            payload.provider_invoice_ids.length === 0
+        ) {
+            setExportSelectionError(
+                "No se encontraron IDs válidos para exportar.",
+            );
+            return;
+        }
+
+        try {
+            setIsExportingDocuments(true);
+            setExportSelectionError("");
+
+            const previewResponse = await axios.post(
+                "/transfers/transfers/export_documents/",
+                {
+                    ...payload,
+                    preview_only: true,
+                },
+            );
+
+            const previewData = previewResponse.data || {};
+            const totalFiles = Number(previewData.total_files || 0);
+            const exceedsLimit = Boolean(previewData.exceeds_limit);
+
+            setExportPreview(previewData);
+
+            if (totalFiles === 0) {
+                setExportSelectionError(
+                    "No se encontraron PDF en la selección (soportes/comprobantes).",
+                );
+                return;
+            }
+
+            if (exceedsLimit) {
+                setExportSelectionError(
+                    `La selección genera ${totalFiles} PDF y el máximo por exportación es ${MAX_EXPORT_PDF_FILES}. Reduzca la selección.`,
+                );
+                return;
+            }
+
+            setPendingExportPayload(payload);
+            setExportConfirm({
+                open: true,
+                totalFiles,
+                totalRecords: selectedRows.length,
+            });
+        } catch (error) {
+            const detail =
+                error.response?.data?.detail ||
+                error.response?.data?.error ||
+                "No se pudo calcular la exportación.";
+            setExportSelectionError(detail);
+        } finally {
+            setIsExportingDocuments(false);
+        }
+    };
+
+    const executeDocumentExport = async () => {
+        if (!pendingExportPayload) return;
 
         try {
             setIsExportingDocuments(true);
 
             const response = await axios.post(
                 "/transfers/transfers/export_documents/",
-                {
-                    transfer_ids: transferIds,
-                    provider_invoice_ids: providerInvoiceIds,
-                    only_pdf: true,
-                    include_payment_proofs: true,
-                },
+                pendingExportPayload,
                 {
                     responseType: "blob",
                 },
@@ -1233,10 +1363,7 @@ function ProviderPayments() {
             const link = document.createElement("a");
             link.href = url;
             const timestamp = new Date().toISOString().split("T")[0];
-            const filename =
-                exportType === "filtered"
-                    ? `GPRO_Documentos_Filtrados_${timestamp}.zip`
-                    : `GPRO_Documentos_Pagos_${timestamp}.zip`;
+            const filename = `GPRO_Documentos_PDF_${timestamp}.zip`;
             link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
@@ -1244,15 +1371,31 @@ function ProviderPayments() {
             window.URL.revokeObjectURL(url);
 
             toast.success(
-                exportType === "filtered"
-                    ? "Documentos PDF filtrados exportados"
-                    : "Documentos PDF exportados",
+                `Exportación completada: ${exportConfirm.totalFiles} PDF en ZIP`,
             );
-        } catch {
-            toast.error("Error al exportar documentos PDF");
+
+            setIsExportSelectorOpen(false);
+            setSelectedExportKeys(new Set());
+            setExportPreview(null);
+            setPendingExportPayload(null);
+        } catch (error) {
+            const detail =
+                error.response?.data?.detail ||
+                error.response?.data?.error ||
+                "Error al exportar documentos PDF";
+            toast.error(detail);
         } finally {
             setIsExportingDocuments(false);
+            setExportConfirm({ open: false, totalFiles: 0, totalRecords: 0 });
         }
+    };
+
+    const closeExportSelector = () => {
+        setIsExportSelectorOpen(false);
+        setSelectedExportKeys(new Set());
+        setExportSelectionError("");
+        setExportPreview(null);
+        setPendingExportPayload(null);
     };
 
     const clearFilters = () => {
@@ -1345,6 +1488,23 @@ function ProviderPayments() {
             return true;
         });
     }, [payments, searchQuery, filters]);
+
+    const exportSelectableRows = useMemo(
+        () =>
+            filteredPayments.filter((row) =>
+                Boolean(row.original_id || row.id),
+            ),
+        [filteredPayments],
+    );
+
+    const allExportRowsSelected = useMemo(() => {
+        return (
+            exportSelectableRows.length > 0 &&
+            exportSelectableRows.every((row) =>
+                selectedExportKeys.has(getExportRowKey(row)),
+            )
+        );
+    }, [exportSelectableRows, selectedExportKeys]);
 
     // KPIs
     const kpis = useMemo(() => {
@@ -2208,17 +2368,14 @@ function ProviderPayments() {
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() =>
-                                                handleExportDocuments(
-                                                    "filtered",
-                                                )
-                                            }
+                                            onClick={openExportSelector}
                                             disabled={
                                                 isExportingDocuments ||
-                                                filteredPayments.length === 0
+                                                exportSelectableRows.length ===
+                                                    0
                                             }
                                             className="border-slate-200 text-slate-700 bg-white hover:bg-slate-50 h-10 sm:h-9 px-3 sm:px-4 whitespace-nowrap"
-                                            title="Exportar ZIP con documentos PDF de los registros visibles"
+                                            title="Seleccionar registros y exportar ZIP con documentos PDF"
                                         >
                                             <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1.5 sm:mr-2" />
                                             {isExportingDocuments
@@ -3375,6 +3532,137 @@ function ProviderPayments() {
                     </form>
                 )}
             </Modal>
+
+            <Modal
+                isOpen={isExportSelectorOpen}
+                onClose={closeExportSelector}
+                title="Seleccionar documentos para exportar"
+                size="2xl"
+            >
+                <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-800">
+                                Registros seleccionados:{" "}
+                                {selectedExportKeys.size} de{" "}
+                                {exportSelectableRows.length}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                                Máximo permitido por exportación:{" "}
+                                {MAX_EXPORT_PDF_FILES} PDF
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={toggleSelectAllExportRows}
+                            className="h-8"
+                        >
+                            {allExportRowsSelected
+                                ? "Limpiar selección"
+                                : "Seleccionar todo"}
+                        </Button>
+                    </div>
+
+                    <div className="max-h-[320px] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                        {exportSelectableRows.map((row) => {
+                            const rowKey = getExportRowKey(row);
+                            const isChecked = selectedExportKeys.has(rowKey);
+                            return (
+                                <label
+                                    key={rowKey}
+                                    className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() =>
+                                            toggleExportRowSelection(row)
+                                        }
+                                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-300"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-slate-800 truncate">
+                                            {row.provider_name ||
+                                                row.beneficiary_name ||
+                                                "Sin proveedor"}
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-0.5 truncate">
+                                            {row.service_order_number
+                                                ? `OS ${row.service_order_number}`
+                                                : "Sin OS"}
+                                            {" • "}
+                                            {row.invoice_number
+                                                ? `Doc ${row.invoice_number}`
+                                                : "Sin número"}
+                                            {" • "}
+                                            {row.source === "provider_invoice"
+                                                ? "Factura de Proveedor"
+                                                : "Transferencia"}
+                                        </p>
+                                    </div>
+                                    <span className="text-xs font-semibold text-slate-700 tabular-nums whitespace-nowrap">
+                                        {formatCurrency(row.amount || 0)}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
+
+                    {exportPreview && (
+                        <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            Vista previa:{" "}
+                            {Number(exportPreview.total_files || 0)} PDF
+                            detectados en la selección.
+                        </div>
+                    )}
+
+                    {exportSelectionError && (
+                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">
+                            {exportSelectionError}
+                        </div>
+                    )}
+
+                    <ModalFooter className="px-0 pb-0">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={closeExportSelector}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={prepareDocumentExport}
+                            disabled={isExportingDocuments}
+                            className="bg-slate-900 hover:bg-slate-800"
+                        >
+                            {isExportingDocuments
+                                ? "Validando..."
+                                : "Continuar"}
+                        </Button>
+                    </ModalFooter>
+                </div>
+            </Modal>
+
+            <ConfirmDialog
+                open={exportConfirm.open}
+                onClose={() =>
+                    setExportConfirm({
+                        open: false,
+                        totalFiles: 0,
+                        totalRecords: 0,
+                    })
+                }
+                title="Confirmar exportación"
+                description={`¿Está seguro que desea exportar ${exportConfirm.totalFiles} archivo(s) PDF correspondientes a ${exportConfirm.totalRecords} registro(s)?`}
+                confirmText={
+                    isExportingDocuments ? "Exportando..." : "Exportar ZIP"
+                }
+                cancelText="Cancelar"
+                onConfirm={executeDocumentExport}
+            />
 
             {/* Void Credit Note Dialog */}
             <PromptDialog

@@ -177,3 +177,60 @@ class TransferDocumentExportTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_export_documents_preview_returns_file_count(self):
+        url = reverse('transfer-export-documents')
+
+        response = self.client.post(
+            url,
+            {
+                'transfer_ids': [self.transfer.id],
+                'provider_invoice_ids': [],
+                'only_pdf': True,
+                'include_payment_proofs': True,
+                'preview_only': True,
+                'max_files': 20,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_files'], 1)
+        self.assertEqual(response.data['max_files'], 20)
+        self.assertFalse(response.data['exceeds_limit'])
+
+    def test_export_documents_enforces_max_files_limit(self):
+        url = reverse('transfer-export-documents')
+
+        extra_ids = []
+        for idx in range(2, 22):
+            transfer = Transfer.objects.create(
+                transfer_type='admin',
+                provider=self.provider,
+                amount=Decimal('10.00'),
+                description=f'Gasto extra {idx}',
+                invoice_file=SimpleUploadedFile(
+                    f'soporte_extra_{idx}.pdf',
+                    b'%PDF-1.4 test extra support',
+                    content_type='application/pdf',
+                ),
+                created_by=self.user,
+            )
+            extra_ids.append(transfer.id)
+
+        response = self.client.post(
+            url,
+            {
+                'transfer_ids': [self.transfer.id, *extra_ids],
+                'provider_invoice_ids': [],
+                'only_pdf': True,
+                'include_payment_proofs': True,
+                'max_files': 20,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'MAX_FILES_EXCEEDED')
+        self.assertEqual(response.data.get('max_files'), 20)
+        self.assertEqual(response.data.get('total_files'), 21)

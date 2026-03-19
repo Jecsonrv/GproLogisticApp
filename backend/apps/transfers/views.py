@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q, Sum
 from django.db import transaction
 from django.http import HttpResponse, FileResponse
+from django.utils.text import slugify
 from django_filters import rest_framework as filters
 from .models import Transfer, TransferPayment, BatchPayment, ProviderCreditNote, CreditNoteApplication, ProviderInvoicePayment
 from .serializers import (
@@ -53,6 +54,7 @@ class TransferViewSet(viewsets.ModelViewSet):
     ordering_fields = ['transaction_date', 'amount', 'created_at']
     ordering = ['-transaction_date']
     pagination_class = None
+    DEFAULT_EXPORT_MAX_FILES = 20
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -119,6 +121,126 @@ class TransferViewSet(viewsets.ModelViewSet):
             zip_file.writestr(zip_name, source.read())
 
         return True
+
+    def _safe_folder_part(self, value, fallback):
+        part = slugify(str(value or '').strip())
+        return part or fallback
+
+    def _build_transfer_folder(self, transfer):
+        provider_name = None
+        if transfer.provider:
+            provider_name = transfer.provider.name
+        elif transfer.beneficiary_name:
+            provider_name = transfer.beneficiary_name
+
+        provider_part = self._safe_folder_part(provider_name, 'sin-proveedor')
+        type_part = self._safe_folder_part(transfer.transfer_type, 'sin-tipo')
+
+        if transfer.service_order and transfer.service_order.order_number:
+            os_part = self._safe_folder_part(
+                transfer.service_order.order_number,
+                f'os-{transfer.service_order_id or "na"}'
+            )
+            return (
+                f"gastos/os_{os_part}/"
+                f"proveedor_{provider_part}/"
+                f"{type_part}_transfer_{transfer.id}"
+            )
+
+        return (
+            f"gastos/operacion/"
+            f"proveedor_{provider_part}/"
+            f"{type_part}_transfer_{transfer.id}"
+        )
+
+    def _build_provider_invoice_folder(self, invoice):
+        provider_part = self._safe_folder_part(
+            invoice.provider.name if invoice.provider else None,
+            'sin-proveedor'
+        )
+        invoice_part = self._safe_folder_part(
+            invoice.invoice_number,
+            f'factura-{invoice.id}'
+        )
+
+        if invoice.service_order and invoice.service_order.order_number:
+            os_part = self._safe_folder_part(
+                invoice.service_order.order_number,
+                f'os-{invoice.service_order_id or "na"}'
+            )
+            return (
+                f"costos_directos/os_{os_part}/"
+                f"proveedor_{provider_part}/"
+                f"factura_{invoice_part}_{invoice.id}"
+            )
+
+        return (
+            f"costos_directos/operacion/"
+            f"proveedor_{provider_part}/"
+            f"factura_{invoice_part}_{invoice.id}"
+        )
+
+    def _validate_export_file(self, file_field, only_pdf=False):
+        if not file_field:
+            return False
+
+        name = (getattr(file_field, 'name', '') or '').strip()
+        if not name:
+            return False
+
+        _, ext = os.path.splitext(name)
+        ext = ext.lower()
+        if only_pdf and ext != '.pdf':
+            return False
+
+        storage = getattr(file_field, 'storage', None)
+        if not storage or not storage.exists(name):
+            return False
+
+        return True
+
+    def _collect_export_candidates(self, transfers, provider_invoices, only_pdf=False, include_payment_proofs=True):
+        candidates = []
+
+        for transfer in transfers:
+            transfer_folder = self._build_transfer_folder(transfer)
+
+            if self._validate_export_file(transfer.invoice_file, only_pdf=only_pdf):
+                candidates.append((
+                    transfer.invoice_file,
+                    f"{transfer_folder}/soporte"
+                ))
+
+            if include_payment_proofs:
+                for payment in transfer.payments.all():
+                    if getattr(payment, 'is_deleted', False):
+                        continue
+                    if self._validate_export_file(payment.proof_file, only_pdf=only_pdf):
+                        candidates.append((
+                            payment.proof_file,
+                            f"{transfer_folder}/pagos/pago_{payment.id}"
+                        ))
+
+        for invoice in provider_invoices:
+            invoice_folder = self._build_provider_invoice_folder(invoice)
+
+            if self._validate_export_file(invoice.invoice_file, only_pdf=only_pdf):
+                candidates.append((
+                    invoice.invoice_file,
+                    f"{invoice_folder}/soporte"
+                ))
+
+            if include_payment_proofs:
+                for payment in invoice.invoice_payments.all():
+                    if getattr(payment, 'is_deleted', False):
+                        continue
+                    if self._validate_export_file(payment.proof_file, only_pdf=only_pdf):
+                        candidates.append((
+                            payment.proof_file,
+                            f"{invoice_folder}/pagos/pago_{payment.id}"
+                        ))
+
+        return candidates
     
     def _validate_transfer_edit(self, transfer, request):
         """
@@ -552,6 +674,16 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         only_pdf = str(request.data.get('only_pdf', 'true')).lower() in ('1', 'true', 'yes', 'on')
         include_payment_proofs = str(request.data.get('include_payment_proofs', 'true')).lower() in ('1', 'true', 'yes', 'on')
+        preview_only = str(request.data.get('preview_only', 'false')).lower() in ('1', 'true', 'yes', 'on')
+
+        raw_max_files = request.data.get('max_files', self.DEFAULT_EXPORT_MAX_FILES)
+        try:
+            max_files = int(raw_max_files)
+        except (TypeError, ValueError):
+            max_files = self.DEFAULT_EXPORT_MAX_FILES
+
+        if max_files <= 0:
+            max_files = self.DEFAULT_EXPORT_MAX_FILES
 
         if not transfer_ids and not provider_invoice_ids:
             return Response(
@@ -567,60 +699,25 @@ class TransferViewSet(viewsets.ModelViewSet):
             'provider', 'service_order'
         ).prefetch_related('invoice_payments')
 
-        buffer = io.BytesIO()
-        used_names = set()
-        files_added = 0
+        candidates = self._collect_export_candidates(
+            transfers,
+            provider_invoices,
+            only_pdf=only_pdf,
+            include_payment_proofs=include_payment_proofs,
+        )
 
-        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-            for transfer in transfers:
-                transfer_folder = f"transfers/transfer_{transfer.id}"
-                if self._add_file_to_zip(
-                    zip_file,
-                    used_names,
-                    transfer.invoice_file,
-                    f"{transfer_folder}/soporte",
-                    only_pdf=only_pdf,
-                ):
-                    files_added += 1
+        files_found = len(candidates)
 
-                if include_payment_proofs:
-                    for payment in transfer.payments.all():
-                        if getattr(payment, 'is_deleted', False):
-                            continue
-                        if self._add_file_to_zip(
-                            zip_file,
-                            used_names,
-                            payment.proof_file,
-                            f"{transfer_folder}/pagos/pago_{payment.id}",
-                            only_pdf=only_pdf,
-                        ):
-                            files_added += 1
+        if preview_only:
+            return Response({
+                'total_files': files_found,
+                'selected_transfers': transfers.count(),
+                'selected_provider_invoices': provider_invoices.count(),
+                'max_files': max_files,
+                'exceeds_limit': files_found > max_files,
+            })
 
-            for invoice in provider_invoices:
-                invoice_folder = f"provider_invoices/factura_{invoice.id}"
-                if self._add_file_to_zip(
-                    zip_file,
-                    used_names,
-                    invoice.invoice_file,
-                    f"{invoice_folder}/soporte",
-                    only_pdf=only_pdf,
-                ):
-                    files_added += 1
-
-                if include_payment_proofs:
-                    for payment in invoice.invoice_payments.all():
-                        if getattr(payment, 'is_deleted', False):
-                            continue
-                        if self._add_file_to_zip(
-                            zip_file,
-                            used_names,
-                            payment.proof_file,
-                            f"{invoice_folder}/pagos/pago_{payment.id}",
-                            only_pdf=only_pdf,
-                        ):
-                            files_added += 1
-
-        if files_added == 0:
+        if files_found == 0:
             return Response(
                 {
                     'error': 'No se encontraron documentos para exportar con los criterios enviados.',
@@ -628,6 +725,33 @@ class TransferViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        if files_found > max_files:
+            return Response(
+                {
+                    'error': f'Se excedió el límite máximo de {max_files} PDF por exportación.',
+                    'detail': f'Se detectaron {files_found} archivos para exportar. Reduzca su selección e intente nuevamente.',
+                    'code': 'MAX_FILES_EXCEEDED',
+                    'total_files': files_found,
+                    'max_files': max_files,
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        buffer = io.BytesIO()
+        used_names = set()
+        files_added = 0
+
+        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            for file_field, zip_subpath in candidates:
+                if self._add_file_to_zip(
+                    zip_file,
+                    used_names,
+                    file_field,
+                    zip_subpath,
+                    only_pdf=only_pdf,
+                ):
+                    files_added += 1
 
         buffer.seek(0)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
