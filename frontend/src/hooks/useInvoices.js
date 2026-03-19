@@ -78,7 +78,7 @@ export const useInvoiceSummary = () => {
     return useQuery({
         queryKey: ["invoices", "summary"],
         queryFn: async () => {
-            const { data } = await axios.get("/api/orders/invoices/summary/");
+            const { data } = await axios.get("/orders/invoices/summary/");
             return data;
         },
     });

@@ -3,6 +3,51 @@ import { Upload, File as FileIcon, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Button } from "./Button";
 
+/**
+ * Validates a file against a given accept string (comma-separated MIME types or extensions).
+ * Returns true if the file is acceptable.
+ */
+function isFileTypeAccepted(file, accept) {
+    if (!accept || accept === "*/*" || accept === "*") return true;
+    const acceptedTypes = accept
+        .split(",")
+        .map((t) => t.trim().toLowerCase());
+    const fileName = file.name.toLowerCase();
+    const fileMime = file.type.toLowerCase();
+
+    return acceptedTypes.some((type) => {
+        if (type.startsWith(".")) {
+            // Extension match (e.g. ".pdf")
+            return fileName.endsWith(type);
+        }
+        if (type.endsWith("/*")) {
+            // MIME wildcard match (e.g. "image/*")
+            const mimeGroup = type.slice(0, -2);
+            return fileMime.startsWith(mimeGroup);
+        }
+        // Exact MIME type match
+        return fileMime === type;
+    });
+}
+
+/**
+ * Formats an accept string into a user-readable label.
+ * E.g. ".pdf,.jpg,.png" → "PDF, JPG, PNG"
+ */
+function formatAcceptLabel(accept) {
+    if (!accept || accept === "*/*" || accept === "*") return "cualquier tipo";
+    return accept
+        .split(",")
+        .map((t) => {
+            const type = t.trim();
+            if (type.startsWith(".")) return type.slice(1).toUpperCase();
+            if (type === "image/*") return "imágenes";
+            if (type === "application/pdf") return "PDF";
+            return type;
+        })
+        .join(", ");
+}
+
 export function FileUpload({
     onFileChange,
     onChange, // Support both onChange and onFileChange
@@ -23,6 +68,10 @@ export function FileUpload({
     useEffect(() => {
         if (value === null || value === undefined) {
             setSelectedFiles([]);
+            // Reset the native input so the same file can be re-selected
+            if (inputRef.current) {
+                inputRef.current.value = "";
+            }
         } else if (value instanceof File) {
             setSelectedFiles([value]);
         } else if (Array.isArray(value)) {
@@ -37,6 +86,23 @@ export function FileUpload({
         const files = Array.from(e.target.files || []);
         setError("");
 
+        if (files.length === 0) return;
+
+        // Validate file type
+        const invalidTypeFiles = files.filter(
+            (file) => !isFileTypeAccepted(file, accept)
+        );
+        if (invalidTypeFiles.length > 0) {
+            setError(
+                `Tipo de archivo no permitido. Formatos aceptados: ${formatAcceptLabel(accept)}`
+            );
+            // Reset input so the same (invalid) file can be retried after correction
+            if (inputRef.current) {
+                inputRef.current.value = "";
+            }
+            return;
+        }
+
         // Validate file size
         const oversizedFiles = files.filter((file) => file.size > maxSize);
         if (oversizedFiles.length > 0) {
@@ -45,6 +111,10 @@ export function FileUpload({
                     maxSize
                 )}`
             );
+            // Reset input so the same file can be re-selected after user reduces size
+            if (inputRef.current) {
+                inputRef.current.value = "";
+            }
             return;
         }
 
@@ -57,6 +127,10 @@ export function FileUpload({
     const handleRemoveFile = (index) => {
         const newFiles = selectedFiles.filter((_, i) => i !== index);
         setSelectedFiles(newFiles);
+        // Reset the native input value so the same file can be re-selected
+        if (inputRef.current) {
+            inputRef.current.value = "";
+        }
         if (fileChangeCallback) {
             fileChangeCallback(multiple ? newFiles : null);
         }
