@@ -199,7 +199,14 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         return True
 
-    def _collect_export_candidates(self, transfers, provider_invoices, only_pdf=False, include_payment_proofs=True):
+    def _collect_export_candidates(
+        self,
+        transfers,
+        provider_invoices,
+        only_pdf=False,
+        include_payment_proofs=True,
+        payment_proofs_only_pdf=False,
+    ):
         candidates = []
 
         for transfer in transfers:
@@ -208,17 +215,20 @@ class TransferViewSet(viewsets.ModelViewSet):
             if self._validate_export_file(transfer.invoice_file, only_pdf=only_pdf):
                 candidates.append((
                     transfer.invoice_file,
-                    f"{transfer_folder}/soporte"
+                    f"{transfer_folder}/soporte",
+                    only_pdf,
                 ))
 
             if include_payment_proofs:
+                proof_only_pdf = only_pdf and payment_proofs_only_pdf
                 for payment in transfer.payments.all():
                     if getattr(payment, 'is_deleted', False):
                         continue
-                    if self._validate_export_file(payment.proof_file, only_pdf=only_pdf):
+                    if self._validate_export_file(payment.proof_file, only_pdf=proof_only_pdf):
                         candidates.append((
                             payment.proof_file,
-                            f"{transfer_folder}/pagos/pago_{payment.id}"
+                            f"{transfer_folder}/pagos/pago_{payment.id}",
+                            proof_only_pdf,
                         ))
 
         for invoice in provider_invoices:
@@ -227,17 +237,20 @@ class TransferViewSet(viewsets.ModelViewSet):
             if self._validate_export_file(invoice.invoice_file, only_pdf=only_pdf):
                 candidates.append((
                     invoice.invoice_file,
-                    f"{invoice_folder}/soporte"
+                    f"{invoice_folder}/soporte",
+                    only_pdf,
                 ))
 
             if include_payment_proofs:
+                proof_only_pdf = only_pdf and payment_proofs_only_pdf
                 for payment in invoice.invoice_payments.all():
                     if getattr(payment, 'is_deleted', False):
                         continue
-                    if self._validate_export_file(payment.proof_file, only_pdf=only_pdf):
+                    if self._validate_export_file(payment.proof_file, only_pdf=proof_only_pdf):
                         candidates.append((
                             payment.proof_file,
-                            f"{invoice_folder}/pagos/pago_{payment.id}"
+                            f"{invoice_folder}/pagos/pago_{payment.id}",
+                            proof_only_pdf,
                         ))
 
         return candidates
@@ -674,6 +687,7 @@ class TransferViewSet(viewsets.ModelViewSet):
 
         only_pdf = str(request.data.get('only_pdf', 'true')).lower() in ('1', 'true', 'yes', 'on')
         include_payment_proofs = str(request.data.get('include_payment_proofs', 'true')).lower() in ('1', 'true', 'yes', 'on')
+        payment_proofs_only_pdf = str(request.data.get('payment_proofs_only_pdf', 'false')).lower() in ('1', 'true', 'yes', 'on')
         preview_only = str(request.data.get('preview_only', 'false')).lower() in ('1', 'true', 'yes', 'on')
 
         raw_max_files = request.data.get('max_files', self.DEFAULT_EXPORT_MAX_FILES)
@@ -704,6 +718,7 @@ class TransferViewSet(viewsets.ModelViewSet):
             provider_invoices,
             only_pdf=only_pdf,
             include_payment_proofs=include_payment_proofs,
+            payment_proofs_only_pdf=payment_proofs_only_pdf,
         )
 
         files_found = len(candidates)
@@ -743,13 +758,13 @@ class TransferViewSet(viewsets.ModelViewSet):
         files_added = 0
 
         with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-            for file_field, zip_subpath in candidates:
+            for file_field, zip_subpath, file_only_pdf in candidates:
                 if self._add_file_to_zip(
                     zip_file,
                     used_names,
                     file_field,
                     zip_subpath,
-                    only_pdf=only_pdf,
+                    only_pdf=file_only_pdf,
                 ):
                     files_added += 1
 
@@ -1248,12 +1263,31 @@ class BatchPaymentViewSet(viewsets.ModelViewSet):
         Usa soft delete para mantener historial.
         """
         batch_payment = self.get_object()
+        service_orders_affected = list(batch_payment.get_service_orders())
 
         try:
             with transaction.atomic():
                 # Los TransferPayment se eliminarán en cascada por el on_delete=CASCADE
                 # Esto disparará el signal post_delete que recalculará los paid_amount de los Transfers
+                batch_payment._current_user = request.user
                 batch_payment.delete()  # Soft delete
+
+                # Registrar auditoría explícita por cada OS impactada.
+                from apps.orders.models import OrderHistory
+                for service_order in service_orders_affected:
+                    OrderHistory.objects.create(
+                        service_order=service_order,
+                        user=request.user,
+                        event_type='payment_deleted',
+                        description=f'Pago agrupado eliminado: {batch_payment.batch_number}',
+                        metadata={
+                            'source': 'batch_payment',
+                            'batch_number': batch_payment.batch_number,
+                            'batch_payment_id': batch_payment.id,
+                            'provider': batch_payment.provider.name if batch_payment.provider else None,
+                            'amount': float(batch_payment.total_amount),
+                        }
+                    )
 
                 return Response(
                     {'message': 'Pago agrupado eliminado correctamente. Los pagos individuales fueron revertidos.'},
@@ -1349,6 +1383,7 @@ class ProviderCreditNoteViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        credit_note._current_user = request.user
         credit_note.delete()
         return Response(
             {'message': 'Nota de crédito eliminada correctamente.'},
@@ -1731,6 +1766,7 @@ class ProviderInvoicePaymentViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         payment = self.get_object()
+        payment._current_user = request.user
         payment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1768,6 +1804,7 @@ class TransferPaymentViewSet(viewsets.ModelViewSet):
             )
 
         # Eliminar el pago (el modelo se encarga de actualizar paid_amount del Transfer)
+        payment._current_user = request.user
         payment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1829,6 +1866,7 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
         """
         instance = self.get_object()
         try:
+            instance._current_user = request.user
             instance.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except ValidationError as e:
@@ -2159,6 +2197,7 @@ class DirectCostAllocationViewSet(viewsets.ModelViewSet):
         allocation = self.get_object()
 
         try:
+            allocation._current_user = request.user
             allocation.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except ValidationError as e:

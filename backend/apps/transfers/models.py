@@ -893,8 +893,11 @@ class Transfer(SoftDeleteModel):
         from django.db import transaction
 
         with transaction.atomic():
+            current_user = getattr(self, '_current_user', None)
             # Soft delete de todos los pagos asociados (no hard delete)
             for payment in self.payments.filter(is_deleted=False):
+                if current_user:
+                    payment._current_user = current_user
                 payment.delete()
             super().delete(*args, **kwargs)
 

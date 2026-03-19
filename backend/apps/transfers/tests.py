@@ -10,8 +10,8 @@ from rest_framework.test import APITestCase
 
 from apps.catalogs.models import Provider, ShipmentType, Service
 from apps.clients.models import Client
-from apps.orders.models import Invoice, OrderCharge, ServiceOrder
-from apps.transfers.models import DirectCostAllocation, ProviderInvoice, Transfer
+from apps.orders.models import Invoice, OrderCharge, OrderHistory, ServiceOrder
+from apps.transfers.models import DirectCostAllocation, ProviderInvoice, ProviderInvoicePayment, Transfer, TransferPayment
 from apps.users.models import User
 
 
@@ -234,3 +234,156 @@ class TransferDocumentExportTests(APITestCase):
         self.assertEqual(response.data.get('code'), 'MAX_FILES_EXCEEDED')
         self.assertEqual(response.data.get('max_files'), 20)
         self.assertEqual(response.data.get('total_files'), 21)
+
+    def test_export_documents_includes_payment_proof_for_paid_provider_invoice(self):
+        url = reverse('transfer-export-documents')
+
+        client_company = Client.objects.create(
+            name='Cliente Export Pago',
+            payment_condition='credito'
+        )
+        shipment_type = ShipmentType.objects.create(name='Terrestre')
+        service_order = ServiceOrder.objects.create(
+            client=client_company,
+            shipment_type=shipment_type,
+            created_by=self.user,
+        )
+
+        provider_invoice = ProviderInvoice.objects.create(
+            invoice_number='PI-EXPORT-001',
+            provider=self.provider,
+            service_order=service_order,
+            total_amount=Decimal('120.00'),
+            created_by=self.user,
+        )
+
+        ProviderInvoicePayment.objects.create(
+            provider_invoice=provider_invoice,
+            amount=Decimal('120.00'),
+            payment_method='transferencia',
+            proof_file=SimpleUploadedFile(
+                'comprobante_pago.jpg',
+                b'fake-jpg-content',
+                content_type='image/jpeg',
+            ),
+            created_by=self.user,
+        )
+
+        response = self.client.post(
+            url,
+            {
+                'transfer_ids': [],
+                'provider_invoice_ids': [provider_invoice.id],
+                'only_pdf': True,
+                'include_payment_proofs': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+
+        with zipfile.ZipFile(io.BytesIO(response.content), 'r') as zip_file:
+            names = zip_file.namelist()
+
+        self.assertTrue(
+            any(name.endswith('.jpg') and '/pagos/' in name for name in names)
+        )
+
+
+class TransferDeletionAuditHistoryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='audit_delete_user',
+            password='test1234',
+            role='operativo2',
+        )
+        self.provider = Provider.objects.create(name='Proveedor Auditoria')
+
+        self.client_company = Client.objects.create(
+            name='Cliente Auditoria',
+            payment_condition='credito'
+        )
+        self.shipment_type = ShipmentType.objects.create(name='Aereo')
+        self.service_order = ServiceOrder.objects.create(
+            client=self.client_company,
+            shipment_type=self.shipment_type,
+            created_by=self.user,
+        )
+
+        self.client.force_authenticate(user=self.user)
+
+    def test_delete_transfer_registers_history_with_actor(self):
+        transfer = Transfer.objects.create(
+            transfer_type='admin',
+            provider=self.provider,
+            service_order=self.service_order,
+            amount=Decimal('45.00'),
+            description='Gasto para auditoria de eliminación',
+            created_by=self.user,
+        )
+
+        response = self.client.delete(
+            reverse('transfer-detail', kwargs={'pk': transfer.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        event = None
+        for candidate in OrderHistory.objects.filter(
+            service_order=self.service_order,
+            event_type='payment_deleted',
+        ).order_by('-created_at'):
+            metadata = candidate.metadata or {}
+            if (
+                metadata.get('source') == 'transfer' and
+                metadata.get('transfer_id') == transfer.id
+            ):
+                event = candidate
+                break
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.user, self.user)
+        self.assertIn('Gasto eliminado', event.description)
+
+    def test_delete_transfer_payment_registers_history_with_actor(self):
+        transfer = Transfer.objects.create(
+            transfer_type='admin',
+            provider=self.provider,
+            service_order=self.service_order,
+            amount=Decimal('120.00'),
+            status='aprobado',
+            description='Gasto con pago para auditoria',
+            created_by=self.user,
+        )
+
+        payment = TransferPayment.objects.create(
+            transfer=transfer,
+            amount=Decimal('60.00'),
+            payment_method='transferencia',
+            reference_number='AUD-DEL-001',
+            created_by=self.user,
+        )
+
+        response = self.client.delete(
+            reverse('transfer-payment-detail', kwargs={'pk': payment.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        event = None
+        for candidate in OrderHistory.objects.filter(
+            service_order=self.service_order,
+            event_type='payment_deleted',
+        ).order_by('-created_at'):
+            metadata = candidate.metadata or {}
+            if (
+                metadata.get('source') == 'transfer_payment' and
+                metadata.get('payment_id') == payment.id
+            ):
+                event = candidate
+                break
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.user, self.user)
+        self.assertIn('Pago a proveedor eliminado', event.description)

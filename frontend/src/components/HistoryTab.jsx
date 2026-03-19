@@ -175,11 +175,34 @@ const METADATA_LABELS = {
     total: "Total",
     provider: "Proveedor",
     amount: "Monto",
-    transfer_type: "Tipo",
     status: "Estado",
+    source: "Origen",
+    transfer_id: "ID Gasto",
+    payment_id: "ID Pago",
+    transfer_type: "Tipo de Gasto",
+    provider_invoice_id: "ID Fact. Proveedor",
+    invoice_number: "N° Factura",
+    payment_status: "Estado de Pago",
+    allocation_id: "ID Asignación",
+    credit_note_id: "ID Nota de Crédito",
+    note_number: "N° Nota de Crédito",
+    batch_number: "N° Lote",
+    batch_payment_id: "ID Pago Agrupado",
+    payment_method: "Método de Pago",
+    payment_date: "Fecha de Pago",
     document_type: "Tipo Doc.",
     file_name: "Archivo",
     description: "Descripción",
+};
+
+const SOURCE_LABELS = {
+    transfer: "Gasto",
+    transfer_payment: "Pago a proveedor",
+    provider_invoice: "Factura de proveedor",
+    provider_invoice_payment: "Pago de factura de proveedor",
+    direct_cost_allocation: "Asignación de costo directo",
+    provider_credit_note: "Nota de crédito de proveedor",
+    batch_payment: "Pago agrupado",
 };
 
 const FILTER_OPTIONS = [
@@ -201,11 +224,11 @@ const HistoryTab = ({ orderId }) => {
         try {
             setLoading(true);
             const response = await axios.get(
-                `/orders/service-orders/${orderId}/history/`
+                `/orders/service-orders/${orderId}/history/`,
             );
             const events = response.data?.history || response.data || [];
             const sortedEvents = [...events].sort(
-                (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+                (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
             );
             setHistory(sortedEvents);
         } catch (error) {
@@ -220,21 +243,18 @@ const HistoryTab = ({ orderId }) => {
         fetchHistory();
     }, [fetchHistory]);
 
-    const getEventConfig = useCallback(
-        (eventType) => {
-            return (
-                EVENT_CONFIG[eventType] || {
-                    icon: AlertCircle,
-                    label: eventType,
-                    color: "text-slate-600",
-                    bgColor: "bg-white",
-                    borderColor: "border-slate-200",
-                    category: "other",
-                }
-            );
-        },
-        []
-    );
+    const getEventConfig = useCallback((eventType) => {
+        return (
+            EVENT_CONFIG[eventType] || {
+                icon: AlertCircle,
+                label: eventType,
+                color: "text-slate-600",
+                bgColor: "bg-white",
+                borderColor: "border-slate-200",
+                category: "other",
+            }
+        );
+    }, []);
 
     const formatMetadataKey = (key) => {
         return (
@@ -292,6 +312,10 @@ const HistoryTab = ({ orderId }) => {
             return STATUS_LABELS[value] || value;
         }
 
+        if (key === "source") {
+            return SOURCE_LABELS[value] || value;
+        }
+
         if (key === "document_type") {
             const types = {
                 tramite: "Trámite",
@@ -317,17 +341,17 @@ const HistoryTab = ({ orderId }) => {
                     if (change.field) {
                         // Formato genérico {field, old, new}
                         parts.push(
-                            `${change.field}: ${change.old} → ${change.new}`
+                            `${change.field}: ${change.old} → ${change.new}`,
                         );
                     } else {
                         // Formatos específicos (ej: markup)
                         if (change.old_markup !== undefined)
                             parts.push(
-                                `Margen: ${change.old_markup}% → ${change.new_markup}%`
+                                `Margen: ${change.old_markup}% → ${change.new_markup}%`,
                             );
                         if (change.old_iva_type)
                             parts.push(
-                                `IVA: ${change.old_iva_type} → ${change.new_iva_type}`
+                                `IVA: ${change.old_iva_type} → ${change.new_iva_type}`,
                             );
                     }
 
@@ -341,6 +365,32 @@ const HistoryTab = ({ orderId }) => {
         }
 
         return String(value);
+    };
+
+    const getActorDisplay = (event) => {
+        const fullName = (event.user_name || "").trim();
+        const username = (event.user_username || "").trim();
+
+        if (fullName) return fullName;
+        if (username) return `@${username}`;
+        return "Sistema";
+    };
+
+    const getActorSecondary = (event) => {
+        const fullName = (event.user_name || "").trim();
+        const username = (event.user_username || "").trim();
+
+        if (fullName && username) return `@${username}`;
+        return null;
+    };
+
+    const getActionLabel = (eventType) => {
+        if (!eventType) return "Ejecutado por";
+        if (eventType.includes("deleted")) return "Eliminado por";
+        if (eventType.includes("added") || eventType.includes("created"))
+            return "Registrado por";
+        if (eventType.includes("updated")) return "Actualizado por";
+        return "Ejecutado por";
     };
 
     const toggleEvent = (eventId) => {
@@ -430,7 +480,7 @@ const HistoryTab = ({ orderId }) => {
                                     "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
                                     isActive
                                         ? "bg-slate-900 text-white"
-                                        : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                                        : "bg-slate-50 text-slate-600 hover:bg-slate-100",
                                 )}
                             >
                                 <Icon className="w-3.5 h-3.5" />
@@ -441,7 +491,7 @@ const HistoryTab = ({ orderId }) => {
                                             "px-1.5 py-0.5 text-[10px] font-bold rounded",
                                             isActive
                                                 ? "bg-slate-700"
-                                                : "bg-slate-200"
+                                                : "bg-slate-200",
                                         )}
                                     >
                                         {count}
@@ -461,6 +511,11 @@ const HistoryTab = ({ orderId }) => {
                             const config = getEventConfig(event.event_type);
                             const Icon = config.icon;
                             const isExpanded = expandedEvents[event.id];
+                            const actorDisplay = getActorDisplay(event);
+                            const actorSecondary = getActorSecondary(event);
+                            const actionLabel = getActionLabel(
+                                event.event_type,
+                            );
 
                             // Determine visible metadata
                             const visibleMetadata = getVisibleMetadata(event);
@@ -474,7 +529,7 @@ const HistoryTab = ({ orderId }) => {
                                         "transition-colors",
                                         hasVisibleMetadata
                                             ? "cursor-pointer hover:bg-slate-50"
-                                            : ""
+                                            : "",
                                     )}
                                     onClick={() =>
                                         hasVisibleMetadata &&
@@ -488,13 +543,13 @@ const HistoryTab = ({ orderId }) => {
                                             className={cn(
                                                 "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center border",
                                                 config.bgColor,
-                                                config.borderColor
+                                                config.borderColor,
                                             )}
                                         >
                                             <Icon
                                                 className={cn(
                                                     "w-4 h-4",
-                                                    config.color
+                                                    config.color,
                                                 )}
                                             />
                                         </div>
@@ -565,14 +620,12 @@ const HistoryTab = ({ orderId }) => {
                                         </div>
 
                                         {/* Usuario */}
-                                        {event.user_name && (
-                                            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
-                                                <User className="w-3.5 h-3.5" />
-                                                <span className="font-medium">
-                                                    {event.user_name}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500">
+                                            <User className="w-3.5 h-3.5" />
+                                            <span className="font-medium">
+                                                {actorDisplay}
+                                            </span>
+                                        </div>
 
                                         {/* Timestamp */}
                                         <time className="flex-shrink-0 text-xs text-slate-400 font-mono tabular-nums">
@@ -586,9 +639,47 @@ const HistoryTab = ({ orderId }) => {
                                     {isExpanded && hasVisibleMetadata && (
                                         <div className="px-4 pb-3">
                                             <div className="ml-11 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 pb-3 border-b border-slate-200">
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                                            Acción
+                                                        </p>
+                                                        <p className="text-sm font-semibold text-slate-900">
+                                                            {event.event_type_display ||
+                                                                config.label}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                                            {actionLabel}
+                                                        </p>
+                                                        <p className="text-sm font-semibold text-slate-900">
+                                                            {actorDisplay}
+                                                        </p>
+                                                        {actorSecondary && (
+                                                            <p className="text-xs text-slate-500 mt-0.5">
+                                                                {actorSecondary}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                                            Fecha y Hora
+                                                        </p>
+                                                        <p className="text-sm font-semibold text-slate-900">
+                                                            {formatDate(
+                                                                event.timestamp,
+                                                                {
+                                                                    format: "medium",
+                                                                },
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                                                     {Object.entries(
-                                                        visibleMetadata
+                                                        visibleMetadata,
                                                     ).map(([key, value]) => (
                                                         <div
                                                             key={key}
@@ -597,12 +688,12 @@ const HistoryTab = ({ orderId }) => {
                                                                 key ===
                                                                     "changes"
                                                                     ? "col-span-full"
-                                                                    : ""
+                                                                    : "",
                                                             )}
                                                         >
                                                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
                                                                 {formatMetadataKey(
-                                                                    key
+                                                                    key,
                                                                 )}
                                                             </span>
                                                             <span
@@ -611,38 +702,17 @@ const HistoryTab = ({ orderId }) => {
                                                                     key ===
                                                                         "changes"
                                                                         ? "whitespace-pre-line font-mono text-xs bg-white p-2 rounded border border-slate-200"
-                                                                        : ""
+                                                                        : "",
                                                                 )}
                                                             >
                                                                 {formatMetadataValue(
                                                                     key,
-                                                                    value
+                                                                    value,
                                                                 )}
                                                             </span>
                                                         </div>
                                                     ))}
                                                 </div>
-                                                {event.user_name && (
-                                                    <div className="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-xs text-slate-500">
-                                                        <User className="w-3 h-3" />
-                                                        <span>
-                                                            Por:{" "}
-                                                            <span className="font-medium text-slate-700">
-                                                                {
-                                                                    event.user_name
-                                                                }
-                                                            </span>
-                                                        </span>
-                                                        {event.user_username && (
-                                                            <span className="text-slate-400">
-                                                                @
-                                                                {
-                                                                    event.user_username
-                                                                }
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -706,7 +776,7 @@ const HistoryTab = ({ orderId }) => {
                                         <p
                                             className={cn(
                                                 "text-lg font-bold tabular-nums",
-                                                item.color
+                                                item.color,
                                             )}
                                         >
                                             {stats[item.key] || 0}

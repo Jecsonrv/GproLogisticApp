@@ -1,12 +1,234 @@
 from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
-from .models import Transfer, BatchPayment, ProviderCreditNote, CreditNoteApplication
+from .models import (
+    Transfer,
+    BatchPayment,
+    ProviderCreditNote,
+    CreditNoteApplication,
+    ProviderInvoice,
+    TransferPayment,
+    ProviderInvoicePayment,
+    DirectCostAllocation,
+)
 from apps.orders.models import OrderDocument
 from apps.users.models import Notification
 import os
 import logging
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(value):
+    try:
+        if value is None:
+            return None
+        if isinstance(value, Decimal):
+            return float(value)
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_actor(instance):
+    return getattr(instance, '_current_user', None) or getattr(instance, 'created_by', None)
+
+
+def _create_order_history_event(service_order, actor, event_type, description, metadata=None):
+    if not service_order:
+        return
+
+    from apps.orders.models import OrderHistory
+
+    OrderHistory.objects.create(
+        service_order=service_order,
+        user=actor,
+        event_type=event_type,
+        description=description,
+        metadata=metadata or {},
+    )
+
+
+def _capture_previous_deleted_state(model_cls, instance):
+    if not instance.pk:
+        instance._was_deleted = False
+        return
+
+    try:
+        previous = model_cls.all_objects.get(pk=instance.pk)
+        instance._was_deleted = previous.is_deleted
+    except model_cls.DoesNotExist:
+        instance._was_deleted = False
+
+
+@receiver(pre_save, sender=Transfer)
+def capture_transfer_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(Transfer, instance)
+
+
+@receiver(pre_save, sender=TransferPayment)
+def capture_transfer_payment_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(TransferPayment, instance)
+
+
+@receiver(pre_save, sender=ProviderInvoice)
+def capture_provider_invoice_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(ProviderInvoice, instance)
+
+
+@receiver(pre_save, sender=ProviderInvoicePayment)
+def capture_provider_invoice_payment_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(ProviderInvoicePayment, instance)
+
+
+@receiver(pre_save, sender=DirectCostAllocation)
+def capture_direct_cost_allocation_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(DirectCostAllocation, instance)
+
+
+@receiver(pre_save, sender=ProviderCreditNote)
+def capture_provider_credit_note_deleted_state(sender, instance, **kwargs):
+    _capture_previous_deleted_state(ProviderCreditNote, instance)
+
+
+@receiver(post_save, sender=Transfer)
+def audit_transfer_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    provider_name = instance.provider.name if instance.provider else instance.beneficiary_name or 'N/A'
+    _create_order_history_event(
+        service_order=instance.service_order,
+        actor=_resolve_actor(instance),
+        event_type='payment_deleted',
+        description=f'Gasto eliminado: {provider_name}',
+        metadata={
+            'source': 'transfer',
+            'transfer_id': instance.id,
+            'provider': provider_name,
+            'amount': _safe_float(instance.amount),
+            'status': instance.status,
+        },
+    )
+
+
+@receiver(post_save, sender=TransferPayment)
+def audit_transfer_payment_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    transfer = instance.transfer
+    provider_name = transfer.provider.name if transfer and transfer.provider else transfer.beneficiary_name if transfer else 'N/A'
+    _create_order_history_event(
+        service_order=transfer.service_order if transfer else None,
+        actor=_resolve_actor(instance),
+        event_type='payment_deleted',
+        description=f'Pago a proveedor eliminado: {provider_name}',
+        metadata={
+            'source': 'transfer_payment',
+            'payment_id': instance.id,
+            'transfer_id': transfer.id if transfer else None,
+            'provider': provider_name,
+            'amount': _safe_float(instance.amount),
+            'payment_method': instance.payment_method,
+            'payment_date': instance.payment_date.isoformat() if instance.payment_date else None,
+        },
+    )
+
+
+@receiver(post_save, sender=ProviderInvoice)
+def audit_provider_invoice_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    provider_name = instance.provider.name if instance.provider else 'N/A'
+    _create_order_history_event(
+        service_order=instance.service_order,
+        actor=_resolve_actor(instance),
+        event_type='payment_deleted',
+        description=f'Factura de proveedor eliminada: {instance.invoice_number}',
+        metadata={
+            'source': 'provider_invoice',
+            'provider_invoice_id': instance.id,
+            'invoice_number': instance.invoice_number,
+            'provider': provider_name,
+            'amount': _safe_float(instance.total_amount),
+            'payment_status': instance.payment_status,
+        },
+    )
+
+
+@receiver(post_save, sender=ProviderInvoicePayment)
+def audit_provider_invoice_payment_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    invoice = instance.provider_invoice
+    provider_name = invoice.provider.name if invoice and invoice.provider else 'N/A'
+    _create_order_history_event(
+        service_order=invoice.service_order if invoice else None,
+        actor=_resolve_actor(instance),
+        event_type='payment_deleted',
+        description=f'Pago de factura de proveedor eliminado: {invoice.invoice_number if invoice else "N/A"}',
+        metadata={
+            'source': 'provider_invoice_payment',
+            'payment_id': instance.id,
+            'provider_invoice_id': invoice.id if invoice else None,
+            'invoice_number': invoice.invoice_number if invoice else None,
+            'provider': provider_name,
+            'amount': _safe_float(instance.amount),
+            'payment_method': instance.payment_method,
+            'payment_date': instance.payment_date.isoformat() if instance.payment_date else None,
+        },
+    )
+
+
+@receiver(post_save, sender=DirectCostAllocation)
+def audit_direct_cost_allocation_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    invoice = instance.provider_invoice
+    service_name = None
+    if instance.order_charge and instance.order_charge.service:
+        service_name = instance.order_charge.service.name
+
+    _create_order_history_event(
+        service_order=invoice.service_order if invoice else None,
+        actor=_resolve_actor(instance),
+        event_type='charge_deleted',
+        description=f'Asignación de costo eliminada: {service_name or "Servicio"}',
+        metadata={
+            'source': 'direct_cost_allocation',
+            'allocation_id': instance.id,
+            'provider_invoice_id': invoice.id if invoice else None,
+            'invoice_number': invoice.invoice_number if invoice else None,
+            'service': service_name,
+            'amount': _safe_float(instance.cost_amount),
+        },
+    )
+
+
+@receiver(post_save, sender=ProviderCreditNote)
+def audit_provider_credit_note_soft_delete(sender, instance, created, **kwargs):
+    if created or not instance.is_deleted or getattr(instance, '_was_deleted', False):
+        return
+
+    related_transfer = instance.original_transfer
+    _create_order_history_event(
+        service_order=related_transfer.service_order if related_transfer else None,
+        actor=_resolve_actor(instance),
+        event_type='payment_deleted',
+        description=f'Nota de crédito eliminada: {instance.note_number}',
+        metadata={
+            'source': 'provider_credit_note',
+            'credit_note_id': instance.id,
+            'note_number': instance.note_number,
+            'provider': instance.provider.name if instance.provider else None,
+            'amount': _safe_float(instance.amount),
+            'status': instance.status,
+        },
+    )
 
 
 @receiver(pre_save, sender=Transfer)
