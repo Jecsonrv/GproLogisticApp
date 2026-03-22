@@ -364,7 +364,16 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         from django.db.models import Prefetch
         from django.db.models.functions import ExtractYear
         queryset = Invoice.objects.all().annotate(
-            issue_year=ExtractYear('issue_date')
+            issue_year=ExtractYear('issue_date'),
+            direct_cost_items_count=Count(
+                'charges',
+                filter=Q(
+                    charges__is_deleted=False,
+                    charges__cost_allocation__is_deleted=False,
+                    charges__cost_allocation__provider_invoice__is_deleted=False,
+                ),
+                distinct=True,
+            ),
         ).select_related(
             'service_order', 'service_order__client', 'service_order__sub_client', 'created_by'
         ).prefetch_related(
@@ -438,6 +447,25 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         """Delete invoice and unmark service order as invoiced"""
         invoice = self.get_object()
 
+        # Flujo B (reversa controlada): si la pre-factura contiene servicios
+        # con costo directo asignado, bloquear el borrado directo para evitar
+        # inconsistencias y exigir reversa explícita.
+        direct_cost_charges = invoice.charges.filter(
+            is_deleted=False,
+            cost_allocation__is_deleted=False,
+            cost_allocation__provider_invoice__is_deleted=False,
+        )
+        if direct_cost_charges.exists():
+            return Response(
+                {
+                    'error': 'Esta pre-factura contiene servicios con costos directos asignados.',
+                    'detail': 'Use reverse_prefactura para revertirla de forma controlada y luego corrija costos/asignaciones.',
+                    'code': 'DIRECT_COST_LOCKED',
+                    'direct_cost_charges': direct_cost_charges.count(),
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Check if invoice has payments (current)
         if invoice.paid_amount > 0:
             return Response(
@@ -502,6 +530,124 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(detail=True, methods=['post'], permission_classes=[IsOperativo2])
+    def reverse_prefactura(self, request, pk=None):
+        """
+        Revierte una pre-factura en borrador de forma controlada.
+
+        Flujo:
+        1) Desvincula cargos y gastos para que vuelvan a la OS (disponibles)
+        2) Elimina la pre-factura
+        3) Registra auditoría en historial de la OS
+
+        Restricciones:
+        - No aplica para facturas con DTE emitido
+        - No aplica para facturas con pagos actuales o con historial de pagos
+        """
+        from .models import InvoicePayment, OrderHistory
+
+        reason = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response(
+                {
+                    'error': 'Debe proporcionar un motivo para revertir la pre-factura.',
+                    'code': 'REVERSAL_REASON_REQUIRED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        invoice = self.get_object()
+
+        if invoice.is_dte_issued:
+            return Response(
+                {
+                    'error': 'No se puede revertir. Esta factura ya tiene DTE emitido. Use anulación y nota de crédito según corresponda.',
+                    'code': 'DTE_LOCKED'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if invoice.paid_amount > 0:
+            return Response(
+                {
+                    'error': 'No se puede revertir una factura con pagos registrados.',
+                    'code': 'PAYMENTS_EXISTS'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        payment_history = InvoicePayment.all_objects.filter(invoice=invoice)
+        if payment_history.exists():
+            return Response(
+                {
+                    'error': 'No se puede revertir porque existe historial de pagos (incluyendo eliminados). Use anulación para mantener trazabilidad.',
+                    'code': 'PAYMENT_HISTORY_EXISTS',
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            inv = Invoice.objects.select_for_update().get(pk=invoice.pk)
+            service_order = inv.service_order
+
+            released_charges = []
+            for charge in inv.charges.filter(is_deleted=False).select_related('service'):
+                released_charges.append({
+                    'id': charge.id,
+                    'service': charge.service.name if charge.service else None,
+                    'was_third_party': charge.is_third_party_service,
+                })
+                charge.invoice = None
+                charge.billing_status = 'disponible'
+                charge.save(skip_order_validation=True)
+
+            released_expenses = []
+            for transfer in inv.billed_transfers.filter(is_deleted=False):
+                released_expenses.append({
+                    'id': transfer.id,
+                    'description': (transfer.description or '')[:80],
+                })
+                transfer.invoice = None
+                transfer.billing_status = 'disponible'
+                transfer.save()
+
+            invoice_number = inv.invoice_number
+            invoice_id = inv.id
+            inv.delete()
+
+            if service_order and not service_order.invoices.exists():
+                service_order.facturado = False
+                service_order.save()
+
+            OrderHistory.objects.create(
+                service_order=service_order,
+                event_type='updated',
+                description=f'Pre-factura {invoice_number} revertida de forma controlada.',
+                user=request.user,
+                metadata={
+                    'source': 'invoice_reverse_prefactura',
+                    'invoice_id': invoice_id,
+                    'invoice_number': invoice_number,
+                    'reason': reason,
+                    'released_items': {
+                        'charges_count': len(released_charges),
+                        'expenses_count': len(released_expenses),
+                        'charges': released_charges,
+                        'expenses': released_expenses,
+                    }
+                }
+            )
+
+        return Response({
+            'message': f'Pre-factura {invoice_number} revertida correctamente.',
+            'invoice_deleted': True,
+            'released': {
+                'charges': len(released_charges),
+                'expenses': len(released_expenses),
+            },
+            'next_step': 'Ahora puede corregir costos directos/asignaciones y refacturar.'
+        }, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def mark_as_dte(self, request, pk=None):
         """
@@ -531,6 +677,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         # Registrar en historial
         from .models import InvoiceEditHistory
+        from apps.transfers.models import DirectCostAllocation
         from django.utils import timezone
         
         InvoiceEditHistory.objects.create(
@@ -940,6 +1087,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             )
 
         from .models import InvoiceEditHistory
+        from apps.transfers.models import DirectCostAllocation
 
         with transaction.atomic():
             if item_type == 'charge':
@@ -949,7 +1097,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
                     # Integridad financiera: no permitir desamarrar cargos tercerizados con
                     # costo directo ya asignado para evitar pérdida de trazabilidad.
-                    if hasattr(charge, 'cost_allocation') and charge.cost_allocation and not charge.cost_allocation.is_deleted:
+                    has_active_direct_cost = DirectCostAllocation.objects.filter(
+                        order_charge=charge,
+                        is_deleted=False,
+                        provider_invoice__is_deleted=False,
+                    ).exists()
+                    if has_active_direct_cost:
                         return Response(
                             {
                                 'error': 'No se puede remover este servicio de la factura porque tiene costo directo asignado.',

@@ -61,6 +61,7 @@ import InvoiceItemsEditor from "../components/InvoiceItemsEditor";
 import axios from "../lib/axios";
 import toast from "react-hot-toast";
 import { formatCurrency, formatDate, cn } from "../lib/utils";
+import useAuthStore from "../stores/authStore";
 
 // ============================================
 // HELPERS
@@ -258,6 +259,9 @@ const STATUS_OPTIONS = [
 // ============================================
 function AccountStatements() {
     const navigate = useNavigate();
+    const currentUser = useAuthStore((state) => state.user);
+    const canReversePrefactura =
+        currentUser?.role === "admin" || currentUser?.role === "operativo2";
     const [searchParams] = useSearchParams();
     const clientIdFromUrl = searchParams.get("client");
 
@@ -286,6 +290,7 @@ function AccountStatements() {
     });
 
     const [statusFilter, setStatusFilter] = useState("");
+    const [requiresReverseOnly, setRequiresReverseOnly] = useState(false);
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [filters, setFilters] = useState({
         dateFrom: "",
@@ -306,6 +311,16 @@ function AccountStatements() {
         open: false,
         id: null,
     });
+    const [reversePrefactura, setReversePrefactura] = useState({
+        open: false,
+        invoiceId: null,
+        invoiceNumber: "",
+        chargesCount: 0,
+        expensesCount: 0,
+        loadingDetails: false,
+        reason: "",
+        isSubmitting: false,
+    });
     const [deletePaymentConfirm, setDeletePaymentConfirm] = useState(null); // {id, amount}
 
     // Persist selectedYear changes
@@ -322,6 +337,7 @@ function AccountStatements() {
 
     const clearFilters = () => {
         setStatusFilter("");
+        setRequiresReverseOnly(false);
         setFilters({
             dateFrom: "",
             dateTo: "",
@@ -541,10 +557,118 @@ function AccountStatements() {
                 fetchInvoices(selectedClient.id);
                 fetchStatement(selectedClient.id);
             }
-        } catch {
+        } catch (error) {
+            const code = error?.response?.data?.code;
+            if (code === "DIRECT_COST_LOCKED" && canReversePrefactura) {
+                const invoiceRow = invoices.find(
+                    (i) => i.id === deleteConfirm.id,
+                );
+                handleOpenReversePrefacturaModal(
+                    invoiceRow || { id: deleteConfirm.id },
+                );
+            }
             // El interceptor de axios ya muestra el toast de error
         } finally {
             setDeleteConfirm({ open: false, id: null });
+        }
+    };
+
+    const handleOpenReversePrefacturaModal = async (invoiceRow) => {
+        if (!invoiceRow?.id) return;
+
+        setReversePrefactura({
+            open: true,
+            invoiceId: invoiceRow.id,
+            invoiceNumber: invoiceRow.invoice_number || "",
+            chargesCount: 0,
+            expensesCount: 0,
+            loadingDetails: true,
+            reason: "",
+            isSubmitting: false,
+        });
+
+        try {
+            const response = await axios.get(
+                `/orders/invoices/${invoiceRow.id}/`,
+            );
+            const detail = response.data || {};
+            const chargesCount = Array.isArray(detail.billed_charges)
+                ? detail.billed_charges.length
+                : Array.isArray(detail.charges)
+                  ? detail.charges.length
+                  : 0;
+            const expensesCount = Array.isArray(detail.billed_expenses)
+                ? detail.billed_expenses.length
+                : Array.isArray(detail.billed_transfers)
+                  ? detail.billed_transfers.length
+                  : 0;
+
+            setReversePrefactura((prev) => ({
+                ...prev,
+                invoiceNumber: detail.invoice_number || prev.invoiceNumber,
+                chargesCount,
+                expensesCount,
+                loadingDetails: false,
+            }));
+        } catch {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                loadingDetails: false,
+            }));
+        }
+    };
+
+    const handleReversePrefactura = async () => {
+        if (!reversePrefactura.invoiceId) return;
+
+        const reason = (reversePrefactura.reason || "").trim();
+        if (!reason) {
+            toast.error(
+                "Debes ingresar un motivo para revertir la pre-factura.",
+            );
+            return;
+        }
+
+        try {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                isSubmitting: true,
+            }));
+
+            await axios.post(
+                `/orders/invoices/${reversePrefactura.invoiceId}/reverse_prefactura/`,
+                { reason },
+            );
+
+            toast.success("Pre-factura revertida correctamente.");
+            if (selectedClient) {
+                fetchInvoices(selectedClient.id);
+                fetchStatement(selectedClient.id);
+            }
+
+            if (
+                selectedInvoice &&
+                selectedInvoice.id === reversePrefactura.invoiceId
+            ) {
+                setIsDetailModalOpen(false);
+                setSelectedInvoice(null);
+            }
+
+            setReversePrefactura({
+                open: false,
+                invoiceId: null,
+                invoiceNumber: "",
+                chargesCount: 0,
+                expensesCount: 0,
+                loadingDetails: false,
+                reason: "",
+                isSubmitting: false,
+            });
+        } catch {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                isSubmitting: false,
+            }));
         }
     };
 
@@ -607,6 +731,14 @@ function AccountStatements() {
             // Filtro de estado
             if (statusFilter && inv.status !== statusFilter) return false;
 
+            // Filtro de integridad por costos directos
+            if (
+                requiresReverseOnly &&
+                !Boolean(inv.requires_reverse_prefactura)
+            ) {
+                return false;
+            }
+
             // Filtro de fechas
             if (filters.dateFrom) {
                 const invDate = new Date(inv.issue_date);
@@ -643,7 +775,14 @@ function AccountStatements() {
 
             return true;
         });
-    }, [invoices, searchQuery, statusFilter, filters, selectedYear]);
+    }, [
+        invoices,
+        searchQuery,
+        statusFilter,
+        filters,
+        selectedYear,
+        requiresReverseOnly,
+    ]);
 
     // Active filters count
     const activeFiltersCount = useMemo(() => {
@@ -654,8 +793,9 @@ function AccountStatements() {
         if (filters.minAmount) count++;
         if (filters.maxAmount) count++;
         if (filters.invoiceType) count++;
+        if (requiresReverseOnly) count++;
         return count;
-    }, [statusFilter, filters]);
+    }, [statusFilter, filters, requiresReverseOnly]);
 
     // Client KPIs
     const clientKPIs = useMemo(() => {
@@ -857,7 +997,16 @@ function AccountStatements() {
             header: "Estado",
             accessor: "status",
             sortable: false,
-            cell: (row) => <StatusBadge status={row.status} />,
+            cell: (row) => (
+                <div className="flex flex-col items-start gap-1 py-1">
+                    <StatusBadge status={row.status} />
+                    {row.requires_reverse_prefactura && (
+                        <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                            Requiere reversa
+                        </span>
+                    )}
+                </div>
+            ),
         },
         {
             header: "Acciones",
@@ -914,17 +1063,47 @@ function AccountStatements() {
                         </button>
                     </div>
                     <div className="flex justify-center">
+                        {canReversePrefactura &&
+                        !row.is_dte_issued &&
+                        row.status !== "paid" &&
+                        row.status !== "cancelled" ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenReversePrefacturaModal(row);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors"
+                                title="Revertir pre-factura"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                            </button>
+                        ) : (
+                            <div className="w-7" />
+                        )}
+                    </div>
+                    <div className="flex justify-center">
                         {row.status !== "paid" ? (
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    if (
+                                        canReversePrefactura &&
+                                        row.requires_reverse_prefactura
+                                    ) {
+                                        handleOpenReversePrefacturaModal(row);
+                                        return;
+                                    }
                                     setDeleteConfirm({
                                         open: true,
                                         id: row.id,
                                     });
                                 }}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                                title="Eliminar"
+                                title={
+                                    row.requires_reverse_prefactura
+                                        ? "Requiere reversa controlada"
+                                        : "Eliminar"
+                                }
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>
@@ -1656,6 +1835,23 @@ function AccountStatements() {
                                                 size="sm"
                                             />
                                         </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setRequiresReverseOnly(
+                                                    !requiresReverseOnly,
+                                                )
+                                            }
+                                            className={cn(
+                                                "h-9",
+                                                requiresReverseOnly &&
+                                                    "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100",
+                                            )}
+                                        >
+                                            <AlertCircle className="w-4 h-4 mr-2" />
+                                            Requiere reversa
+                                        </Button>
                                     </div>
 
                                     {/* Panel de Filtros Avanzados */}
@@ -2165,10 +2361,10 @@ function AccountStatements() {
             {/* Confirm Delete Dialog */}
             <ConfirmDialog
                 open={deleteConfirm.open}
-                onOpenChange={(open) =>
+                onClose={() =>
                     setDeleteConfirm({
-                        open,
-                        id: open ? deleteConfirm.id : null,
+                        open: false,
+                        id: null,
                     })
                 }
                 title="Eliminar Factura"
@@ -2178,6 +2374,103 @@ function AccountStatements() {
                 variant="danger"
                 onConfirm={handleDeleteInvoice}
             />
+
+            <Modal
+                isOpen={reversePrefactura.open}
+                onClose={() => {
+                    if (reversePrefactura.isSubmitting) return;
+                    setReversePrefactura({
+                        open: false,
+                        invoiceId: null,
+                        invoiceNumber: "",
+                        chargesCount: 0,
+                        expensesCount: 0,
+                        loadingDetails: false,
+                        reason: "",
+                        isSubmitting: false,
+                    });
+                }}
+                title="Revertir Pre-factura"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        Esta operación liberará los ítems facturados y eliminará
+                        la pre-factura para que puedas corregir costos directos
+                        y refacturar.
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <p>
+                            <span className="font-semibold">Factura:</span>{" "}
+                            {reversePrefactura.invoiceNumber ||
+                                `#${reversePrefactura.invoiceId}`}
+                        </p>
+                        {reversePrefactura.loadingDetails ? (
+                            <p className="mt-1 text-slate-500">
+                                Calculando ítems a liberar...
+                            </p>
+                        ) : (
+                            <p className="mt-1">
+                                <span className="font-semibold">
+                                    Se liberarán:
+                                </span>{" "}
+                                {reversePrefactura.chargesCount} servicio(s) y{" "}
+                                {reversePrefactura.expensesCount} gasto(s).
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="reverse-prefactura-reason-account">
+                            Motivo de reversa
+                        </Label>
+                        <textarea
+                            id="reverse-prefactura-reason-account"
+                            rows={4}
+                            value={reversePrefactura.reason}
+                            onChange={(e) =>
+                                setReversePrefactura((prev) => ({
+                                    ...prev,
+                                    reason: e.target.value,
+                                }))
+                            }
+                            placeholder="Describe por qué se revierte esta pre-factura"
+                            className="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-900"
+                            disabled={reversePrefactura.isSubmitting}
+                        />
+                    </div>
+                </div>
+
+                <ModalFooter>
+                    <Button
+                        variant="ghost"
+                        onClick={() =>
+                            setReversePrefactura({
+                                open: false,
+                                invoiceId: null,
+                                invoiceNumber: "",
+                                chargesCount: 0,
+                                expensesCount: 0,
+                                loadingDetails: false,
+                                reason: "",
+                                isSubmitting: false,
+                            })
+                        }
+                        disabled={reversePrefactura.isSubmitting}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={handleReversePrefactura}
+                        disabled={reversePrefactura.isSubmitting}
+                    >
+                        {reversePrefactura.isSubmitting
+                            ? "Revirtiendo..."
+                            : "Revertir Pre-factura"}
+                    </Button>
+                </ModalFooter>
+            </Modal>
 
             {/* Confirm Delete Payment Dialog */}
             <ConfirmDialog

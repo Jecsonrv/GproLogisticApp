@@ -2,6 +2,7 @@ from decimal import Decimal
 import io
 import zipfile
 
+from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -91,6 +92,61 @@ class DirectCostSecurityRegressionTests(APITestCase):
         with self.assertRaises(ValidationError):
             self.provider_invoice.delete()
 
+    def test_charge_delete_still_blocked_when_direct_cost_has_invoice_history(self):
+        # Aunque el cargo ya no esté facturado, si la OS tuvo facturación previa,
+        # no debe romperse la trazabilidad de costos directos.
+        self.client.force_authenticate(user=self.user_operativo2)
+        self.charge.invoice = None
+        self.charge.billing_status = 'disponible'
+        self.charge.save(skip_order_validation=True)
+
+        response = self.client.delete(
+            reverse('charge-detail', kwargs={'pk': self.charge.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'DIRECT_COST_LOCKED')
+
+    def test_charge_delete_auto_unlinks_direct_cost_when_no_invoice_history(self):
+        self.client.force_authenticate(user=self.user_operativo2)
+
+        fresh_order = ServiceOrder.objects.create(
+            client=self.client_company,
+            shipment_type=self.shipment_type,
+            created_by=self.user_operativo2,
+        )
+        fresh_charge = OrderCharge.objects.create(
+            service_order=fresh_order,
+            service=self.service,
+            quantity=1,
+            unit_price=Decimal('140.00'),
+        )
+        fresh_provider_invoice = ProviderInvoice.objects.create(
+            invoice_number='CD-003',
+            provider=self.provider,
+            service_order=fresh_order,
+            total_amount=Decimal('95.00'),
+            created_by=self.user_operativo2,
+        )
+        fresh_allocation = DirectCostAllocation.objects.create(
+            provider_invoice=fresh_provider_invoice,
+            order_charge=fresh_charge,
+            cost_amount=Decimal('95.00'),
+            created_by=self.user_operativo2,
+        )
+
+        response = self.client.delete(
+            reverse('charge-detail', kwargs={'pk': fresh_charge.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        fresh_charge.refresh_from_db()
+        fresh_allocation.refresh_from_db()
+        fresh_provider_invoice.refresh_from_db()
+        self.assertTrue(fresh_charge.is_deleted)
+        self.assertTrue(fresh_allocation.is_deleted)
+        self.assertEqual(fresh_provider_invoice.allocated_amount, Decimal('0.00'))
+
     def test_remove_item_blocks_direct_cost_charge_even_for_operativo2(self):
         self.client.force_authenticate(user=self.user_operativo2)
         url = reverse('invoice-remove-item', kwargs={'pk': self.invoice.id})
@@ -115,6 +171,138 @@ class DirectCostSecurityRegressionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_invoice_destroy_is_blocked_when_contains_direct_cost_charges(self):
+        self.client.force_authenticate(user=self.user_operativo2)
+
+        response = self.client.delete(
+            reverse('invoice-detail', kwargs={'pk': self.invoice.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'DIRECT_COST_LOCKED')
+
+    def test_reverse_prefactura_requires_reason(self):
+        self.client.force_authenticate(user=self.user_operativo2)
+
+        response = self.client.post(
+            reverse('invoice-reverse-prefactura', kwargs={'pk': self.invoice.id}),
+            {},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('code'), 'REVERSAL_REASON_REQUIRED')
+
+    def test_reverse_prefactura_releases_items_and_allows_followup_corrections(self):
+        self.client.force_authenticate(user=self.user_operativo2)
+
+        response = self.client.post(
+            reverse('invoice-reverse-prefactura', kwargs={'pk': self.invoice.id}),
+            {'reason': 'Error en asignación de costo'},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Invoice.objects.filter(pk=self.invoice.id).exists())
+
+        self.charge.refresh_from_db()
+        self.assertIsNone(self.charge.invoice_id)
+        self.assertEqual(self.charge.billing_status, 'disponible')
+
+        self.allocation.refresh_from_db()
+        self.assertFalse(self.allocation.is_deleted)
+
+        with self.assertRaises(ValidationError):
+            self.provider_invoice.delete()
+
+        self.allocation.delete()
+        self.charge.refresh_from_db()
+        self.assertFalse(self.charge.is_third_party_service)
+
+        self.provider_invoice.delete()
+        self.provider_invoice.refresh_from_db()
+        self.assertTrue(self.provider_invoice.is_deleted)
+
+    def test_provider_invoice_requires_removing_allocations_first(self):
+        # Escenario sin historial de facturación: igualmente debe exigirse
+        # desmontar la asignación antes de eliminar el costo directo.
+        fresh_order = ServiceOrder.objects.create(
+            client=self.client_company,
+            shipment_type=self.shipment_type,
+            created_by=self.user_operativo2,
+        )
+        fresh_charge = OrderCharge.objects.create(
+            service_order=fresh_order,
+            service=self.service,
+            quantity=1,
+            unit_price=Decimal('120.00'),
+        )
+        fresh_provider_invoice = ProviderInvoice.objects.create(
+            invoice_number='CD-002',
+            provider=self.provider,
+            service_order=fresh_order,
+            total_amount=Decimal('90.00'),
+            created_by=self.user_operativo2,
+        )
+        fresh_allocation = DirectCostAllocation.objects.create(
+            provider_invoice=fresh_provider_invoice,
+            order_charge=fresh_charge,
+            cost_amount=Decimal('90.00'),
+            created_by=self.user_operativo2,
+        )
+
+        with self.assertRaises(ValidationError):
+            fresh_provider_invoice.delete()
+
+        fresh_allocation.delete()
+        fresh_charge.refresh_from_db()
+        self.assertFalse(fresh_charge.is_third_party_service)
+
+        fresh_provider_invoice.delete()
+        fresh_provider_invoice.refresh_from_db()
+        self.assertTrue(fresh_provider_invoice.is_deleted)
+
+    def test_invoice_list_exposes_direct_cost_reversal_metadata(self):
+        self.client.force_authenticate(user=self.user_operativo2)
+
+        response = self.client.get(reverse('invoice-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        invoice_row = next((i for i in response.data if i['id'] == self.invoice.id), None)
+        self.assertIsNotNone(invoice_row)
+        self.assertEqual(invoice_row.get('delete_block_code'), 'DIRECT_COST_LOCKED')
+        self.assertFalse(invoice_row.get('can_delete'))
+        self.assertTrue(invoice_row.get('requires_reverse_prefactura'))
+        self.assertGreaterEqual(invoice_row.get('direct_cost_items_count', 0), 1)
+
+    def test_fix_orphan_third_party_charges_command_normalizes_historical_orphans(self):
+        # Simula dato historico inconsistente: servicio marcado como tercerizado
+        # pero con asignacion soft-deleted.
+        self.allocation.is_deleted = True
+        self.allocation.save(update_fields=['is_deleted'])
+        self.charge.refresh_from_db()
+        self.assertTrue(self.charge.is_third_party_service)
+
+        call_command('fix_orphan_third_party_charges', '--apply')
+
+        self.charge.refresh_from_db()
+        self.assertFalse(self.charge.is_third_party_service)
+
+    def test_fix_orphan_command_deactivates_allocation_when_provider_invoice_deleted(self):
+        # Simula hueco historico: factura de proveedor eliminada con asignacion activa.
+        self.provider_invoice.is_deleted = True
+        self.provider_invoice.save(update_fields=['is_deleted'])
+
+        self.allocation.refresh_from_db()
+        self.assertFalse(self.allocation.is_deleted)
+
+        call_command('fix_orphan_third_party_charges', '--apply')
+
+        self.allocation.refresh_from_db()
+        self.charge.refresh_from_db()
+        self.assertTrue(self.allocation.is_deleted)
+        self.assertFalse(self.charge.is_third_party_service)
 
 
 class TransferDocumentExportTests(APITestCase):

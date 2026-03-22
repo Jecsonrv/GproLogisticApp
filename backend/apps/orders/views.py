@@ -3,7 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import HttpResponse
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from .models import ServiceOrder, OrderDocument, OrderCharge
+from apps.transfers.models import DirectCostAllocation
 from .serializers import ServiceOrderSerializer, ServiceOrderListSerializer, OrderDocumentSerializer
 from .serializers_new import ServiceOrderDetailSerializer
 from apps.users.permissions import IsOperativo, IsOperativo2
@@ -1156,15 +1158,28 @@ class OrderChargeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Integridad financiera: evitar eliminar cargos con costo directo asignado.
-        if hasattr(charge, 'cost_allocation') and charge.cost_allocation and not charge.cost_allocation.is_deleted:
-            return Response(
-                {
-                    'error': 'No se puede eliminar un cargo con costo directo asignado.',
-                    'detail': 'Elimine/corrija primero la trazabilidad financiera mediante anulación y refacturación.'
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Si tiene costo directo activo, intentar desmontar la asignación en la
+        # misma operación para permitir la corrección operativa cuando es seguro.
+        active_allocation = DirectCostAllocation.objects.filter(
+            order_charge=charge,
+            is_deleted=False,
+            provider_invoice__is_deleted=False,
+        ).first()
+        if active_allocation:
+            try:
+                with transaction.atomic():
+                    active_allocation._current_user = request.user
+                    active_allocation.delete()
+            except ValidationError as e:
+                error_message = e.messages[0] if hasattr(e, 'messages') and e.messages else str(e)
+                return Response(
+                    {
+                        'error': 'No se puede eliminar un cargo con costo directo asignado.',
+                        'detail': error_message,
+                        'code': 'DIRECT_COST_LOCKED',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         # Set current user for signal
         charge._current_user = request.user

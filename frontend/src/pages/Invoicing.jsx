@@ -71,6 +71,7 @@ import BillingWizard from "../components/BillingWizard";
 import PaymentItemsModal from "../components/PaymentItemsModal";
 import PaymentDetailModal from "../components/PaymentDetailModal";
 import CreditNoteModal from "../components/CreditNoteModal";
+import useAuthStore from "../stores/authStore";
 
 // ============================================
 // HELPERS
@@ -146,7 +147,7 @@ const InvoiceStatusBadge = ({ status }) => {
         <span
             className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border shadow-sm transition-colors",
-                config.className
+                config.className,
             )}
         >
             {Icon && <Icon className={cn("w-3.5 h-3.5", config.iconColor)} />}
@@ -183,7 +184,7 @@ const InvoiceTypeBadge = ({ type }) => {
         <span
             className={cn(
                 "inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border",
-                c.className
+                c.className,
             )}
         >
             {c.label}
@@ -224,6 +225,9 @@ const KPICard = ({ label, value, subtext, icon: Icon }) => {
 
 const Invoicing = () => {
     const navigate = useNavigate();
+    const currentUser = useAuthStore((state) => state.user);
+    const canReversePrefactura =
+        currentUser?.role === "admin" || currentUser?.role === "operativo2";
     // Data State
     const [invoices, setInvoices] = useState([]);
     const [creditNotes, setCreditNotes] = useState([]);
@@ -271,6 +275,16 @@ const Invoicing = () => {
         id: null,
         type: null, // 'invoice' | 'credit-note'
     });
+    const [reversePrefactura, setReversePrefactura] = useState({
+        open: false,
+        invoiceId: null,
+        invoiceNumber: "",
+        chargesCount: 0,
+        expensesCount: 0,
+        loadingDetails: false,
+        reason: "",
+        isSubmitting: false,
+    });
 
     // Search and Filters
     const [searchQuery, setSearchQuery] = useState("");
@@ -282,6 +296,7 @@ const Invoicing = () => {
         dueDateFrom: "",
         dueDateTo: "",
     });
+    const [requiresReverseOnly, setRequiresReverseOnly] = useState(false);
 
     // Edit invoice form
     const [editForm, setEditForm] = useState({
@@ -362,7 +377,7 @@ const Invoicing = () => {
             });
             const ordersWithAmount = response.data.filter(
                 (order) =>
-                    order.total_amount && parseFloat(order.total_amount) > 0
+                    order.total_amount && parseFloat(order.total_amount) > 0,
             );
             setAllServiceOrders(ordersWithAmount);
         } catch (error) {
@@ -398,6 +413,14 @@ const Invoicing = () => {
                 return false;
             }
 
+            // Direct cost integrity filter
+            if (
+                requiresReverseOnly &&
+                !Boolean(invoice.requires_reverse_prefactura)
+            ) {
+                return false;
+            }
+
             // Issue date range filter
             if (filters.dateFrom) {
                 const invoiceDate = new Date(invoice.issue_date);
@@ -426,7 +449,7 @@ const Invoicing = () => {
 
             return true;
         });
-    }, [invoices, searchQuery, filters]);
+    }, [invoices, searchQuery, filters, requiresReverseOnly]);
 
     // Active filters count
     const activeFiltersCount = useMemo(() => {
@@ -437,8 +460,9 @@ const Invoicing = () => {
         if (filters.dateTo) count++;
         if (filters.dueDateFrom) count++;
         if (filters.dueDateTo) count++;
+        if (requiresReverseOnly) count++;
         return count;
-    }, [filters]);
+    }, [filters, requiresReverseOnly]);
 
     const handleOpenEditCNModal = (nc) => {
         setLoading(true);
@@ -449,7 +473,7 @@ const Invoicing = () => {
                 setIsCreditNoteModalOpen(true);
             })
             .catch(() =>
-                toast.error("No se pudieron cargar los datos para edición.")
+                toast.error("No se pudieron cargar los datos para edición."),
             )
             .finally(() => setLoading(false));
     };
@@ -513,7 +537,7 @@ const Invoicing = () => {
             formData.append("invoice_type", editForm.invoice_type);
             formData.append("issue_date", editForm.issue_date);
             formData.append("notes", editForm.notes);
-            
+
             if (editForm.generation_code) {
                 formData.append("generation_code", editForm.generation_code);
             }
@@ -553,6 +577,7 @@ const Invoicing = () => {
             dueDateFrom: "",
             dueDateTo: "",
         });
+        setRequiresReverseOnly(false);
         setSearchQuery("");
     };
 
@@ -609,10 +634,107 @@ const Invoicing = () => {
             toast.success("La factura ha sido eliminada.");
             fetchInvoices();
             fetchSummary();
-        } catch {
+        } catch (error) {
+            const code = error?.response?.data?.code;
+            if (code === "DIRECT_COST_LOCKED" && canReversePrefactura) {
+                const invoiceRow = invoices.find(
+                    (i) => i.id === deleteConfirm.id,
+                );
+                handleOpenReversePrefacturaModal(
+                    invoiceRow || { id: deleteConfirm.id },
+                );
+            }
             // El interceptor de axios ya muestra el toast de error
         } finally {
             setDeleteConfirm({ open: false, id: null });
+        }
+    };
+
+    const handleOpenReversePrefacturaModal = async (invoiceRow) => {
+        if (!invoiceRow?.id) return;
+
+        setReversePrefactura({
+            open: true,
+            invoiceId: invoiceRow.id,
+            invoiceNumber: invoiceRow.invoice_number || "",
+            chargesCount: 0,
+            expensesCount: 0,
+            loadingDetails: true,
+            reason: "",
+            isSubmitting: false,
+        });
+
+        try {
+            const response = await api.get(
+                `/orders/invoices/${invoiceRow.id}/`,
+            );
+            const detail = response.data || {};
+            const chargesCount = Array.isArray(detail.billed_charges)
+                ? detail.billed_charges.length
+                : Array.isArray(detail.charges)
+                  ? detail.charges.length
+                  : 0;
+            const expensesCount = Array.isArray(detail.billed_expenses)
+                ? detail.billed_expenses.length
+                : Array.isArray(detail.billed_transfers)
+                  ? detail.billed_transfers.length
+                  : 0;
+
+            setReversePrefactura((prev) => ({
+                ...prev,
+                invoiceNumber: detail.invoice_number || prev.invoiceNumber,
+                chargesCount,
+                expensesCount,
+                loadingDetails: false,
+            }));
+        } catch {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                loadingDetails: false,
+            }));
+        }
+    };
+
+    const handleReversePrefactura = async () => {
+        if (!reversePrefactura.invoiceId) return;
+
+        const reason = (reversePrefactura.reason || "").trim();
+        if (!reason) {
+            toast.error(
+                "Debes ingresar un motivo para revertir la pre-factura.",
+            );
+            return;
+        }
+
+        try {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                isSubmitting: true,
+            }));
+
+            await api.post(
+                `/orders/invoices/${reversePrefactura.invoiceId}/reverse_prefactura/`,
+                { reason },
+            );
+
+            toast.success("Pre-factura revertida correctamente.");
+            fetchInvoices();
+            fetchSummary();
+            setReversePrefactura({
+                open: false,
+                invoiceId: null,
+                invoiceNumber: "",
+                chargesCount: 0,
+                expensesCount: 0,
+                loadingDetails: false,
+                reason: "",
+                isSubmitting: false,
+            });
+        } catch {
+            setReversePrefactura((prev) => ({
+                ...prev,
+                isSubmitting: false,
+            }));
         }
     };
 
@@ -646,7 +768,7 @@ const Invoicing = () => {
     const creditNotesSummary = useMemo(() => {
         const total = creditNotes.reduce(
             (sum, nc) => sum + parseFloat(nc.amount || 0),
-            0
+            0,
         );
         const thisMonth = creditNotes.filter((nc) => {
             const ncDate = new Date(nc.issue_date);
@@ -658,7 +780,7 @@ const Invoicing = () => {
         });
         const thisMonthTotal = thisMonth.reduce(
             (sum, nc) => sum + parseFloat(nc.amount || 0),
-            0
+            0,
         );
         return {
             count: creditNotes.length,
@@ -827,7 +949,7 @@ const Invoicing = () => {
                             onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(
-                                    `/service-orders/${row.service_order}`
+                                    `/service-orders/${row.service_order}`,
                                 );
                             }}
                             className="text-[10px] text-slate-700 hover:text-slate-900 font-semibold flex items-center gap-1 mt-0.5"
@@ -882,7 +1004,7 @@ const Invoicing = () => {
                                     "text-[11px] font-semibold tabular-nums",
                                     row.days_overdue > 0
                                         ? "text-red-600"
-                                        : "text-slate-500"
+                                        : "text-slate-500",
                                 )}
                             >
                                 {formatDateSafe(row.due_date)}
@@ -935,7 +1057,7 @@ const Invoicing = () => {
                             "text-sm font-semibold tabular-nums tracking-tight",
                             row.paid_amount > 0
                                 ? "text-emerald-700"
-                                : "text-slate-300"
+                                : "text-slate-300",
                         )}
                     >
                         {row.paid_amount > 0
@@ -958,7 +1080,7 @@ const Invoicing = () => {
                             "font-semibold tabular-nums text-sm tracking-tight",
                             parseFloat(row.balance) > 0.01
                                 ? "text-slate-700"
-                                : "text-emerald-600"
+                                : "text-emerald-600",
                         )}
                     >
                         {parseFloat(row.balance) > 0.01 ? (
@@ -976,7 +1098,16 @@ const Invoicing = () => {
             header: "Estado",
             accessor: "status",
             sortable: false,
-            render: (row) => <InvoiceStatusBadge status={row.status} />,
+            render: (row) => (
+                <div className="flex flex-col items-start gap-1 py-1">
+                    <InvoiceStatusBadge status={row.status} />
+                    {row.requires_reverse_prefactura && (
+                        <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                            Requiere reversa
+                        </span>
+                    )}
+                </div>
+            ),
         },
         {
             header: "Acciones",
@@ -1060,12 +1191,41 @@ const Invoicing = () => {
                         <Edit2 className="w-4 h-4" />
                     </button>
                     {/* Eliminar */}
+                    {canReversePrefactura &&
+                    !row.is_dte_issued &&
+                    row.status !== "paid" &&
+                    row.status !== "cancelled" ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenReversePrefacturaModal(row);
+                            }}
+                            title="Revertir pre-factura"
+                            className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <div className="w-7" />
+                    )}
+
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
+                            if (
+                                canReversePrefactura &&
+                                row.requires_reverse_prefactura
+                            ) {
+                                handleOpenReversePrefacturaModal(row);
+                                return;
+                            }
                             setDeleteConfirm({ open: true, id: row.id });
                         }}
-                        title="Eliminar"
+                        title={
+                            row.requires_reverse_prefactura
+                                ? "Requiere reversa controlada"
+                                : "Eliminar"
+                        }
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                     >
                         <Trash2 className="w-4 h-4" />
@@ -1138,7 +1298,7 @@ const Invoicing = () => {
                                 -
                                 {formatCurrency(
                                     summary.total_credited ||
-                                        creditNotesSummary.total
+                                        creditNotesSummary.total,
                                 )}
                             </span>
                         </div>
@@ -1162,7 +1322,7 @@ const Invoicing = () => {
                                         "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
                                         activeTab === "invoices"
                                             ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50",
                                     )}
                                 >
                                     Facturas
@@ -1173,7 +1333,7 @@ const Invoicing = () => {
                                         "flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-1.5 text-xs font-bold rounded-md transition-all uppercase tracking-wide",
                                         activeTab === "credit-notes"
                                             ? "bg-white text-slate-900 shadow-sm border border-slate-200/50"
-                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                            : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50",
                                     )}
                                 >
                                     N. Crédito
@@ -1200,28 +1360,50 @@ const Invoicing = () => {
                                     />
                                 </div>
                                 {activeTab === "invoices" && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                            setIsFiltersOpen(!isFiltersOpen)
-                                        }
-                                        className={cn(
-                                            "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
-                                            isFiltersOpen &&
-                                                "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50"
-                                        )}
-                                    >
-                                        <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
-                                        <span className="hidden sm:inline">
-                                            Filtros
-                                        </span>
-                                        {activeFiltersCount > 0 && (
-                                            <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
-                                                {activeFiltersCount}
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setRequiresReverseOnly(
+                                                    !requiresReverseOnly,
+                                                )
+                                            }
+                                            className={cn(
+                                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
+                                                requiresReverseOnly &&
+                                                    "border-amber-300 bg-amber-50 text-amber-800",
+                                            )}
+                                        >
+                                            <AlertCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2" />
+                                            <span className="hidden sm:inline">
+                                                Requiere reversa
                                             </span>
-                                        )}
-                                    </Button>
+                                        </Button>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setIsFiltersOpen(!isFiltersOpen)
+                                            }
+                                            className={cn(
+                                                "border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all h-10 sm:h-9 px-2.5 sm:px-3 whitespace-nowrap",
+                                                isFiltersOpen &&
+                                                    "ring-2 ring-slate-900/5 border-slate-900 bg-slate-50",
+                                            )}
+                                        >
+                                            <Filter className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-2 text-slate-500" />
+                                            <span className="hidden sm:inline">
+                                                Filtros
+                                            </span>
+                                            {activeFiltersCount > 0 && (
+                                                <span className="ml-1 sm:ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-slate-900 text-white rounded-full">
+                                                    {activeFiltersCount}
+                                                </span>
+                                            )}
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -1401,7 +1583,7 @@ const Invoicing = () => {
                                             </p>
                                             <p className="text-lg font-bold text-slate-700 tabular-nums">
                                                 {formatCurrency(
-                                                    creditNotesSummary.thisMonthTotal
+                                                    creditNotesSummary.thisMonthTotal,
                                                 )}
                                             </p>
                                         </div>
@@ -1411,7 +1593,7 @@ const Invoicing = () => {
                                             </p>
                                             <p className="text-lg font-bold text-slate-800 tabular-nums">
                                                 {formatCurrency(
-                                                    creditNotesSummary.total
+                                                    creditNotesSummary.total,
                                                 )}
                                             </p>
                                         </div>
@@ -1460,7 +1642,7 @@ const Invoicing = () => {
                         label="Factura"
                         placeholder="Buscar por número de factura, cliente u orden de servicio..."
                         options={invoices.filter(
-                            (inv) => inv.status !== "cancelled"
+                            (inv) => inv.status !== "cancelled",
                         )}
                         getOptionLabel={(inv) => {
                             const osInfo = inv.service_order_number
@@ -1527,10 +1709,10 @@ const Invoicing = () => {
                             value={selectedServiceOrderForBilling?.id || ""}
                             onChange={(val) => {
                                 const order = allServiceOrders.find(
-                                    (o) => String(o.id) === String(val)
+                                    (o) => String(o.id) === String(val),
                                 );
                                 setSelectedServiceOrderForBilling(
-                                    order || null
+                                    order || null,
                                 );
                             }}
                             options={[
@@ -1709,7 +1891,7 @@ const Invoicing = () => {
                                     className={cn(
                                         "mb-1.5 block",
                                         editForm.is_dte_issued &&
-                                            "text-slate-400"
+                                            "text-slate-400",
                                     )}
                                 >
                                     Tipo de Documento *
@@ -1739,7 +1921,7 @@ const Invoicing = () => {
                                     className={cn(
                                         "mb-1.5 block",
                                         editForm.is_dte_issued &&
-                                            "text-slate-400"
+                                            "text-slate-400",
                                     )}
                                 >
                                     Fecha de Emisión *
@@ -1918,26 +2100,26 @@ const Invoicing = () => {
                                             selectedInvoice.status === "paid"
                                                 ? "success"
                                                 : selectedInvoice.status ===
-                                                  "partial"
-                                                ? "warning"
-                                                : selectedInvoice.status ===
-                                                  "overdue"
-                                                ? "danger"
-                                                : "default"
+                                                    "partial"
+                                                  ? "warning"
+                                                  : selectedInvoice.status ===
+                                                      "overdue"
+                                                    ? "danger"
+                                                    : "default"
                                         }
                                     >
                                         {selectedInvoice.status === "paid"
                                             ? "Pagada"
                                             : selectedInvoice.status ===
-                                              "partial"
-                                            ? "Pago Parcial"
-                                            : selectedInvoice.status ===
-                                              "overdue"
-                                            ? "Vencida"
-                                            : selectedInvoice.status ===
-                                              "cancelled"
-                                            ? "Anulada"
-                                            : "Pendiente"}
+                                                "partial"
+                                              ? "Pago Parcial"
+                                              : selectedInvoice.status ===
+                                                  "overdue"
+                                                ? "Vencida"
+                                                : selectedInvoice.status ===
+                                                    "cancelled"
+                                                  ? "Anulada"
+                                                  : "Pendiente"}
                                     </Badge>
                                 </div>
                             </div>
@@ -1947,7 +2129,7 @@ const Invoicing = () => {
                                 </div>
                                 <div className="text-2xl font-semibold text-slate-700 tabular-nums">
                                     {formatCurrency(
-                                        selectedInvoice.total_amount
+                                        selectedInvoice.total_amount,
                                     )}
                                 </div>
                             </div>
@@ -1964,7 +2146,7 @@ const Invoicing = () => {
                                         <button
                                             onClick={() =>
                                                 navigate(
-                                                    `/service-orders/${selectedInvoice.service_order_id}`
+                                                    `/service-orders/${selectedInvoice.service_order_id}`,
                                                 )
                                             }
                                             className="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors flex items-center gap-1 group"
@@ -1981,8 +2163,12 @@ const Invoicing = () => {
                                     )}
                                     {selectedInvoice.purchase_order && (
                                         <div className="mt-1 flex items-center gap-1">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase">PO:</span>
-                                            <span className="font-mono text-xs text-slate-600">{selectedInvoice.purchase_order}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                PO:
+                                            </span>
+                                            <span className="font-mono text-xs text-slate-600">
+                                                {selectedInvoice.purchase_order}
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -1993,7 +2179,7 @@ const Invoicing = () => {
                                     <div className="text-sm">
                                         {formatDateSafe(
                                             selectedInvoice.issue_date,
-                                            "long"
+                                            "long",
                                         )}
                                     </div>
                                 </div>
@@ -2005,7 +2191,7 @@ const Invoicing = () => {
                                         {selectedInvoice.due_date
                                             ? formatDateSafe(
                                                   selectedInvoice.due_date,
-                                                  "long"
+                                                  "long",
                                               )
                                             : "—"}
                                     </div>
@@ -2018,7 +2204,7 @@ const Invoicing = () => {
                                     </div>
                                     <div className="text-xl font-semibold text-slate-700 tabular-nums">
                                         {formatCurrency(
-                                            selectedInvoice.paid_amount || 0
+                                            selectedInvoice.paid_amount || 0,
                                         )}
                                     </div>
                                 </div>
@@ -2030,14 +2216,14 @@ const Invoicing = () => {
                                         className={cn(
                                             "text-xl font-bold tabular-nums",
                                             parseFloat(
-                                                selectedInvoice.balance
+                                                selectedInvoice.balance,
                                             ) > 0
                                                 ? "text-red-600"
-                                                : "text-slate-900"
+                                                : "text-slate-900",
                                         )}
                                     >
                                         {formatCurrency(
-                                            selectedInvoice.balance || 0
+                                            selectedInvoice.balance || 0,
                                         )}
                                     </div>
                                 </div>
@@ -2045,7 +2231,8 @@ const Invoicing = () => {
                         </div>
 
                         {/* Datos Fiscales DTE */}
-                        {(selectedInvoice.generation_code || selectedInvoice.reception_stamp) && (
+                        {(selectedInvoice.generation_code ||
+                            selectedInvoice.reception_stamp) && (
                             <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
                                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -2054,17 +2241,25 @@ const Invoicing = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {selectedInvoice.generation_code && (
                                         <div>
-                                            <p className="text-xs text-slate-500 mb-0.5">Código de Generación</p>
+                                            <p className="text-xs text-slate-500 mb-0.5">
+                                                Código de Generación
+                                            </p>
                                             <p className="font-mono text-sm font-medium text-slate-700 select-all">
-                                                {selectedInvoice.generation_code}
+                                                {
+                                                    selectedInvoice.generation_code
+                                                }
                                             </p>
                                         </div>
                                     )}
                                     {selectedInvoice.reception_stamp && (
                                         <div>
-                                            <p className="text-xs text-slate-500 mb-0.5">Sello de Recepción</p>
+                                            <p className="text-xs text-slate-500 mb-0.5">
+                                                Sello de Recepción
+                                            </p>
                                             <p className="font-mono text-sm font-medium text-slate-700 select-all">
-                                                {selectedInvoice.reception_stamp}
+                                                {
+                                                    selectedInvoice.reception_stamp
+                                                }
                                             </p>
                                         </div>
                                     )}
@@ -2080,7 +2275,7 @@ const Invoicing = () => {
                                     fetchSummary();
                                     if (selectedInvoice?.id) {
                                         handleViewInvoiceDetails(
-                                            selectedInvoice.id
+                                            selectedInvoice.id,
                                         );
                                     }
                                 }}
@@ -2104,7 +2299,7 @@ const Invoicing = () => {
                                         onClick={() => {
                                             setIsDetailModalOpen(false);
                                             handleOpenPaymentItemsModal(
-                                                selectedInvoice
+                                                selectedInvoice,
                                             );
                                         }}
                                     >
@@ -2137,6 +2332,103 @@ const Invoicing = () => {
                 cancelText="Cancelar"
                 variant="danger"
             />
+
+            <Modal
+                isOpen={reversePrefactura.open}
+                onClose={() => {
+                    if (reversePrefactura.isSubmitting) return;
+                    setReversePrefactura({
+                        open: false,
+                        invoiceId: null,
+                        invoiceNumber: "",
+                        chargesCount: 0,
+                        expensesCount: 0,
+                        loadingDetails: false,
+                        reason: "",
+                        isSubmitting: false,
+                    });
+                }}
+                title="Revertir Pre-factura"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        Esta operación liberará los ítems facturados y eliminará
+                        la pre-factura para que puedas corregir costos directos
+                        y refacturar.
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <p>
+                            <span className="font-semibold">Factura:</span>{" "}
+                            {reversePrefactura.invoiceNumber ||
+                                `#${reversePrefactura.invoiceId}`}
+                        </p>
+                        {reversePrefactura.loadingDetails ? (
+                            <p className="mt-1 text-slate-500">
+                                Calculando ítems a liberar...
+                            </p>
+                        ) : (
+                            <p className="mt-1">
+                                <span className="font-semibold">
+                                    Se liberarán:
+                                </span>{" "}
+                                {reversePrefactura.chargesCount} servicio(s) y{" "}
+                                {reversePrefactura.expensesCount} gasto(s).
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="reverse-prefactura-reason">
+                            Motivo de reversa
+                        </Label>
+                        <textarea
+                            id="reverse-prefactura-reason"
+                            rows={4}
+                            value={reversePrefactura.reason}
+                            onChange={(e) =>
+                                setReversePrefactura((prev) => ({
+                                    ...prev,
+                                    reason: e.target.value,
+                                }))
+                            }
+                            placeholder="Describe por qué se revierte esta pre-factura"
+                            className="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-900"
+                            disabled={reversePrefactura.isSubmitting}
+                        />
+                    </div>
+                </div>
+
+                <ModalFooter>
+                    <Button
+                        variant="ghost"
+                        onClick={() =>
+                            setReversePrefactura({
+                                open: false,
+                                invoiceId: null,
+                                invoiceNumber: "",
+                                chargesCount: 0,
+                                expensesCount: 0,
+                                loadingDetails: false,
+                                reason: "",
+                                isSubmitting: false,
+                            })
+                        }
+                        disabled={reversePrefactura.isSubmitting}
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        onClick={handleReversePrefactura}
+                        disabled={reversePrefactura.isSubmitting}
+                    >
+                        {reversePrefactura.isSubmitting
+                            ? "Revirtiendo..."
+                            : "Revertir Pre-factura"}
+                    </Button>
+                </ModalFooter>
+            </Modal>
 
             {/* Payment Items Modal */}
             <PaymentItemsModal

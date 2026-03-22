@@ -1,6 +1,43 @@
 import axios from "axios";
 import toast from "react-hot-toast";
 
+const TOAST_DEDUP_WINDOW_MS = 1200;
+
+const normalizeToastMessage = (message) => {
+    if (typeof message === "string") {
+        return message.trim().toLowerCase();
+    }
+    if (message == null) return "";
+    return String(message).trim().toLowerCase();
+};
+
+const patchToastErrorDedup = () => {
+    if (toast.__gproDedupPatched) return;
+
+    const originalError = toast.error.bind(toast);
+    const recentMessages = new Map();
+
+    toast.error = (message, options = {}) => {
+        const normalized = normalizeToastMessage(message);
+        const now = Date.now();
+        const lastShownAt = recentMessages.get(normalized) || 0;
+
+        if (normalized && now - lastShownAt < TOAST_DEDUP_WINDOW_MS) {
+            return undefined;
+        }
+
+        if (normalized) {
+            recentMessages.set(normalized, now);
+        }
+
+        return originalError(message, options);
+    };
+
+    toast.__gproDedupPatched = true;
+};
+
+patchToastErrorDedup();
+
 /**
  * API Client - Axios configurado para GPRO Logistic
  * Incluye manejo automático de errores con Toast
@@ -105,7 +142,7 @@ api.interceptors.request.use(
     },
     (error) => {
         return Promise.reject(error);
-    }
+    },
 );
 
 // Interceptor para manejar respuestas y errores
@@ -127,7 +164,7 @@ api.interceptors.response.use(
                         `${
                             import.meta.env.VITE_API_URL || "/api"
                         }/users/token/refresh/`,
-                        { refresh: refreshToken }
+                        { refresh: refreshToken },
                     );
 
                     const { access } = response.data;
@@ -145,7 +182,7 @@ api.interceptors.response.use(
                     "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.",
                     {
                         duration: 5000,
-                    }
+                    },
                 );
                 window.location.href = "/login";
                 return Promise.reject(refreshError);
@@ -177,7 +214,7 @@ api.interceptors.response.use(
         }
 
         return Promise.reject(error);
-    }
+    },
 );
 
 /**

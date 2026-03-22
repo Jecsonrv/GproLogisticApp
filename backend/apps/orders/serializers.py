@@ -428,6 +428,11 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     invoice_type_display = serializers.CharField(source='get_invoice_type_display', read_only=True)
     days_overdue = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    delete_block_code = serializers.SerializerMethodField()
+    delete_block_reason = serializers.SerializerMethodField()
+    direct_cost_items_count = serializers.SerializerMethodField()
+    requires_reverse_prefactura = serializers.SerializerMethodField()
     payments = InvoicePaymentSerializer(many=True, read_only=True)
 
     class Meta:
@@ -441,6 +446,8 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             'paid_amount', 'credited_amount', 'balance', 'status',
             'status_display', 'days_overdue', 'payments', 'pdf_file', 'dte_file', 'ccf', 'notes',
             'is_dte_issued', 'is_editable',
+            'can_delete', 'delete_block_code', 'delete_block_reason',
+            'direct_cost_items_count', 'requires_reverse_prefactura',
             'generation_code', 'reception_stamp'
         ]
 
@@ -471,3 +478,51 @@ class InvoiceListSerializer(serializers.ModelSerializer):
     def get_is_editable(self, obj):
         """Una factura es editable si no tiene DTE emitido"""
         return not obj.is_dte_issued
+
+    def get_direct_cost_items_count(self, obj):
+        """
+        Cantidad de cargos facturados en esta factura que tienen costo directo asignado.
+        Usa anotación si viene del queryset y cae a consulta directa como respaldo.
+        """
+        annotated = getattr(obj, 'direct_cost_items_count', None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.charges.filter(
+            is_deleted=False,
+            cost_allocation__is_deleted=False,
+            cost_allocation__provider_invoice__is_deleted=False,
+        ).count()
+
+    def get_requires_reverse_prefactura(self, obj):
+        """
+        Indica si para corrección debe usarse la reversa controlada de pre-factura.
+        """
+        has_direct_costs = self.get_direct_cost_items_count(obj) > 0
+        return bool(
+            has_direct_costs and
+            not obj.is_dte_issued and
+            obj.status != 'cancelled'
+        )
+
+    def get_can_delete(self, obj):
+        """Disponibilidad de eliminación considerando bloqueo por costos directos."""
+        if self.get_direct_cost_items_count(obj) > 0:
+            return False
+        return obj.can_delete_without_credit_note()
+
+    def get_delete_block_code(self, obj):
+        """Código de bloqueo principal para acciones UI."""
+        if self.get_direct_cost_items_count(obj) > 0:
+            return 'DIRECT_COST_LOCKED'
+        if obj.is_dte_issued and not obj.can_delete_without_credit_note():
+            return 'DTE_LOCKED'
+        return None
+
+    def get_delete_block_reason(self, obj):
+        """Razón de bloqueo legible para interfaz."""
+        block_code = self.get_delete_block_code(obj)
+        if block_code == 'DIRECT_COST_LOCKED':
+            return 'Esta pre-factura tiene costos directos asignados y requiere reversa controlada.'
+        if block_code == 'DTE_LOCKED':
+            return 'Factura con DTE emitido fuera de ventana de eliminación; use anulación.'
+        return None

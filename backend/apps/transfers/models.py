@@ -215,6 +215,14 @@ class ProviderInvoice(SoftDeleteModel):
         """
         Bloquea la eliminación si la factura ya tiene servicios facturados al cliente.
         """
+        # Debe desmontarse primero el vínculo con cargos tercerizados para evitar
+        # dejar servicios marcados como tercerizados sin respaldo de costo.
+        if self.allocations.filter(is_deleted=False).exists():
+            raise ValidationError(
+                "No se puede eliminar la factura de proveedor mientras tenga cargos tercerizados vinculados. "
+                "Primero elimine esas asignaciones/cargos y luego elimine el costo directo."
+            )
+
         # Inmutabilidad financiera: si la OS ya tuvo facturación, no permitir eliminar
         # costos directos para preservar trazabilidad contable.
         if self.service_order and self.service_order.invoices.exists():
@@ -393,7 +401,12 @@ class DirectCostAllocation(SoftDeleteModel):
         provider_invoice.recalculate_allocated()
 
         # Desmarcar el servicio como tercerizado si ya no tiene asignación
-        if order_charge and not hasattr(order_charge, 'cost_allocation'):
+        has_active_allocation = DirectCostAllocation.objects.filter(
+            order_charge=order_charge,
+            is_deleted=False,
+        ).exists() if order_charge else False
+
+        if order_charge and not has_active_allocation:
             order_charge.is_third_party_service = False
             order_charge.save(skip_order_validation=True)
 
