@@ -119,7 +119,7 @@ def calculate_retention(base_gravada, is_gran_contribuyente=False):
     if not is_gran_contribuyente:
         return Decimal('0.00')
 
-    if base_gravada <= RETENCION_THRESHOLD:
+    if base_gravada < RETENCION_THRESHOLD:
         return Decimal('0.00')
 
     return base_gravada * RETENCION_RATE

@@ -127,7 +127,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             toast.success(
                 `Estado actualizado a: ${
                     STATUS_OPTIONS.find((s) => s.id === newStatus)?.name
-                }`
+                }`,
             );
             if (onUpdate) onUpdate();
         } catch {
@@ -146,7 +146,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             if (showLoader) setLoading(true);
             const response = await api.get(
                 `/orders/service-orders/${orderId}/`,
-                { signal }
+                { signal },
             );
             setOrder(response.data);
             setCharges(response.data.charges || []);
@@ -209,7 +209,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         try {
             const response = await api.get(
                 `/transfers/provider-invoices/by_service_order/?service_order=${orderId}`,
-                { signal }
+                { signal },
             );
             setProviderInvoices(response.data || []);
         } catch (error) {
@@ -223,7 +223,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
         try {
             const response = await api.get(
                 `/catalogs/client-service-prices/by-client/${clientId}/`,
-                { signal }
+                { signal },
             );
             setClientPrices(response.data);
         } catch (error) {
@@ -245,7 +245,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             !chargeForm.provider_invoice_id
         ) {
             toast.error(
-                "Seleccione una factura de proveedor para el servicio tercerizado"
+                "Seleccione una factura de proveedor para el servicio tercerizado",
             );
             return;
         }
@@ -272,7 +272,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
             // Validar que el costo total no exceda el disponible
             const selectedInvoice = providerInvoices.find(
-                (inv) => inv.id === chargeForm.provider_invoice_id
+                (inv) => inv.id === chargeForm.provider_invoice_id,
             );
             const totalCost = costAmount * quantity;
 
@@ -282,10 +282,10 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             ) {
                 toast.error(
                     `El costo total (${formatCurrency(
-                        totalCost
+                        totalCost,
                     )}) excede el monto disponible de la factura (${formatCurrency(
-                        selectedInvoice.unallocated_amount
-                    )})`
+                        selectedInvoice.unallocated_amount,
+                    )})`,
                 );
                 return;
             }
@@ -305,7 +305,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
             // Agregar el cargo
             const response = await api.post(
                 `/orders/service-orders/${orderId}/add_charge/`,
-                payload
+                payload,
             );
 
             // Si es tercerizado y hay factura, crear la asignacion de costo
@@ -325,7 +325,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                             description: `Costo tercerizado - ${
                                 chargeForm.notes || ""
                             }`.trim(),
-                        }
+                        },
                     );
 
                     // Mostrar warning si existe
@@ -345,7 +345,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     // Si falla la asignacion, al menos el cargo se creo
                     console.warn(
                         "No se pudo vincular automaticamente al costo directo:",
-                        allocError
+                        allocError,
                     );
                 }
             }
@@ -370,7 +370,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
 
         try {
             await api.delete(`/orders/charges/${id}/`);
-            toast.success("Cargo eliminado exitosamente", { id: "success-delete" });
+            toast.success("Cargo eliminado exitosamente", {
+                id: "success-delete",
+            });
             fetchOrderDetail(false);
             fetchProviderInvoices(); // Refrescar facturas disponibles
             if (onUpdate) onUpdate(); // Update parent list totals
@@ -420,10 +422,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                     discount: parseFloat(editChargeForm.discount || 0),
                     notes: editChargeForm.notes,
                     iva_type: editChargeForm.iva_type,
-                }
+                },
             );
 
-            toast.success("Servicio actualizado correctamente", { id: "success-update" });
+            toast.success("Servicio actualizado correctamente", {
+                id: "success-update",
+            });
             setEditingChargeId(null);
             fetchOrderDetail(false); // Refresh sin loader
         } catch {
@@ -650,7 +654,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                 {order.eta
                                                     ? new Date(
                                                           order.eta +
-                                                              "T00:00:00"
+                                                              "T00:00:00",
                                                       ).toLocaleDateString(
                                                           "es-SV",
                                                           {
@@ -658,7 +662,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                               year: "numeric",
                                                               month: "long",
                                                               day: "numeric",
-                                                          }
+                                                          },
                                                       )
                                                     : "—"}
                                             </dd>
@@ -691,7 +695,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         {order.notes && (
                                             <div className="pt-3 border-t border-slate-100">
                                                 <dt className="text-sm font-medium text-slate-500">
-                                                    Concepto / Información Adicional
+                                                    Concepto / Información
+                                                    Adicional
                                                 </dt>
                                                 <dd className="mt-1 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap">
                                                     {order.notes}
@@ -744,16 +749,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? order.fiscal_summary
+                                                    ? (order.fiscal_summary
                                                           ?.services
                                                           ?.total_con_iva ??
                                                           order.total_services ??
-                                                          0
-                                                    : order.fiscal_summary
+                                                          0)
+                                                    : (order.fiscal_summary
                                                           ?.services
                                                           ?.subtotal_neto ??
                                                           order.total_services ??
-                                                          0
+                                                          0),
                                             )}
                                         </div>
                                     </div>
@@ -767,16 +772,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? order.fiscal_summary
+                                                    ? (order.fiscal_summary
                                                           ?.third_party
                                                           ?.total_con_iva ??
                                                           order.total_third_party ??
-                                                          0
-                                                    : order.fiscal_summary
+                                                          0)
+                                                    : (order.fiscal_summary
                                                           ?.third_party
                                                           ?.subtotal_neto ??
                                                           order.total_third_party ??
-                                                          0
+                                                          0),
                                             )}
                                         </div>
                                     </div>
@@ -790,16 +795,16 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                         <div className="text-xl sm:text-2xl font-bold text-white mt-1 sm:mt-1.5 tabular-nums">
                                             {formatCurrency(
                                                 showWithIva
-                                                    ? order.fiscal_summary
+                                                    ? (order.fiscal_summary
                                                           ?.consolidated
                                                           ?.total_con_iva ??
                                                           order.total_amount ??
-                                                          0
-                                                    : order.fiscal_summary
+                                                          0)
+                                                    : (order.fiscal_summary
                                                           ?.consolidated
                                                           ?.subtotal_neto ??
                                                           order.total_amount ??
-                                                          0
+                                                          0),
                                             )}
                                         </div>
                                     </div>
@@ -812,7 +817,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                             IVA incluido:{" "}
                                             {formatCurrency(
                                                 order.fiscal_summary
-                                                    .consolidated.iva_total
+                                                    .consolidated.iva_total,
                                             )}
                                         </div>
                                     )}
@@ -866,13 +871,13 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             clientPrices.find(
                                                                 (cp) =>
                                                                     parseInt(
-                                                                        cp.service
+                                                                        cp.service,
                                                                     ) ===
                                                                         serviceId ||
                                                                     parseInt(
-                                                                        cp.service_id
+                                                                        cp.service_id,
                                                                     ) ===
-                                                                        serviceId
+                                                                        serviceId,
                                                             );
 
                                                         // Buscar el servicio en el catálogo general
@@ -880,9 +885,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             services.find(
                                                                 (s) =>
                                                                     parseInt(
-                                                                        s.id
+                                                                        s.id,
                                                                     ) ===
-                                                                    serviceId
+                                                                    serviceId,
                                                             );
 
                                                         // Determinar Precio Base
@@ -890,12 +895,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         if (customPrice) {
                                                             unitPrice =
                                                                 parseFloat(
-                                                                    customPrice.custom_price
+                                                                    customPrice.custom_price,
                                                                 );
                                                         } else if (service) {
                                                             unitPrice =
                                                                 parseFloat(
-                                                                    service.default_price
+                                                                    service.default_price,
                                                                 );
                                                         }
 
@@ -962,8 +967,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             (cp) =>
                                                                 cp.service ===
                                                                 parseInt(
-                                                                    chargeForm.service
-                                                                )
+                                                                    chargeForm.service,
+                                                                ),
                                                         ) ? (
                                                             <span className="text-emerald-600 font-medium">
                                                                 ✓ Precio
@@ -995,7 +1000,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         if (
                                                             val === "" ||
                                                             (/^\d+$/.test(
-                                                                val
+                                                                val,
                                                             ) &&
                                                                 parseInt(val) >
                                                                     0)
@@ -1036,12 +1041,12 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 ? (() => {
                                                                       const cost =
                                                                           parseFloat(
-                                                                              chargeForm.cost_amount
+                                                                              chargeForm.cost_amount,
                                                                           ) ||
                                                                           0;
                                                                       const margin =
                                                                           parseFloat(
-                                                                              chargeForm.margin_percentage
+                                                                              chargeForm.margin_percentage,
                                                                           ) ||
                                                                           0;
                                                                       return cost >
@@ -1052,7 +1057,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     margin /
                                                                                         100)
                                                                             ).toFixed(
-                                                                                2
+                                                                                2,
                                                                             )
                                                                           : "";
                                                                   })()
@@ -1069,7 +1074,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     val ===
                                                                         "" ||
                                                                     parseFloat(
-                                                                        val
+                                                                        val,
                                                                     ) >= 0
                                                                 ) {
                                                                     setChargeForm(
@@ -1077,7 +1082,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             ...chargeForm,
                                                                             unit_price:
                                                                                 val,
-                                                                        }
+                                                                        },
                                                                     );
                                                                 }
                                                             }
@@ -1119,7 +1124,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             (parseFloat(val) >=
                                                                 0 &&
                                                                 parseFloat(
-                                                                    val
+                                                                    val,
                                                                 ) <= 100)
                                                         ) {
                                                             setChargeForm({
@@ -1224,8 +1229,8 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         providerInvoices.filter(
                                                             (inv) =>
                                                                 parseFloat(
-                                                                    inv.unallocated_amount
-                                                                ) > 0
+                                                                    inv.unallocated_amount,
+                                                                ) > 0,
                                                         );
 
                                                     // Obtener factura seleccionada
@@ -1233,17 +1238,17 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         availableInvoices.find(
                                                             (inv) =>
                                                                 inv.id ===
-                                                                chargeForm.provider_invoice_id
+                                                                chargeForm.provider_invoice_id,
                                                         );
 
                                                     // Cálculos automáticos
                                                     const costAmount =
                                                         parseFloat(
-                                                            chargeForm.cost_amount
+                                                            chargeForm.cost_amount,
                                                         ) || 0;
                                                     const marginPercent =
                                                         parseFloat(
-                                                            chargeForm.margin_percentage
+                                                            chargeForm.margin_percentage,
                                                         ) || 0;
                                                     const calculatedPrice =
                                                         costAmount > 0
@@ -1254,7 +1259,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                             : 0;
                                                     const quantity =
                                                         parseInt(
-                                                            chargeForm.quantity
+                                                            chargeForm.quantity,
                                                         ) || 1;
                                                     const subtotal =
                                                         calculatedPrice *
@@ -1290,15 +1295,15 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             chargeForm.provider_invoice_id
                                                                         }
                                                                         onChange={(
-                                                                            value
+                                                                            value,
                                                                         ) => {
                                                                             const invoice =
                                                                                 availableInvoices.find(
                                                                                     (
-                                                                                        inv
+                                                                                        inv,
                                                                                     ) =>
                                                                                         inv.id ===
-                                                                                        value
+                                                                                        value,
                                                                                 );
                                                                             setChargeForm(
                                                                                 {
@@ -1310,25 +1315,25 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                         invoice
                                                                                             ? invoice.unallocated_amount
                                                                                             : "",
-                                                                                }
+                                                                                },
                                                                             );
                                                                         }}
                                                                         options={
                                                                             availableInvoices
                                                                         }
                                                                         getOptionLabel={(
-                                                                            opt
+                                                                            opt,
                                                                         ) =>
                                                                             `${
                                                                                 opt.invoice_number
                                                                             } - ${
                                                                                 opt.provider_name
-                                                                            } ${opt.notes ? `(${opt.notes}) ` : ''}(Disp: ${formatCurrency(
-                                                                                opt.unallocated_amount
+                                                                            } ${opt.notes ? `(${opt.notes}) ` : ""}(Disp: ${formatCurrency(
+                                                                                opt.unallocated_amount,
                                                                             )})`
                                                                         }
                                                                         getOptionValue={(
-                                                                            opt
+                                                                            opt,
                                                                         ) =>
                                                                             opt.id
                                                                         }
@@ -1374,7 +1379,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     <div className="grid grid-cols-2 gap-3">
                                                                         <div>
                                                                             <Label className="mb-1.5 block text-xs">
-                                                                                Costo Base (Unitario)
+                                                                                Costo
+                                                                                Base
+                                                                                (Unitario)
                                                                             </Label>
                                                                             <div className="relative">
                                                                                 <span className="absolute left-3 top-2 text-slate-500 text-sm">
@@ -1392,24 +1399,51 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                         chargeForm.cost_amount
                                                                                     }
                                                                                     onChange={(
-                                                                                        e
+                                                                                        e,
                                                                                     ) => {
                                                                                         const val =
                                                                                             e
                                                                                                 .target
                                                                                                 .value;
-                                                                                        const cost = parseFloat(val);
-                                                                                        const price = parseFloat(chargeForm.unit_price);
-                                                                                        let margin = chargeForm.margin_percentage;
-
-                                                                                                                                                if (!isNaN(cost) && cost > 0 && !isNaN(price)) {
-                                                                                                                                                    margin = parseFloat((((price / cost) - 1) * 100).toFixed(4));
-                                                                                                                                                }
-                                                                                        
-                                                                                                                                                if (
-                                                                                                                                                    val ===                                                                                                "" ||
+                                                                                        const cost =
                                                                                             parseFloat(
-                                                                                                val
+                                                                                                val,
+                                                                                            );
+                                                                                        const price =
+                                                                                            parseFloat(
+                                                                                                chargeForm.unit_price,
+                                                                                            );
+                                                                                        let margin =
+                                                                                            chargeForm.margin_percentage;
+
+                                                                                        if (
+                                                                                            !isNaN(
+                                                                                                cost,
+                                                                                            ) &&
+                                                                                            cost >
+                                                                                                0 &&
+                                                                                            !isNaN(
+                                                                                                price,
+                                                                                            )
+                                                                                        ) {
+                                                                                            margin =
+                                                                                                parseFloat(
+                                                                                                    (
+                                                                                                        (price /
+                                                                                                            cost -
+                                                                                                            1) *
+                                                                                                        100
+                                                                                                    ).toFixed(
+                                                                                                        4,
+                                                                                                    ),
+                                                                                                );
+                                                                                        }
+
+                                                                                        if (
+                                                                                            val ===
+                                                                                                "" ||
+                                                                                            parseFloat(
+                                                                                                val,
                                                                                             ) >=
                                                                                                 0
                                                                                         ) {
@@ -1418,8 +1452,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                                     ...chargeForm,
                                                                                                     cost_amount:
                                                                                                         val,
-                                                                                                    margin_percentage: margin
-                                                                                                }
+                                                                                                    margin_percentage:
+                                                                                                        margin,
+                                                                                                },
                                                                                             );
                                                                                         }
                                                                                     }}
@@ -1431,45 +1466,94 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 <p className="text-xs text-slate-500 mt-1">
                                                                                     Disponible:{" "}
                                                                                     {formatCurrency(
-                                                                                        selectedInvoice.unallocated_amount
+                                                                                        selectedInvoice.unallocated_amount,
                                                                                     )}
                                                                                 </p>
                                                                             )}
                                                                         </div>
                                                                         <div>
                                                                             <Label className="mb-1.5 block text-xs">
-                                                                                Precio Venta (Unitario)
+                                                                                Precio
+                                                                                Venta
+                                                                                (Unitario)
                                                                             </Label>
                                                                             <div className="relative">
-                                                                                <span className="absolute left-3 top-2 text-slate-500 text-sm">$</span>
+                                                                                <span className="absolute left-3 top-2 text-slate-500 text-sm">
+                                                                                    $
+                                                                                </span>
                                                                                 <Input
                                                                                     className="pl-7"
                                                                                     type="number"
                                                                                     step="0.01"
                                                                                     min="0"
-                                                                                    value={chargeForm.unit_price}
-                                                                                    onChange={(e) => {
-                                                                                        const val = e.target.value;
-                                                                                        const price = parseFloat(val);
-                                                                                        const cost = parseFloat(chargeForm.cost_amount);
+                                                                                    value={
+                                                                                        chargeForm.unit_price
+                                                                                    }
+                                                                                    onChange={(
+                                                                                        e,
+                                                                                    ) => {
+                                                                                        const val =
+                                                                                            e
+                                                                                                .target
+                                                                                                .value;
+                                                                                        const price =
+                                                                                            parseFloat(
+                                                                                                val,
+                                                                                            );
+                                                                                        const cost =
+                                                                                            parseFloat(
+                                                                                                chargeForm.cost_amount,
+                                                                                            );
                                                                                         let margin = 0;
 
-                                                                                        if (!isNaN(price) && !isNaN(cost) && cost > 0) {
-                                                                                            margin = parseFloat((((price / cost) - 1) * 100).toFixed(4));
+                                                                                        if (
+                                                                                            !isNaN(
+                                                                                                price,
+                                                                                            ) &&
+                                                                                            !isNaN(
+                                                                                                cost,
+                                                                                            ) &&
+                                                                                            cost >
+                                                                                                0
+                                                                                        ) {
+                                                                                            margin =
+                                                                                                parseFloat(
+                                                                                                    (
+                                                                                                        (price /
+                                                                                                            cost -
+                                                                                                            1) *
+                                                                                                        100
+                                                                                                    ).toFixed(
+                                                                                                        4,
+                                                                                                    ),
+                                                                                                );
                                                                                         }
 
-                                                                                        setChargeForm({
-                                                                                            ...chargeForm,
-                                                                                            unit_price: val,
-                                                                                            margin_percentage: margin
-                                                                                        });
+                                                                                        setChargeForm(
+                                                                                            {
+                                                                                                ...chargeForm,
+                                                                                                unit_price:
+                                                                                                    val,
+                                                                                                margin_percentage:
+                                                                                                    margin,
+                                                                                            },
+                                                                                        );
                                                                                     }}
                                                                                     placeholder="0.00"
                                                                                     required
                                                                                 />
                                                                             </div>
                                                                             <p className="text-xs text-slate-500 mt-1">
-                                                                                Margen calc: {chargeForm.margin_percentage ? parseFloat(chargeForm.margin_percentage).toFixed(2) : 0}%
+                                                                                Margen
+                                                                                calc:{" "}
+                                                                                {chargeForm.margin_percentage
+                                                                                    ? parseFloat(
+                                                                                          chargeForm.margin_percentage,
+                                                                                      ).toFixed(
+                                                                                          2,
+                                                                                      )
+                                                                                    : 0}
+                                                                                %
                                                                             </p>
                                                                         </div>
                                                                     </div>
@@ -1488,7 +1572,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 </span>
                                                                                 <span className="font-bold text-slate-900 tabular-nums">
                                                                                     {formatCurrency(
-                                                                                        calculatedPrice
+                                                                                        calculatedPrice,
                                                                                     )}
                                                                                 </span>
                                                                             </div>
@@ -1511,7 +1595,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 </span>
                                                                                 <span className="font-bold text-slate-900 tabular-nums">
                                                                                     {formatCurrency(
-                                                                                        subtotal
+                                                                                        subtotal,
                                                                                     )}
                                                                                 </span>
                                                                             </div>
@@ -1524,7 +1608,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     </span>
                                                                                     <span className="text-slate-700 tabular-nums">
                                                                                         {formatCurrency(
-                                                                                            ivaAmount
+                                                                                            ivaAmount,
                                                                                         )}
                                                                                     </span>
                                                                                 </div>
@@ -1537,7 +1621,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 </span>
                                                                                 <span className="text-lg text-emerald-700 tabular-nums">
                                                                                     {formatCurrency(
-                                                                                        totalWithIva
+                                                                                        totalWithIva,
                                                                                     )}
                                                                                 </span>
                                                                             </div>
@@ -1555,7 +1639,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     }`}
                                                                                 >
                                                                                     {formatCurrency(
-                                                                                        profit
+                                                                                        profit,
                                                                                     )}
                                                                                 </span>
                                                                             </div>
@@ -1577,7 +1661,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                         (
                                                                                         {formatCurrency(
                                                                                             costAmount *
-                                                                                                quantity
+                                                                                                quantity,
                                                                                         )}
 
                                                                                         )
@@ -1790,7 +1874,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 editChargeForm.quantity
                                                                             }
                                                                             onChange={(
-                                                                                e
+                                                                                e,
                                                                             ) => {
                                                                                 const val =
                                                                                     e
@@ -1800,10 +1884,10 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     val ===
                                                                                         "" ||
                                                                                     (/^\d+$/.test(
-                                                                                        val
+                                                                                        val,
                                                                                     ) &&
                                                                                         parseInt(
-                                                                                            val
+                                                                                            val,
                                                                                         ) >
                                                                                             0)
                                                                                 ) {
@@ -1812,7 +1896,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                             ...editChargeForm,
                                                                                             quantity:
                                                                                                 val,
-                                                                                        }
+                                                                                        },
                                                                                     );
                                                                                 }
                                                                             }}
@@ -1845,7 +1929,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             {formatCurrency(
                                                                                 charge
                                                                                     .cost_allocation_info
-                                                                                    .cost_amount
+                                                                                    .cost_amount,
                                                                             )}
                                                                         </span>
                                                                     ) : (
@@ -1866,7 +1950,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 editChargeForm.unit_price
                                                                             }
                                                                             onChange={(
-                                                                                e
+                                                                                e,
                                                                             ) => {
                                                                                 const val =
                                                                                     e
@@ -1876,7 +1960,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     val ===
                                                                                         "" ||
                                                                                     parseFloat(
-                                                                                        val
+                                                                                        val,
                                                                                     ) >=
                                                                                         0
                                                                                 ) {
@@ -1885,7 +1969,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                             ...editChargeForm,
                                                                                             unit_price:
                                                                                                 val,
-                                                                                        }
+                                                                                        },
                                                                                     );
                                                                                 }
                                                                             }}
@@ -1900,7 +1984,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             }
                                                                         >
                                                                             {formatCurrency(
-                                                                                charge.unit_price
+                                                                                charge.unit_price,
                                                                             )}
                                                                         </span>
                                                                     )}
@@ -1918,14 +2002,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                         ? "text-emerald-600/70"
                                                                                         : "text-emerald-700"
                                                                                     : isBilled
-                                                                                    ? "text-red-600/70"
-                                                                                    : "text-red-700"
+                                                                                      ? "text-red-600/70"
+                                                                                      : "text-red-700"
                                                                             }`}
                                                                         >
                                                                             {formatCurrency(
                                                                                 charge
                                                                                     .cost_allocation_info
-                                                                                    .profit
+                                                                                    .profit,
                                                                             )}
                                                                         </span>
                                                                     ) : (
@@ -1945,27 +2029,30 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                         parseFloat(
                                                                                             charge
                                                                                                 .cost_allocation_info
-                                                                                                .cost_amount
-                                                                                        ) || 0;
+                                                                                                .cost_amount,
+                                                                                        ) ||
+                                                                                        0;
                                                                                     const price =
                                                                                         parseFloat(
-                                                                                            editChargeForm.unit_price
-                                                                                        ) || 0;
+                                                                                            editChargeForm.unit_price,
+                                                                                        ) ||
+                                                                                        0;
                                                                                     if (
                                                                                         cost >
                                                                                         0
                                                                                     ) {
                                                                                         return (
-                                                                                            ((price /
-                                                                                                cost) -
+                                                                                            (price /
+                                                                                                cost -
                                                                                                 1) *
                                                                                             100
                                                                                         ).toFixed(
-                                                                                            2
+                                                                                            2,
                                                                                         );
                                                                                     }
                                                                                     return "0.00";
                                                                                 })()}
+
                                                                                 %
                                                                             </span>
                                                                         ) : (
@@ -1979,13 +2066,14 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                             ? "text-slate-500"
                                                                                             : "text-slate-600"
                                                                                         : isBilled
-                                                                                        ? "text-red-600/70"
-                                                                                        : "text-red-700"
+                                                                                          ? "text-red-600/70"
+                                                                                          : "text-red-700"
                                                                                 }`}
                                                                             >
                                                                                 {charge.cost_allocation_info.margin_percentage.toFixed(
-                                                                                    2
+                                                                                    2,
                                                                                 )}
+
                                                                                 %
                                                                             </span>
                                                                         )
@@ -2018,23 +2106,23 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 editChargeForm.iva_type
                                                                             }
                                                                             onChange={(
-                                                                                value
+                                                                                value,
                                                                             ) =>
                                                                                 setEditChargeForm(
                                                                                     {
                                                                                         ...editChargeForm,
                                                                                         iva_type:
                                                                                             value,
-                                                                                    }
+                                                                                    },
                                                                                 )
                                                                             }
                                                                             getOptionLabel={(
-                                                                                opt
+                                                                                opt,
                                                                             ) =>
                                                                                 opt.name
                                                                             }
                                                                             getOptionValue={(
-                                                                                opt
+                                                                                opt,
                                                                             ) =>
                                                                                 opt.id
                                                                             }
@@ -2048,18 +2136,18 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                 "gravado"
                                                                                     ? "bg-slate-100 text-slate-700 border-slate-300"
                                                                                     : charge.iva_type ===
-                                                                                      "exento"
-                                                                                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                                                                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                                                                        "exento"
+                                                                                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                                                      : "bg-slate-50 text-slate-600 border-slate-200"
                                                                             }`}
                                                                         >
                                                                             {charge.iva_type ===
                                                                             "gravado"
                                                                                 ? "Gravado 13%"
                                                                                 : charge.iva_type ===
-                                                                                  "exento"
-                                                                                ? "Exento"
-                                                                                : "No Sujeto"}
+                                                                                    "exento"
+                                                                                  ? "Exento"
+                                                                                  : "No Sujeto"}
                                                                         </Badge>
                                                                     )}
                                                                 </td>
@@ -2072,10 +2160,10 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     }`}
                                                                 >
                                                                     {parseFloat(
-                                                                        charge.iva_amount
+                                                                        charge.iva_amount,
                                                                     ) > 0 ? (
                                                                         formatCurrency(
-                                                                            charge.iva_amount
+                                                                            charge.iva_amount,
                                                                         )
                                                                     ) : (
                                                                         <span className="text-slate-300">
@@ -2092,7 +2180,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     }`}
                                                                 >
                                                                     {formatCurrency(
-                                                                        charge.amount
+                                                                        charge.amount,
                                                                     )}
                                                                 </td>
                                                                 {/* Total */}
@@ -2104,7 +2192,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     }`}
                                                                 >
                                                                     {formatCurrency(
-                                                                        charge.total
+                                                                        charge.total,
                                                                     )}
                                                                 </td>
                                                                 {order.status !==
@@ -2138,7 +2226,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     <button
                                                                                         onClick={() =>
                                                                                             handleEditCharge(
-                                                                                                charge
+                                                                                                charge,
                                                                                             )
                                                                                         }
                                                                                         className="text-slate-400 hover:text-slate-900 transition-colors p-1 rounded hover:bg-slate-100"
@@ -2149,7 +2237,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                                     <button
                                                                                         onClick={() =>
                                                                                             handleDeleteCharge(
-                                                                                                charge.id
+                                                                                                charge.id,
                                                                                             )
                                                                                         }
                                                                                         className="text-slate-400 hover:text-danger-600 transition-colors p-1 rounded hover:bg-danger-50"
@@ -2182,9 +2270,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     sum +
                                                                     parseFloat(
                                                                         charge.amount ||
-                                                                            0
+                                                                            0,
                                                                     ),
-                                                                0
+                                                                0,
                                                             );
                                                         const iva =
                                                             charges.reduce(
@@ -2192,9 +2280,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     sum +
                                                                     parseFloat(
                                                                         charge.iva_amount ||
-                                                                            0
+                                                                            0,
                                                                     ),
-                                                                0
+                                                                0,
                                                             );
                                                         const totalBruto =
                                                             charges.reduce(
@@ -2202,9 +2290,9 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     sum +
                                                                     parseFloat(
                                                                         charge.total ||
-                                                                            0
+                                                                            0,
                                                                     ),
-                                                                0
+                                                                0,
                                                             );
 
                                                         // Base gravada: solo items con iva_type === 'gravado'
@@ -2213,19 +2301,19 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                 .filter(
                                                                     (charge) =>
                                                                         charge.iva_type ===
-                                                                        "gravado"
+                                                                        "gravado",
                                                                 )
                                                                 .reduce(
                                                                     (
                                                                         sum,
-                                                                        charge
+                                                                        charge,
                                                                     ) =>
                                                                         sum +
                                                                         parseFloat(
                                                                             charge.amount ||
-                                                                                0
+                                                                                0,
                                                                         ),
-                                                                    0
+                                                                    0,
                                                                 );
 
                                                         const RETENCION_THRESHOLD = 100.0;
@@ -2238,7 +2326,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                         let retencion = 0;
                                                         if (
                                                             isGranContribuyente &&
-                                                            baseGravada >
+                                                            baseGravada >=
                                                                 RETENCION_THRESHOLD
                                                         ) {
                                                             retencion =
@@ -2265,7 +2353,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700">
                                                                         {formatCurrency(
-                                                                            subtotal
+                                                                            subtotal,
                                                                         )}
                                                                     </td>
                                                                     {order.status !==
@@ -2285,7 +2373,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700">
                                                                         {formatCurrency(
-                                                                            iva
+                                                                            iva,
                                                                         )}
                                                                     </td>
                                                                     {order.status !==
@@ -2314,7 +2402,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             <td className="px-3 py-2 text-right text-sm font-medium tabular-nums text-slate-700">
                                                                                 -{" "}
                                                                                 {formatCurrency(
-                                                                                    retencion
+                                                                                    retencion,
                                                                                 )}
                                                                             </td>
                                                                             {order.status !==
@@ -2336,7 +2424,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                             </td>
                                                                             <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-base tabular-nums">
                                                                                 {formatCurrency(
-                                                                                    totalNeto
+                                                                                    totalNeto,
                                                                                 )}
                                                                             </td>
                                                                             {order.status !==
@@ -2361,7 +2449,7 @@ const ServiceOrderDetail = ({ orderId, onUpdate, onEdit }) => {
                                                                         </td>
                                                                         <td className="px-3 py-2.5 text-right font-bold text-slate-900 text-base tabular-nums">
                                                                             {formatCurrency(
-                                                                                totalBruto
+                                                                                totalBruto,
                                                                             )}
                                                                         </td>
                                                                         {order.status !==

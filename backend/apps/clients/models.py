@@ -82,7 +82,7 @@ class Client(models.Model):
         Retorna la tasa de retención según clasificación de contribuyente.
 
         Según normativa salvadoreña:
-        - Gran Contribuyente: Retiene 1% sobre servicios > $100
+        - Gran Contribuyente: Retiene 1% sobre servicios >= $100
         - Mediano/Pequeño: No retienen
         """
         from decimal import Decimal
@@ -106,7 +106,7 @@ class Client(models.Model):
         if self.taxpayer_type != 'grande':
             return False
 
-        return subtotal_services > RETENCION_THRESHOLD
+        return subtotal_services >= RETENCION_THRESHOLD
 
     def calculate_retention(self, subtotal_services):
         """

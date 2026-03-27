@@ -106,7 +106,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
             const newDueDate = calculateDueDate(
                 formData.issue_date,
                 formData.payment_condition === "credito" ? clientCreditDays : 0,
-                formData.payment_condition
+                formData.payment_condition,
             );
             setFormData((prev) => ({ ...prev, due_date: newDueDate }));
         }
@@ -116,7 +116,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         try {
             setLoading(true);
             const response = await axios.get(
-                `/orders/service-orders/${serviceOrder.id}/billable_items/`
+                `/orders/service-orders/${serviceOrder.id}/billable_items/`,
             );
             // El endpoint devuelve {items: [], summary: {}}
             const items = response.data.items || [];
@@ -126,7 +126,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         } catch (error) {
             console.error("Error fetching charges:", error);
             toast.error(
-                "No se pudieron cargar los cargos pendientes. Intente recargar."
+                "No se pudieron cargar los cargos pendientes. Intente recargar.",
             );
         } finally {
             setLoading(false);
@@ -240,7 +240,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
         if (
             isGranContribuyente &&
             isDTE &&
-            baseGravadaServicios > RETENCION_THRESHOLD
+            baseGravadaServicios >= RETENCION_THRESHOLD
         ) {
             retencion = baseGravadaServicios * RETENCION_RATE;
         }
@@ -280,7 +280,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
     const handleCreateInvoice = async () => {
         if (selectedChargeIds.length === 0) {
             toast.error(
-                "Debe seleccionar al menos un cargo para generar la factura."
+                "Debe seleccionar al menos un cargo para generar la factura.",
             );
             return;
         }
@@ -290,7 +290,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
 
             // Separate items by type
             const selectedItems = charges.filter((c) =>
-                selectedChargeIds.includes(c.id)
+                selectedChargeIds.includes(c.id),
             );
             const chargeIds = selectedItems
                 .filter((c) => c.type === "service")
@@ -340,18 +340,18 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                         })
                         .join("\n");
                     toast.error(
-                        errorMessages || "No se pudo generar la factura."
+                        errorMessages || "No se pudo generar la factura.",
                     );
                 } else {
                     toast.error(
                         errors.error ||
                             errors.detail ||
-                            "No se pudo generar la factura. Verifique los datos."
+                            "No se pudo generar la factura. Verifique los datos.",
                     );
                 }
             } else {
                 toast.error(
-                    "No se pudo generar la factura. Intente nuevamente."
+                    "No se pudo generar la factura. Intente nuevamente.",
                 );
             }
         } finally {
@@ -413,14 +413,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                     setSelectedChargeIds(
                                                                         charges.map(
                                                                             (
-                                                                                c
+                                                                                c,
                                                                             ) =>
-                                                                                c.id
-                                                                        )
+                                                                                c.id,
+                                                                        ),
                                                                     );
                                                                 } else {
                                                                     setSelectedChargeIds(
-                                                                        []
+                                                                        [],
                                                                     );
                                                                 }
                                                             }}
@@ -453,11 +453,11 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                     const displayIva = isExport
                                                         ? 0
                                                         : parseFloat(
-                                                              charge.iva
+                                                              charge.iva,
                                                           );
                                                     const displayTotal =
                                                         parseFloat(
-                                                            charge.amount
+                                                            charge.amount,
                                                         ) + displayIva;
 
                                                     return (
@@ -466,14 +466,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                             className={cn(
                                                                 "transition-colors cursor-pointer group",
                                                                 selectedChargeIds.includes(
-                                                                    charge.id
+                                                                    charge.id,
                                                                 )
                                                                     ? "bg-blue-50/40"
-                                                                    : "hover:bg-slate-50"
+                                                                    : "hover:bg-slate-50",
                                                             )}
                                                             onClick={() =>
                                                                 handleChargeToggle(
-                                                                    charge.id
+                                                                    charge.id,
                                                                 )
                                                             }
                                                         >
@@ -481,14 +481,14 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={selectedChargeIds.includes(
-                                                                        charge.id
+                                                                        charge.id,
                                                                     )}
                                                                     onChange={(
-                                                                        e
+                                                                        e,
                                                                     ) => {
                                                                         e.stopPropagation();
                                                                         handleChargeToggle(
-                                                                            charge.id
+                                                                            charge.id,
                                                                         );
                                                                     }}
                                                                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -541,12 +541,12 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                         <div className="text-[11px] text-slate-500 mt-0.5 ml-14">
                                                                             Costo:{" "}
                                                                             {formatCurrency(
-                                                                                charge.cost_amount
+                                                                                charge.cost_amount,
                                                                             )}{" "}
                                                                             |
                                                                             Margen:{" "}
                                                                             {charge.margin_percentage.toFixed(
-                                                                                2
+                                                                                2,
                                                                             )}
                                                                             %
                                                                         </div>
@@ -554,17 +554,17 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                             </td>
                                                             <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
                                                                 {formatCurrency(
-                                                                    charge.amount
+                                                                    charge.amount,
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
                                                                 {formatCurrency(
-                                                                    displayIva
+                                                                    displayIva,
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-2.5 text-right tabular-nums font-bold text-slate-900">
                                                                 {formatCurrency(
-                                                                    displayTotal
+                                                                    displayTotal,
                                                                 )}
                                                             </td>
                                                         </tr>
@@ -581,17 +581,17 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-medium text-slate-600 tabular-nums text-sm">
                                                         {formatCurrency(
-                                                            selectedTotals.subtotal
+                                                            selectedTotals.subtotal,
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-medium text-slate-600 tabular-nums text-sm">
                                                         {formatCurrency(
-                                                            selectedTotals.iva
+                                                            selectedTotals.iva,
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums text-lg">
                                                         {formatCurrency(
-                                                            selectedTotals.total
+                                                            selectedTotals.total,
                                                         )}
                                                     </td>
                                                 </tr>
@@ -629,7 +629,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             </span>
                                             <span className="text-slate-700 tabular-nums">
                                                 {formatCurrency(
-                                                    selectedTotals.subtotalServicios
+                                                    selectedTotals.subtotalServicios,
                                                 )}
                                             </span>
                                         </div>
@@ -641,7 +641,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             </span>
                                             <span className="text-slate-700 tabular-nums">
                                                 {formatCurrency(
-                                                    selectedTotals.subtotalTerceros
+                                                    selectedTotals.subtotalTerceros,
                                                 )}
                                             </span>
                                         </div>
@@ -653,7 +653,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                         </span>
                                         <span className="text-slate-800 tabular-nums font-medium">
                                             {formatCurrency(
-                                                selectedTotals.subtotal
+                                                selectedTotals.subtotal,
                                             )}
                                         </span>
                                     </div>
@@ -688,13 +688,16 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
 
                                     {/* Explicación IVA 0 en Exportación */}
                                     {selectedTotals.iva === 0 &&
-                                        selectedTotals.baseGravadaServicios > 0 &&
+                                        selectedTotals.baseGravadaServicios >
+                                            0 &&
                                         (formData.invoice_type === "FEX" ||
                                             formData.invoice_type ===
                                                 "INTL") && (
                                             <div className="text-[10px] text-amber-600 bg-amber-50 p-1.5 rounded mt-1 border border-amber-100">
                                                 <Info className="w-3 h-3 inline mr-1 -mt-0.5" />
-                                                El IVA es $0.00 por ser factura de exportación. Cambie el tipo a "DTE" si requiere cobrar IVA.
+                                                El IVA es $0.00 por ser factura
+                                                de exportación. Cambie el tipo a
+                                                "DTE" si requiere cobrar IVA.
                                             </div>
                                         )}
 
@@ -707,7 +710,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             <span className="text-slate-600 tabular-nums">
                                                 −{" "}
                                                 {formatCurrency(
-                                                    selectedTotals.retencion
+                                                    selectedTotals.retencion,
                                                 )}
                                             </span>
                                         </div>
@@ -726,7 +729,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                             {formatCurrency(
                                                 selectedTotals.retencion > 0
                                                     ? selectedTotals.totalAPagar
-                                                    : selectedTotals.total
+                                                    : selectedTotals.total,
                                             )}
                                         </span>
                                     </div>
@@ -779,25 +782,26 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                 {charges
                                                     .filter((charge) =>
                                                         selectedChargeIds.includes(
-                                                            charge.id
-                                                        )
+                                                            charge.id,
+                                                        ),
                                                     )
                                                     .map((charge) => {
                                                         const hasCost =
                                                             charge.cost_amount >
                                                             0;
-                                                        
+
                                                         // Si es exportación, el IVA unitario es 0
                                                         const isExport =
                                                             formData.invoice_type ===
                                                                 "FEX" ||
                                                             formData.invoice_type ===
                                                                 "INTL";
-                                                        const displayIva = isExport
-                                                            ? 0
-                                                            : parseFloat(
-                                                                  charge.iva_amount
-                                                              );
+                                                        const displayIva =
+                                                            isExport
+                                                                ? 0
+                                                                : parseFloat(
+                                                                      charge.iva_amount,
+                                                                  );
 
                                                         return (
                                                             <tr
@@ -845,7 +849,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                     {hasCost ? (
                                                                         <span className="text-slate-700">
                                                                             {formatCurrency(
-                                                                                charge.cost_amount
+                                                                                charge.cost_amount,
                                                                             )}
                                                                         </span>
                                                                     ) : (
@@ -856,7 +860,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right text-slate-700 tabular-nums font-medium">
                                                                     {formatCurrency(
-                                                                        charge.amount
+                                                                        charge.amount,
                                                                     )}
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right tabular-nums">
@@ -870,7 +874,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                             }`}
                                                                         >
                                                                             {formatCurrency(
-                                                                                charge.profit
+                                                                                charge.profit,
                                                                             )}
                                                                         </span>
                                                                     ) : (
@@ -890,7 +894,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                             }`}
                                                                         >
                                                                             {charge.margin_percentage.toFixed(
-                                                                                1
+                                                                                1,
                                                                             )}
                                                                             %
                                                                         </span>
@@ -908,25 +912,25 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                                             "gravado"
                                                                                 ? "bg-slate-100 text-slate-700 border-slate-300"
                                                                                 : charge.iva_type ===
-                                                                                  "exento"
-                                                                                ? "bg-amber-50 text-amber-700 border-amber-200"
-                                                                                : "bg-slate-50 text-slate-600 border-slate-200"
+                                                                                    "exento"
+                                                                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                                                  : "bg-slate-50 text-slate-600 border-slate-200"
                                                                         }`}
                                                                     >
                                                                         {charge.iva_type ===
                                                                         "gravado"
                                                                             ? "Gravado 13%"
                                                                             : charge.iva_type ===
-                                                                              "exento"
-                                                                            ? "Exento"
-                                                                            : "No Sujeto"}
+                                                                                "exento"
+                                                                              ? "Exento"
+                                                                              : "No Sujeto"}
                                                                     </Badge>
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                                                                     {displayIva >
                                                                     0 ? (
                                                                         formatCurrency(
-                                                                            displayIva
+                                                                            displayIva,
                                                                         )
                                                                     ) : (
                                                                         <span className="text-slate-300">
@@ -951,7 +955,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         className="px-3 py-3 text-right font-semibold text-slate-800 tabular-nums text-sm"
                                                     >
                                                         {formatCurrency(
-                                                            selectedTotals.subtotal
+                                                            selectedTotals.subtotal,
                                                         )}
                                                     </td>
                                                 </tr>
@@ -967,7 +971,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         className="px-3 py-2 text-right font-medium text-slate-700 tabular-nums text-sm"
                                                     >
                                                         {formatCurrency(
-                                                            selectedTotals.iva
+                                                            selectedTotals.iva,
                                                         )}
                                                     </td>
                                                 </tr>
@@ -983,7 +987,7 @@ const BillingWizard = ({ isOpen, onClose, serviceOrder, onInvoiceCreated }) => {
                                                         className="px-3 py-3 text-right font-bold text-slate-900 tabular-nums text-base"
                                                     >
                                                         {formatCurrency(
-                                                            selectedTotals.total
+                                                            selectedTotals.total,
                                                         )}
                                                     </td>
                                                 </tr>
