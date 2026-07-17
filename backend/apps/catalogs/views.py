@@ -39,6 +39,53 @@ class ProviderViewSet(viewsets.ModelViewSet):
         # Por defecto mostrar solo activos en listados
         if self.action == 'list' and self.request.query_params.get('is_active') is None:
             queryset = queryset.filter(is_active=True)
+
+        # Anotar la deuda total por proveedor en una sola consulta para
+        # evitar 2 agregaciones por proveedor en el serializer (N+1)
+        if self.action == 'list':
+            from decimal import Decimal
+            from django.db.models import Sum, F, Value, OuterRef, Subquery, DecimalField
+            from django.db.models.functions import Coalesce
+            from apps.transfers.models import Transfer, ProviderInvoice
+
+            year = None
+            year_param = self.request.query_params.get('year')
+            if year_param and year_param.isdigit() and int(year_param) > 0:
+                year = int(year_param)
+
+            transfer_qs = Transfer.objects.filter(
+                provider=OuterRef('pk'),
+                status__in=['pendiente', 'aprobado', 'provisionada', 'parcial']
+            )
+            if year:
+                transfer_qs = transfer_qs.filter(transaction_date__year=year)
+            transfer_debt_sq = transfer_qs.values('provider').annotate(
+                total=Sum('balance')
+            ).values('total')
+
+            invoice_qs = ProviderInvoice.objects.filter(
+                provider=OuterRef('pk'),
+                payment_status__in=['pendiente', 'parcial']
+            )
+            if year:
+                invoice_qs = invoice_qs.filter(issue_date__year=year)
+            invoice_debt_sq = invoice_qs.values('provider').annotate(
+                total=Sum(F('total_amount') - F('paid_amount'))
+            ).values('total')
+
+            queryset = queryset.annotate(
+                annotated_transfer_debt=Coalesce(
+                    Subquery(transfer_debt_sq),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=15, decimal_places=2)
+                ),
+                annotated_invoice_debt=Coalesce(
+                    Subquery(invoice_debt_sq),
+                    Value(Decimal('0.00')),
+                    output_field=DecimalField(max_digits=15, decimal_places=2)
+                ),
+            )
+
         return queryset.order_by('name')
 
     @action(detail=False, methods=['get'], permission_classes=[IsOperativo])

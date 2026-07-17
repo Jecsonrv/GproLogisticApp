@@ -1661,12 +1661,22 @@ function ProviderPayments() {
         return count;
     }, [filters]);
 
+    // Set de IDs de OS cerradas para consulta O(1) por fila
+    const closedOSIds = useMemo(
+        () =>
+            new Set(
+                serviceOrders
+                    .filter((o) => o.status === "cerrada")
+                    .map((o) => o.id),
+            ),
+        [serviceOrders],
+    );
+
     // Helper para verificar si la OS de un pago está cerrada
     const isPaymentOSClosed = (payment) => {
         const osId = payment.service_order?.id || payment.service_order;
         if (!osId) return false; // Gastos administrativos sin OS no están bloqueados
-        const os = serviceOrders.find((o) => o.id === Number(osId));
-        return os && os.status === "cerrada";
+        return closedOSIds.has(Number(osId));
     };
 
     const columns = [

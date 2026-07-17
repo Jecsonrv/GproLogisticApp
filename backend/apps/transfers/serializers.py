@@ -88,10 +88,30 @@ class ProviderInvoiceListSerializer(serializers.ModelSerializer):
         ]
 
     def get_allocations_count(self, obj):
-        return obj.allocations.filter(is_deleted=False).count()
+        # .all() aprovecha la caché de prefetch_related del ViewSet
+        # (el manager por defecto ya excluye is_deleted=True)
+        return len(obj.allocations.all())
 
     def get_profit_summary(self, obj):
-        return obj.get_profit_summary()
+        # Calcular sobre las asignaciones prefetcheadas para evitar
+        # las consultas por fila de obj.get_profit_summary()
+        total_cost = Decimal('0.00')
+        total_sale = Decimal('0.00')
+        for alloc in obj.allocations.all():
+            total_cost += alloc.cost_amount
+            if alloc.order_charge:
+                total_sale += alloc.order_charge.subtotal
+
+        profit = total_sale - total_cost
+        margin = (profit / total_cost * 100) if total_cost > 0 else Decimal('0.00')
+
+        return {
+            'total_cost': float(total_cost),
+            'total_sale': float(total_sale),
+            'profit': float(profit),
+            'margin_percentage': float(margin),
+            'unallocated': float(obj.unallocated_amount)
+        }
 
     def get_created_by_name(self, obj):
         if obj.created_by:
@@ -298,13 +318,18 @@ class TransferListSerializer(serializers.ModelSerializer):
 
     def get_credit_notes_applied(self, obj):
         """Retorna las NC de proveedores vinculadas a esta factura"""
-        # NC vinculadas directamente como factura original
-        credit_notes = ProviderCreditNote.objects.filter(
-            original_transfer=obj,
-            is_deleted=False
-        ).exclude(status='anulada')
+        # Usar datos prefetcheados por el ViewSet cuando estén disponibles
+        # para evitar consultas N+1 en el listado
+        credit_notes = getattr(obj, 'active_credit_notes', None)
+        if credit_notes is None:
+            credit_notes = list(
+                ProviderCreditNote.objects.filter(
+                    original_transfer=obj,
+                    is_deleted=False
+                ).exclude(status='anulada')
+            )
 
-        if not credit_notes.exists():
+        if not credit_notes:
             return None
 
         return [{
@@ -487,7 +512,9 @@ class ProviderCreditNoteListSerializer(serializers.ModelSerializer):
         return None
 
     def get_applications_count(self, obj):
-        return obj.applications.filter(is_deleted=False).count()
+        # .all() aprovecha la caché de prefetch_related del ViewSet
+        # (el manager por defecto ya excluye is_deleted=True)
+        return len(obj.applications.all())
 
 
 class ProviderCreditNoteDetailSerializer(serializers.ModelSerializer):

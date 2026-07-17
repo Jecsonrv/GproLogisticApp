@@ -80,6 +80,11 @@ class ProviderSerializer(serializers.ModelSerializer):
 
     def get_total_debt(self, obj):
         """Calcula la deuda total pendiente del proveedor (Transfers + ProviderInvoices)"""
+        # Usar anotaciones del ViewSet cuando existan (listado) para evitar
+        # 2 consultas de agregación por proveedor
+        if hasattr(obj, 'annotated_transfer_debt'):
+            return float(obj.annotated_transfer_debt or 0) + float(obj.annotated_invoice_debt or 0)
+
         from apps.transfers.models import Transfer, ProviderInvoice
         from django.db.models import Sum, F
 

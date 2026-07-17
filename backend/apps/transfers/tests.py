@@ -575,3 +575,126 @@ class TransferDeletionAuditHistoryTests(APITestCase):
         self.assertIsNotNone(event)
         self.assertEqual(event.user, self.user)
         self.assertIn('Pago a proveedor eliminado', event.description)
+
+
+class ListEndpointQueryCountTests(APITestCase):
+    """
+    Tests de regresión de rendimiento: los listados no deben tener consultas N+1.
+
+    Patrón: se mide el número de queries con pocos registros y con el doble de
+    registros; si el listado está bien optimizado (select_related /
+    prefetch_related + anotaciones), el conteo debe ser idéntico en ambos casos.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import date
+        cls.admin = User.objects.create_user(
+            username='admin_qc_test',
+            password='x',
+            role='admin',
+        )
+        cls.provider_a = Provider.objects.create(name='Proveedor QC A')
+        cls.provider_b = Provider.objects.create(name='Proveedor QC B')
+        cls.client_obj = Client.objects.create(name='Cliente QC Test')
+        cls.shipment_type = ShipmentType.objects.create(name='Marítimo QC')
+        cls.service_order = ServiceOrder.objects.create(
+            client=cls.client_obj,
+            shipment_type=cls.shipment_type,
+            created_by=cls.admin,
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(user=self.admin)
+
+    def _create_transfer(self, provider, idx):
+        from datetime import date
+        from apps.transfers.models import ProviderCreditNote
+        transfer = Transfer.objects.create(
+            transfer_type='admin',
+            provider=provider,
+            amount=Decimal('100.00'),
+            description=f'Gasto {idx}',
+            transaction_date=date(2026, 1, 15),
+            created_by=self.admin,
+        )
+        ProviderCreditNote.objects.create(
+            provider=provider,
+            original_transfer=transfer,
+            note_number=f'NC-QC-{idx}',
+            amount=Decimal('10.00'),
+            issue_date=date(2026, 1, 20),
+            received_date=date(2026, 1, 21),
+            reason='otro',
+            created_by=self.admin,
+        )
+        return transfer
+
+    def _create_invoice(self, provider, idx):
+        from datetime import date
+        return ProviderInvoice.objects.create(
+            invoice_number=f'FAC-QC-{idx}',
+            provider=provider,
+            service_order=self.service_order,
+            total_amount=Decimal('200.00'),
+            issue_date=date(2026, 1, 15),
+            created_by=self.admin,
+        )
+
+    def _count_queries(self, url):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return len(ctx.captured_queries)
+
+    def _assert_constant_queries(self, url, create_more):
+        first_count = self._count_queries(url)
+        create_more()
+        second_count = self._count_queries(url)
+        self.assertEqual(
+            first_count,
+            second_count,
+            f'{url} tiene consultas N+1: {first_count} queries con pocos '
+            f'registros vs {second_count} con más registros',
+        )
+
+    def test_transfers_list_has_no_n_plus_one(self):
+        for i in range(3):
+            self._create_transfer(self.provider_a, i)
+
+        self._assert_constant_queries(
+            '/api/transfers/transfers/',
+            lambda: [self._create_transfer(self.provider_b, 100 + i) for i in range(3)],
+        )
+
+    def test_provider_invoices_list_has_no_n_plus_one(self):
+        for i in range(3):
+            self._create_invoice(self.provider_a, i)
+
+        self._assert_constant_queries(
+            '/api/transfers/provider-invoices/',
+            lambda: [self._create_invoice(self.provider_b, 100 + i) for i in range(3)],
+        )
+
+    def test_credit_notes_list_has_no_n_plus_one(self):
+        for i in range(3):
+            self._create_transfer(self.provider_a, i)
+
+        self._assert_constant_queries(
+            '/api/transfers/provider-credit-notes/',
+            lambda: [self._create_transfer(self.provider_b, 100 + i) for i in range(3)],
+        )
+
+    def test_providers_list_has_no_n_plus_one(self):
+        self._create_transfer(self.provider_a, 1)
+        self._create_invoice(self.provider_a, 1)
+
+        def create_more():
+            for i in range(3):
+                provider = Provider.objects.create(name=f'Proveedor QC extra {i}')
+                self._create_transfer(provider, 200 + i)
+                self._create_invoice(provider, 200 + i)
+
+        self._assert_constant_queries('/api/catalogs/providers/', create_more)
