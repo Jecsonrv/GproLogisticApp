@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.exceptions import ValidationError
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Prefetch
 from django.db import transaction
 from django.http import HttpResponse, FileResponse
 from django.utils.text import slugify
@@ -44,7 +44,14 @@ class TransferViewSet(viewsets.ModelViewSet):
         'service_order__client',
         'provider',
         'bank',
-        'created_by'
+        'created_by',
+        'invoice'
+    ).prefetch_related(
+        Prefetch(
+            'credit_notes',
+            queryset=ProviderCreditNote.objects.exclude(status='anulada'),
+            to_attr='active_credit_notes'
+        )
     ).all()
     serializer_class = TransferSerializer
     permission_classes = [IsAnyOperativo]
@@ -1337,8 +1344,8 @@ class ProviderCreditNoteViewSet(viewsets.ModelViewSet):
     - GET    /provider-credit-notes/by-provider/  - NC agrupadas por proveedor
     """
     queryset = ProviderCreditNote.objects.select_related(
-        'provider', 'created_by', 'voided_by'
-    ).all()
+        'provider', 'created_by', 'voided_by', 'original_transfer'
+    ).prefetch_related('applications').all()
     permission_classes = [IsOperativo]
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     filterset_class = ProviderCreditNoteFilter
@@ -1844,7 +1851,14 @@ class ProviderInvoiceViewSet(viewsets.ModelViewSet):
     """
     queryset = ProviderInvoice.objects.select_related(
         'provider', 'service_order', 'created_by'
-    ).prefetch_related('allocations').all()
+    ).prefetch_related(
+        Prefetch(
+            'allocations',
+            queryset=DirectCostAllocation.objects.select_related(
+                'order_charge', 'order_charge__service', 'created_by'
+            )
+        )
+    ).all()
     permission_classes = [IsOperativo2OrAdmin]  # overridden by get_permissions()
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     filterset_class = ProviderInvoiceFilter
