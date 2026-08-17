@@ -1090,30 +1090,28 @@ class BatchPayment(SoftDeleteModel):
     def save(self, *args, **kwargs):
         # Generar número de lote automático: BP-YYYY-NNNN
         if not self.batch_number:
-            from django.db import transaction
             from django.db.models import Max
-            import re
+            from apps.core.sequences import next_number
 
             current_year = timezone.now().year
 
-            with transaction.atomic():
-                # Buscar el máximo número del año actual
-                result = BatchPayment.all_objects.select_for_update().filter(
+            # Correlativo reservado sobre la fila contador de la serie, sin
+            # bloquear los lotes ya existentes (ver apps/core/sequences.py).
+            def _current_max_batch_number():
+                result = BatchPayment.all_objects.filter(
                     batch_number__regex=rf'^BP-{current_year}-\d{{4}}$'
                 ).aggregate(
                     max_num=Max('batch_number')
                 )
+                if not result['max_num']:
+                    return 0
+                try:
+                    return int(result['max_num'].split('-')[-1])
+                except (ValueError, IndexError):
+                    return 0
 
-                if result['max_num']:
-                    try:
-                        last_num = int(result['max_num'].split('-')[-1])
-                        new_num = last_num + 1
-                    except (ValueError, IndexError):
-                        new_num = 1
-                else:
-                    new_num = 1
-
-                self.batch_number = f'BP-{current_year}-{new_num:04d}'
+            new_num = next_number(f'batch_payment:{current_year}', _current_max_batch_number)
+            self.batch_number = f'BP-{current_year}-{new_num:04d}'
 
         super().save(*args, **kwargs)
 

@@ -37,7 +37,19 @@ if not DEBUG and os.getenv('AWS_ACCESS_KEY_ID'):
     AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_DEFAULT_ACL = None  # Files are private by default
-    
+
+    # Acotar la latencia de S3. Sin timeouts explícitos botocore espera hasta
+    # 60s por intento y reintenta, de modo que una subida atascada podía
+    # mantener abierta la transacción (y sus locks) durante minutos.
+    from botocore.config import Config as _BotoConfig
+    AWS_S3_CLIENT_CONFIG = _BotoConfig(
+        connect_timeout=5,
+        read_timeout=15,
+        retries={'max_attempts': 2, 'mode': 'standard'},
+        signature_version=AWS_S3_SIGNATURE_VERSION,
+    )
+
+
     # Static files (CSS, JS) in S3 (Optional, usually Whitenoise handles this well enough for small apps)
     # STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
     
@@ -129,7 +141,11 @@ if 'DATABASE_URL' in os.environ:
     # Optimizaciones adicionales para PostgreSQL en producción
     DATABASES['default']['OPTIONS'] = {
         'connect_timeout': 10,
-        'options': '-c statement_timeout=30000',  # 30 segundos max por query
+        # statement_timeout: 30 segundos max por query.
+        # lock_timeout: si una fila está bloqueada por otra transacción, fallar
+        # a los 10 segundos con un error identificable (55P03) en vez de esperar
+        # los 30 segundos completos y morir con un 500 genérico.
+        'options': '-c statement_timeout=30000 -c lock_timeout=10000',
     }
 else:
     # Fallback para desarrollo local (SQLite o Postgres manual)

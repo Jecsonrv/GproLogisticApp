@@ -12,6 +12,7 @@ from apps.catalogs.models import SubClient, ShipmentType, Provider, Bank, Custom
 from apps.validators import validate_document_file
 from apps.core.models import SoftDeleteModel
 from apps.core.constants import IVA_RATE, RETENCION_RATE, RETENCION_THRESHOLD
+from apps.core.sequences import next_number
 
 
 def order_document_upload_path(instance, filename):
@@ -98,26 +99,26 @@ class ServiceOrder(SoftDeleteModel):
             if self.is_manual_os:
                 raise ValidationError("Debe proporcionar un número de OS para las OS manuales")
 
-            # Generación automática (código original)
-            # Usar select_for_update con transacción para evitar race conditions
-            with transaction.atomic():
-                # Buscar el máximo número del año actual con bloqueo
-                result = ServiceOrder.all_objects.select_for_update().filter(
+            # Generación automática.
+            # El correlativo se reserva bloqueando SOLO la fila contador de la
+            # serie (DocumentSequence). Antes se hacía con
+            # select_for_update() sobre todas las OS del año, lo que dejaba
+            # bloqueadas esas filas hasta el commit de la petición completa.
+            def _current_max_order_number():
+                result = ServiceOrder.all_objects.filter(
                     order_number__regex=rf'^\d{{3}}-{current_year}$'
                 ).aggregate(
                     max_num=Max('order_number')
                 )
+                if not result['max_num']:
+                    return 0
+                try:
+                    return int(result['max_num'].split('-')[0])
+                except (ValueError, IndexError):
+                    return 0
 
-                if result['max_num']:
-                    try:
-                        last_num = int(result['max_num'].split('-')[0])
-                        new_num = last_num + 1
-                    except (ValueError, IndexError):
-                        new_num = 1
-                else:
-                    new_num = 1
-
-                self.order_number = f'{new_num:03d}-{current_year}'
+            new_num = next_number(f'service_order:{current_year}', _current_max_order_number)
+            self.order_number = f'{new_num:03d}-{current_year}'
 
         # Validaciones adicionales para OS manuales
         if self.is_manual_os and self.order_number:
@@ -688,30 +689,30 @@ class Invoice(models.Model):
         Aplica retención 1% para Grandes Contribuyentes con CCF si subtotal > $100.
         """
         if not self.invoice_number:
-            from django.db import transaction
             from django.db.models import Max
 
             year = timezone.now().year
 
-            with transaction.atomic():
-                result = Invoice.objects.select_for_update().filter(
+            # El correlativo se reserva bloqueando SOLO la fila contador de la
+            # serie (DocumentSequence). El select_for_update() anterior
+            # bloqueaba TODAS las pre-facturas del año hasta el commit de la
+            # petición, y cualquier PATCH concurrente sobre una de ellas moría
+            # con "canceling statement due to statement timeout".
+            def _current_max_invoice_number():
+                result = Invoice.objects.filter(
                     invoice_number__regex=rf'^PRE-\d{{5}}-{year}$'
                 ).aggregate(max_num=Max('invoice_number'))
 
-                if result['max_num']:
-                    try:
-                        parts = result['max_num'].split('-')
-                        if len(parts) >= 2:
-                            last_num = int(parts[1])
-                            new_num = last_num + 1
-                        else:
-                            new_num = 1
-                    except (ValueError, IndexError):
-                        new_num = 1
-                else:
-                    new_num = 1
+                if not result['max_num']:
+                    return 0
+                try:
+                    parts = result['max_num'].split('-')
+                    return int(parts[1]) if len(parts) >= 2 else 0
+                except (ValueError, IndexError):
+                    return 0
 
-                self.invoice_number = f"PRE-{new_num:05d}-{year}"
+            new_num = next_number(f'invoice_prefactura:{year}', _current_max_invoice_number)
+            self.invoice_number = f"PRE-{new_num:05d}-{year}"
 
         # Auto-bloquear DTE cuando se sube el PDF de la factura
         if self.pdf_file and not self.is_dte_issued:

@@ -205,10 +205,15 @@ class Client(models.Model):
         if self.payment_condition != 'credito':
             return True, "Cliente de contado, no requiere validación de crédito", Decimal('0.00')
 
-        # Obtener lock sobre las facturas del cliente para prevenir race condition
+        # Serializar la validación bloqueando SOLO la fila del cliente.
+        # Bloquear sus facturas (select_for_update sobre Invoice) dejaba esas
+        # filas retenidas hasta el commit de la petición completa y provocaba
+        # timeouts en cualquier actualización concurrente de esas facturas.
         with transaction.atomic():
-            # Sumar saldos pendientes con lock
-            pending_balance = Invoice.objects.select_for_update().filter(
+            Client.objects.select_for_update().filter(pk=self.pk).first()
+
+            # Sumar saldos pendientes (lectura sin bloqueo)
+            pending_balance = Invoice.objects.filter(
                 service_order__client=self,
                 balance__gt=0
             ).exclude(
