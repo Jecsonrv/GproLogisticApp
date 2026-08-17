@@ -104,14 +104,14 @@ class ServiceOrder(SoftDeleteModel):
             # select_for_update() sobre todas las OS del año, lo que dejaba
             # bloqueadas esas filas hasta el commit de la petición completa.
             def _current_max_order_number():
-                # El formato admite de 1 a 4 dígitos (ver validación de OS
-                # manuales más abajo), así que el regex debe cubrirlos todos:
-                # con `\d{3}` el correlativo dejaba de verse a sí mismo al
-                # llegar a 1000 y reproponía ese número indefinidamente.
+                # El regex no acota la cantidad de dígitos: con `\d{3}` el
+                # correlativo dejaba de verse a sí mismo al llegar a 1000 y
+                # reproponía ese número indefinidamente. Cualquier tope fijo
+                # solo mueve ese punto de quiebre más lejos.
                 # El máximo se calcula en Python porque Max() sobre un
                 # CharField ordena como texto, y ahí '999-2026' > '1000-2026'.
                 numbers = ServiceOrder.all_objects.filter(
-                    order_number__regex=rf'^\d{{1,4}}-{current_year}$'
+                    order_number__regex=rf'^\d+-{current_year}$'
                 ).values_list('order_number', flat=True)
                 return max(
                     (int(n.split('-')[0]) for n in numbers),
