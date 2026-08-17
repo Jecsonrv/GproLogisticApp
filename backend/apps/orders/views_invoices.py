@@ -15,6 +15,7 @@ from apps.catalogs.models import Bank
 from .serializers import InvoiceListSerializer, InvoicePaymentSerializer, CreditNoteSerializer
 from .serializers_new import InvoiceDetailSerializer, InvoiceCreateSerializer
 from apps.orders.pdf_generator import generate_invoice_pdf
+from apps.core.storage import stage_upload
 from apps.users.permissions import IsOperativo, IsOperativo2
 
 # Import distributed lock utilities (only active when Redis is configured)
@@ -143,22 +144,23 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(response_serializer.data)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    def check_storage_integrity(self, invoice):
+    def check_staged_storage_integrity(self, model, field_name, stored_name):
         """
-        Verifica que el archivo PDF realmente exista en el storage (S3).
-        Si no existe, lanza una excepción para revertir la transacción.
+        Verifica que un archivo subido con stage_upload() exista realmente en el
+        storage (S3). Se ejecuta ANTES de abrir la transacción, de modo que la
+        latencia de S3 no se gasta con la fila de la factura bloqueada.
         """
-        if invoice.pdf_file:
-            try:
-                # Forzar verificación con el storage backend
-                if not invoice.pdf_file.storage.exists(invoice.pdf_file.name):
-                    raise ValueError(
-                        f"Error crítico: El archivo PDF '{invoice.pdf_file.name}' no se guardó correctamente en el almacenamiento. "
-                        "La operación ha sido cancelada para evitar inconsistencias."
-                    )
-            except Exception as e:
-                # Si falla la conexión con S3 o cualquier otro error de storage
-                raise ValueError(f"Error de verificación de almacenamiento: {str(e)}")
+        storage = model._meta.get_field(field_name).storage
+        try:
+            if not storage.exists(stored_name):
+                raise ValueError(
+                    f"Error crítico: El archivo '{stored_name}' no se guardó correctamente en el almacenamiento. "
+                    "La operación ha sido cancelada para evitar inconsistencias."
+                )
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Error de verificación de almacenamiento: {str(e)}")
 
     def perform_create(self, serializer):
         """Create invoice from service order with distributed lock"""
@@ -166,6 +168,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         if not service_order_id:
             raise ValueError("Se requiere una orden de servicio")
+
+        # Subir los archivos ANTES de abrir la transacción. Hacerlo dentro
+        # mantenía la fila de la factura bloqueada durante toda la latencia de
+        # S3 y provocaba timeouts en las peticiones concurrentes sobre esa
+        # misma factura.
+        staged_pdf_file = stage_upload(Invoice, 'pdf_file', self.request.FILES.get('pdf_file'))
+        staged_dte_file = stage_upload(Invoice, 'dte_file', self.request.FILES.get('dte_file'))
+
+        # Verificar la integridad del archivo también fuera de la transacción.
+        if staged_pdf_file:
+            self.check_staged_storage_integrity(Invoice, 'pdf_file', staged_pdf_file)
 
         # Use distributed lock to prevent concurrent invoicing of the same order
         def create_invoice():
@@ -209,9 +222,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # if service_order.facturado:
             #    raise ValueError("Esta orden de servicio ya fue facturada")
 
-            # Get file if provided
-            pdf_file = self.request.FILES.get('pdf_file')
-            dte_file = self.request.FILES.get('dte_file')
+            # Archivos ya subidos al storage ANTES de abrir la transacción
+            # (ver stage_upload), aquí sólo se asignan sus nombres.
+            pdf_file = staged_pdf_file
+            dte_file = staged_dte_file
 
             # Create invoice with values
             invoice_data = {
@@ -231,13 +245,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 invoice_data['dte_file'] = dte_file
 
             invoice = serializer.save(**invoice_data)
-            
-            # --- VALIDACIÓN DE INTEGRIDAD DE ARCHIVO (SOLUCIÓN PERMANENTE) ---
-            # Si se proporcionó un PDF, verificar inmediatamente que se haya subido a S3/Storage.
-            # Si falla, la excepción hará rollback de toda la transacción atómica.
-            if pdf_file:
-                self.check_storage_integrity(invoice)
-            # ---------------------------------------------------------------
+
+            # La integridad del archivo ya se verificó antes de abrir la
+            # transacción (check_staged_storage_integrity), de modo que aquí no
+            # se hace ninguna llamada a S3 con la factura bloqueada.
 
             # 1. Link selected MANUAL charges to this invoice
             # Use getlist() for FormData arrays, fallback to get() for JSON
@@ -1698,6 +1709,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Subir el comprobante antes de tomar el lock sobre la factura, para no
+        # sostener el bloqueo de fila durante la latencia de S3.
+        staged_receipt_file = stage_upload(InvoicePayment, 'receipt_file', request.FILES.get('receipt_file'))
+
         def process_payment():
             # Re-fetch invoice inside lock to ensure fresh data
             inv = Invoice.objects.select_for_update().get(pk=pk)
@@ -1874,7 +1889,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 retention_reception_stamp=request.data.get('retention_reception_stamp', ''),
                 bank=bank,
                 notes=request.data.get('notes', ''),
-                receipt_file=request.FILES.get('receipt_file'),
+                receipt_file=staged_receipt_file,
                 created_by=request.user
             )
 
@@ -2116,6 +2131,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if invoice.status == 'cancelled':
              return Response({'error': 'No se pueden aplicar NC a facturas anuladas'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Subir el PDF antes de tomar el lock sobre la factura, para no
+        # sostener el bloqueo de fila durante la latencia de S3.
+        staged_pdf_file = stage_upload(CreditNote, 'pdf_file', request.FILES.get('pdf_file'))
+
         def process_credit_note():
             # Re-fetch invoice inside lock
             inv = Invoice.objects.select_for_update().get(pk=pk)
@@ -2137,10 +2156,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 amount=amount,
                 reason=request.data.get('reason', ''),
                 issue_date=request.data.get('issue_date'),
-                pdf_file=request.FILES.get('pdf_file'),
+                pdf_file=staged_pdf_file,
                 created_by=request.user
             )
-            
+
             return credit_note
 
         try:

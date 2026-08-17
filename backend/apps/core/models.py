@@ -32,6 +32,24 @@ class SoftDeleteModel(models.Model):
         self.deleted_at = None
         self.save()
 
+class DocumentSequence(models.Model):
+    """
+    Contador de una sola fila por serie de documento (OS, pre-facturas, lotes).
+
+    Permite reservar correlativos bloqueando esta fila en lugar de bloquear
+    todas las filas del documento correspondiente. Ver apps/core/sequences.py.
+    """
+    key = models.CharField(max_length=100, unique=True, verbose_name="Serie")
+    last_number = models.PositiveIntegerField(default=0, verbose_name="Último número asignado")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Actualizado el")
+
+    class Meta:
+        verbose_name = "Correlativo de Documento"
+        verbose_name_plural = "Correlativos de Documentos"
+
+    def __str__(self):
+        return f"{self.key} -> {self.last_number}"
+
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Creado el")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Actualizado el")
